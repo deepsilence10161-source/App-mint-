@@ -1,8 +1,14 @@
 # Generated output — always reproducible from the project specification.
-build/
-out/
-site/
-dist/
+#
+# Anchored to the repository root with a leading slash, and that is not
+# cosmetic: an unanchored "build/" also matched engine/build/, which holds
+# source. The cache modules were silently excluded from a commit because of it —
+# the tests passed locally, where the files exist, and CI would have failed to
+# import them. Anything that means "output" must say where.
+/build/
+/out/
+/site/
+/dist/
 
 # Android / Gradle
 local.properties

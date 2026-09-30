@@ -97,33 +97,80 @@ jobs:
       # Two apps, because they share no UI code. One is a WebView showing a
       # page; the other draws every view itself from the screen description.
       # A change that breaks one of them would otherwise slip through.
-      - name: Generate both Android projects
+      # The build key covers the specification, the generators, the toolchain and
+      # the build type. Two runs with the same key would compile the same app, so
+      # the second one can reuse the first one's output.
+      - name: Work out the build keys
+        id: keys
         run: |
-          node engine/cli.mjs generate apps/demo/spec.json --out build/out
-          node engine/cli.mjs generate apps/native-demo/spec.json --out build/native
+          set -euo pipefail
+          for app in demo native-demo; do
+            node engine/cli.mjs build-key "apps/$app/spec.json" --json > "/tmp/key-$app.json"
+          done
+          DEMO=$(node -e "console.log(require('/tmp/key-demo.json').key)")
+          NATIVE=$(node -e "console.log(require('/tmp/key-native-demo.json').key)")
+          # Only the toolchain and the workflow count as environment. The key
+          # itself already covers the specification and the generators, so it
+          # does not need to be re-derived from the source tree here.
+          ENV_HASH=$(printf '%s' "$(node --version)|$(java -version 2>&1 | head -1)" | sha256sum | cut -c1-12)
+          echo "combined=${DEMO:0:16}-${NATIVE:0:16}-$ENV_HASH" >> "$GITHUB_OUTPUT"
+          echo "demo=$DEMO" >> "$GITHUB_OUTPUT"
+          echo "native=$NATIVE" >> "$GITHUB_OUTPUT"
+          echo "demo key:   ${DEMO:0:16}"
+          echo "native key: ${NATIVE:0:16}"
 
-      - name: Build the website app
-        working-directory: build/out/android
+      - name: Restore the build cache
+        id: buildcache
+        uses: actions/cache@v4
+        with:
+          path: build/.cache
+          key: appmint-apk-${{ steps.keys.outputs.combined }}
+          restore-keys: |
+            appmint-apk-
+
+      - name: Build both apps
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m'
-        run: gradle assembleDebug --console=plain --stacktrace
+        run: |
+          set -euo pipefail
+          node tools/build-apk.mjs apps/demo/spec.json \
+            --out build/apk/demo.apk --project build/out --cache build/.cache
+          node tools/build-apk.mjs apps/native-demo/spec.json \
+            --out build/apk/native.apk --project build/native --cache build/.cache
 
-      - name: Build the designed-screens app
-        working-directory: build/native/android
-        env:
-          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m'
-        run: gradle assembleDebug --console=plain --stacktrace
+      # The receipts say, per app, whether the compiler ran. Printed to the log
+      # so the answer is in the record rather than inferred from timings.
+      - name: Report what the cache did
+        if: always()
+        run: |
+          set -euo pipefail
+          node - <<'JSEOF'
+          const fs = require('node:fs');
+          const files = { demo: 'build/out', native: 'build/native' };
+          let cached = 0, built = 0;
+          for (const [app, dir] of Object.entries(files)) {
+            const file = `${dir}/build-receipt.json`;
+            if (!fs.existsSync(file)) { console.log(`${app}: no receipt`); continue; }
+            const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const kb = (r.artefacts[0] && r.artefacts[0].bytes ? r.artefacts[0].bytes / 1024 : 0).toFixed(0);
+            const wasCached = r.source === 'cache';
+            if (wasCached) cached++; else built++;
+            const detail = wasCached
+              ? 'originally built ' + r.originalBuildAt
+              : 'compiled in ' + (r.durationMs / 1000).toFixed(0) + 's';
+            console.log(app + ': ' + r.source.toUpperCase() + '  key=' + r.keyShort + '  ' + kb + 'KB  ' + detail);
+          }
+          console.log('');
+          console.log(built + ' compiled, ' + cached + ' restored from the cache.');
+          JSEOF
 
       - name: Stage both APKs
         run: |
           set -euo pipefail
           mkdir -p build/apk
-          DEMO=$(find build/out/android -name '*.apk' | head -1)
-          NATIVE=$(find build/native/android -name '*.apk' | head -1)
-          [ -n "$DEMO" ] || { echo "::error::No APK was produced for the website app"; exit 1; }
-          [ -n "$NATIVE" ] || { echo "::error::No APK was produced for the designed-screens app"; exit 1; }
-          cp "$DEMO" build/apk/demo.apk
-          cp "$NATIVE" build/apk/native.apk
+          for f in build/apk/demo.apk build/apk/native.apk; do
+            [ -s "$f" ] || { echo "::error::No APK at $f — the build did not produce one"; exit 1; }
+          done
           ls -lh build/apk/
           # what the generator says these builds are — the driver does not guess
           node -e "for (const f of ['build/out/BUILD-INFO.json','build/native/BUILD-INFO.json']) {

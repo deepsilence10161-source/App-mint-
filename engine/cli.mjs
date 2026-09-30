@@ -6,6 +6,8 @@
  *   node engine/cli.mjs generate <spec.json> --out <dir> [--profile modern|bleeding|legacy]
  *   node engine/cli.mjs permissions <spec.json>
  *   node engine/cli.mjs explain <spec.json>
+ *   node engine/cli.mjs build-key <spec.json> [--type release]
+ *   node engine/cli.mjs cache [--list | --prune N | --explain <spec.json>]
  *
  * Everything is deterministic and offline. No network, no AI, no accounts.
  */
@@ -17,6 +19,9 @@ import { validateSpec, applyFixes, planFixes, repair, defaultSpec, showValue } f
 import { confidenceOf, isAutoFixable } from './spec/fix-policy.mjs';
 import { generateAndroidProject, TOOLCHAIN_PROFILES } from './gen/android.mjs';
 import { permissionReport, derivePermissions } from './capability/permissions.mjs';
+import { BuildCache } from './build/cache.mjs';
+import { buildKey, buildKeyParts, diffKeyParts } from './build/key.mjs';
+import { resolveToolchain } from './spec/toolchain.mjs';
 
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -265,6 +270,111 @@ function parseArgs(argv) {
   return out;
 }
 
+
+
+/* ---------------------------------------------------------------- *
+ * build-key
+ *
+ * Print the key a build of this specification would be filed under, and
+ * what the key is made of. The point of showing the parts rather than only
+ * the hash is that a person can see WHY two builds differ — "the generator
+ * changed" is actionable, a hex string is not.
+ * ---------------------------------------------------------------- */
+function cmdBuildKey(args) {
+  const file = args._[1];
+  if (!file) return fail('Usage: build-key <spec.json> [--type release] [--cache <dir>]');
+  const spec = readSpec(file);
+  const buildType = args.type || 'debug';
+
+  // Resolve the toolchain the same way the generator does, so the key covers
+  // the versions that will actually be used rather than whatever was typed.
+  let toolchain = null;
+  try { toolchain = resolveToolchain(spec)?.resolved || resolveToolchain(spec); } catch { /* key falls back to the raw values */ }
+
+  const key = buildKey(spec, { buildType, toolchain: toolchain || undefined });
+
+  if (args.json) {
+    console.log(JSON.stringify({ spec: file, buildType, key: key.full, short: key.short, parts: key.parts }, null, 2));
+    return 0;
+  }
+
+  console.log(paint(C.bold, '\n  APP MINT — build key'));
+  console.log(paint(C.dim, `  ${file}\n`));
+  console.log(`  ${paint(C.cyan, key.short)}  ${paint(C.dim, '(short form — the full hash is what the cache stores)')}`);
+  console.log(paint(C.dim, `  ${key.full}\n`));
+  console.log('  Made from:');
+  console.log(`    specification   ${key.parts.spec.slice(0, 16)}…`);
+  console.log(`    generators      ${key.parts.generator.slice(0, 16)}…  ${paint(C.dim, `(${key.parts.generatorFiles} files)`)}`);
+  console.log(`    toolchain       ${key.parts.toolchain.slice(0, 16)}…  ${paint(C.dim, JSON.stringify(key.parts.toolchainValues))}`);
+  console.log(`    build type      ${key.parts.buildType}`);
+
+  const cache = new BuildCache(args.cache || defaultCacheDir());
+  const got = cache.get(key, { verify: true });
+  console.log('');
+  if (got.hit) {
+    console.log(paint(C.green, `  In the cache — verified.`) + paint(C.dim, `  built ${got.manifest.builtAt}`));
+    for (const a of got.artefacts) console.log(`    ${a.name}  ${paint(C.dim, `${(a.bytes / 1024).toFixed(0)} KB  ${a.sha256.slice(0, 12)}…`)}`);
+  } else {
+    const why = cache.explain(key);
+    console.log(paint(C.yellow, `  Not in the cache (${got.reason}).`));
+    console.log(`  ${why.message}`);
+    if (got.detail) console.log(paint(C.dim, `  ${got.detail}`));
+  }
+  console.log('');
+  return 0;
+}
+
+/** Where the cache lives unless told otherwise: inside the build output. */
+function defaultCacheDir() {
+  return process.env.APPMINT_CACHE || 'build/.cache';
+}
+
+/* ---------------------------------------------------------------- *
+ * cache
+ * ---------------------------------------------------------------- */
+function cmdCache(args) {
+  const cache = new BuildCache(args.dir || defaultCacheDir());
+
+  if (args.prune !== undefined) {
+    const keep = Number(args.prune) || 20;
+    const result = args['dry-run']
+      ? cache.prune({ keep, dryRun: true })
+      : cache.prune({ keep });
+    console.log(`\n  ${args['dry-run'] ? 'Would remove' : 'Removed'} ${result.freed} entr${result.freed === 1 ? 'y' : 'ies'}; ${result.kept} kept.\n`);
+    return 0;
+  }
+
+  if (args.explain) {
+    const spec = readSpec(args.explain);
+    const why = cache.explain(buildKey(spec, { buildType: args.type || 'debug' }));
+    console.log(paint(C.bold, '\n  APP MINT — why is this build not cached?\n'));
+    console.log(`  ${why.message}\n`);
+    if (why.changed) for (const c of why.changed) console.log(paint(C.dim, `    · ${c.why}`));
+    if (why.nearest) for (const n of why.nearest) console.log(paint(C.dim, `    · ${n.key16}  ${n.builtAt}  ${n.spec?.appName || 'unknown app'}`));
+    console.log('');
+    return 0;
+  }
+
+  const entries = cache.list();
+  const size = cache.size();
+  console.log(paint(C.bold, '\n  APP MINT — build cache\n'));
+  console.log(`  ${cache.root}`);
+  console.log(`  ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}, ${(size.bytes / 1024 / 1024).toFixed(1)} MB\n`);
+
+  if (args.list || entries.length) {
+    if (!entries.length) console.log(paint(C.dim, '  (nothing built yet)\n'));
+    for (const e of entries.slice(0, Number(args.limit) || 20)) {
+      const arts = e.artefacts.map((a) => `${a.name} ${(a.bytes / 1024).toFixed(0)}KB`).join(', ');
+      const state = e.usable ? paint(C.green, 'ok') : paint(C.yellow, e.problem);
+      console.log(`  ${e.key16}  ${state.padEnd(24)}  ${e.builtAt}  ${paint(C.dim, e.spec?.appName || '')}`);
+      if (args.list) console.log(paint(C.dim, `      ${arts}`));
+      if (!e.usable && e.detail) console.log(paint(C.dim, `      ${e.detail}`));
+    }
+    console.log('');
+  }
+  return 0;
+}
+
 /* ---------------------------------------------------------------- */
 const argv = process.argv.slice(2);
 const args = parseArgs(argv);
@@ -275,6 +385,8 @@ const ROUTES = {
   generate: cmdGenerate,
   permissions: cmdPermissions,
   explain: cmdExplain,
+  'build-key': cmdBuildKey,
+  cache: cmdCache,
 };
 
 if (!cmd) { cmdExplain(); process.exit(0); }
