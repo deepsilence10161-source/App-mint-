@@ -18,8 +18,8 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { canonicalJson, sha256, generatorDigest, buildKey, buildKeyParts, diffKeyParts } from '../../engine/build/key.mjs';
-import { BuildCache, builtReceipt, cachedReceipt, readReceipt, writeReceipt, hashFile } from '../../engine/build/cache.mjs';
+import { canonicalJson, sha256, generatorDigest, buildKey, buildKeyParts, diffKeyParts } from '../../engine/keys/key.mjs';
+import { BuildCache, builtReceipt, cachedReceipt, readReceipt, writeReceipt, hashFile } from '../../engine/keys/cache.mjs';
 import { defaultSpec } from '../../engine/spec/spec.mjs';
 
 /* ── helpers ────────────────────────────────────────────────────────────── */
@@ -203,7 +203,7 @@ test('the generators are part of the key', () => {
 
 test('the build cache is not part of the digest, so it cannot invalidate itself', () => {
   /*
-   * engine/build/ decides whether to rebuild; it never decides what to build.
+   * engine/keys/ decides whether to rebuild; it never decides what to build.
    * Including it made every improvement to the cache discard every cached
    * build, so the cache worked perfectly and could never save anything. This is
    * the boundary the digest is drawn at, and it is asserted rather than

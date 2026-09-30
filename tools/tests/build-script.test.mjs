@@ -27,8 +27,8 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BuildCache } from '../../engine/build/cache.mjs';
-import { buildKey } from '../../engine/build/key.mjs';
+import { BuildCache } from '../../engine/keys/cache.mjs';
+import { buildKey } from '../../engine/keys/key.mjs';
 import { defaultSpec } from '../../engine/spec/spec.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

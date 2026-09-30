@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
           # Asked of the builder, not of a second opinion. The key is derived in
-          # one place (engine/build/key.mjs) precisely because two places had
+          # one place (engine/keys/key.mjs) precisely because two places had
           # already disagreed once: the cache was named with one key and builds
           # were looked up with another, which is a cache that never hits and
           # never complains. --key-only prints the key and stops, so this stays

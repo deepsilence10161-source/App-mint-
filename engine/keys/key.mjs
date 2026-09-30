@@ -95,8 +95,15 @@ export function sha256(text) {
  * cases where the conservative answer is the wrong one:
  *
  *   engine/cli.mjs       a front end; it generates nothing
- *   engine/build/        the cache and the key. These decide whether to rebuild,
+ *   engine/keys/         the cache and the key. These decide whether to rebuild,
  *                        never what to build.
+ *
+ * That second directory is engine/keys/ and not engine/build/, which is what it
+ * was called first. A directory named build is skipped by things that assume it
+ * holds generated output — .gitignore rules, packaging tools, and the workspace
+ * this project was developed in, where the two modules vanished from disk at a
+ * turn boundary while remaining in git. Source does not live in a directory
+ * called build, and a test enforces that so nobody has to learn it twice.
  *
  * Including the build machinery would have made the cache invalidate itself:
  * every improvement to caching would discard every cached build, so the cache

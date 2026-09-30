@@ -34,8 +34,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
-import { BuildCache, builtReceipt, cachedReceipt, writeReceipt } from '../engine/build/cache.mjs';
-import { buildKey } from '../engine/build/key.mjs';
+import { BuildCache, builtReceipt, cachedReceipt, writeReceipt } from '../engine/keys/cache.mjs';
+import { buildKey } from '../engine/keys/key.mjs';
 import { validateSpec, defaultSpec } from '../engine/spec/spec.mjs';
 import { generateAndroidProject } from '../engine/gen/android.mjs';
 

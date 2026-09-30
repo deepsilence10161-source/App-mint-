@@ -377,3 +377,54 @@ test('no script hides a failure behind a fallback that reports success', () => {
   }
   assert.deepEqual(offenders, [], offenders.join('\n'));
 });
+
+test('no source lives in a directory that tools treat as generated output', () => {
+  /*
+   * The rule is not a style preference. A path component named build, out, dist,
+   * target or coverage is skipped by design by things that assume it holds
+   * throwaway output: .gitignore patterns, packaging tools, archive copies, and
+   * the workspace this project was developed in. Two modules — the build key and
+   * the cache — were written to engine/build/ and were still in git while
+   * missing from disk, because the workspace had quietly declined to carry that
+   * directory.
+   *
+   * The failure is worth guarding against rather than remembering, because it is
+   * invisible while you work: the files are right there, every test passes, and
+   * they are gone the next morning.
+   */
+  const FORBIDDEN = new Set(['build', 'out', 'dist', 'target', 'coverage', 'node_modules', '.next', '.cache']);
+  const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
+    .split('\n').filter(Boolean);
+
+  const offenders = [];
+  for (const file of tracked) {
+    // Output directories are allowed to be excluded from git rather than to
+    // appear in it: a file tracked under one of these names is the problem.
+    const parts = file.split('/');
+    const dirs = parts.slice(0, -1);
+    for (const d of dirs) {
+      if (FORBIDDEN.has(d)) offenders.push(`${file} (directory "${d}")`);
+    }
+  }
+  assert.deepEqual(offenders, [],
+    `source tracked under a generated-output directory name:\n${offenders.join('\n')}`);
+});
+
+test('the key and the cache are reachable from every place that needs them', () => {
+  // They were at engine/build/ once, which is how the rule above was learned.
+  // This one asserts the replacement actually resolves, because a rename that
+  // leaves an import behind is a module that loads fine locally and fails in CI.
+  const importers = ['engine/cli.mjs', 'tools/build-apk.mjs',
+    'tools/tests/build-cache.test.mjs', 'tools/tests/build-script.test.mjs'];
+  for (const file of importers) {
+    const src = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    for (const m of src.matchAll(/from\s+'(\.[^']+)'/g)) {
+      const resolved = path.resolve(path.dirname(path.join(ROOT, file)), m[1]);
+      assert.ok(fs.existsSync(resolved), `${file} imports ${m[1]}, which does not exist`);
+    }
+  }
+  assert.ok(fs.existsSync(path.join(ROOT, 'engine/keys/key.mjs')));
+  assert.ok(fs.existsSync(path.join(ROOT, 'engine/keys/cache.mjs')));
+  assert.ok(!fs.existsSync(path.join(ROOT, 'engine/build')),
+    'engine/build must not come back: a directory named build is dropped by tools that assume it is output');
+});

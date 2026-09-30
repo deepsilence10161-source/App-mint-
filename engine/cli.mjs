@@ -19,8 +19,8 @@ import { validateSpec, applyFixes, planFixes, repair, defaultSpec, showValue } f
 import { confidenceOf, isAutoFixable } from './spec/fix-policy.mjs';
 import { generateAndroidProject, TOOLCHAIN_PROFILES } from './gen/android.mjs';
 import { permissionReport, derivePermissions } from './capability/permissions.mjs';
-import { BuildCache } from './build/cache.mjs';
-import { buildKey, buildKeyParts, diffKeyParts } from './build/key.mjs';
+import { BuildCache } from './keys/cache.mjs';
+import { buildKey, buildKeyParts, diffKeyParts } from './keys/key.mjs';
 
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -287,7 +287,7 @@ function cmdBuildKey(args) {
 
   // The key resolves the toolchain itself now — one place, so the command line
   // and the builder cannot drift apart again. See toolchainFor() in
-  // engine/build/key.mjs for what went wrong when both did it separately.
+  // engine/keys/key.mjs for what went wrong when both did it separately.
   const key = buildKey(spec, { buildType });
 
   if (args.json) {
