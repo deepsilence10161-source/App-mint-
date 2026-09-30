@@ -22,7 +22,7 @@
       "key": "installed_package",
       "label": "Package is registered on the device",
       "ok": true,
-      "evidence": "dumpsys package com.appmint.nativedemo: 6080 bytes",
+      "evidence": "dumpsys package com.appmint.nativedemo: 6078 bytes",
       "severity": "fail"
     },
     {
@@ -36,77 +36,77 @@
       "key": "alive",
       "label": "App process still alive after all interactions",
       "ok": true,
-      "evidence": "pidof -> alive (pid 6640)",
+      "evidence": "pidof -> alive (pid 6682)",
       "severity": "fail"
     },
     {
       "key": "shot_01-launch",
       "label": "Screenshot captured: launch",
       "ok": true,
-      "evidence": "92832 bytes",
+      "evidence": "92733 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_04-after-back",
       "label": "Screenshot captured: after back press",
       "ok": true,
-      "evidence": "93260 bytes",
+      "evidence": "93451 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_05-landscape",
       "label": "Screenshot captured: landscape rotation",
       "ok": true,
-      "evidence": "70881 bytes",
+      "evidence": "71094 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_06-portrait",
       "label": "Screenshot captured: back to portrait",
       "ok": true,
-      "evidence": "93260 bytes",
+      "evidence": "93451 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_02-loaded",
       "label": "Screenshot captured: first screen drawn",
       "ok": true,
-      "evidence": "92832 bytes",
+      "evidence": "92733 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-1",
       "label": "Screenshot captured: designed screen 1",
       "ok": true,
-      "evidence": "92832 bytes",
+      "evidence": "92733 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-2",
       "label": "Screenshot captured: designed screen 2",
       "ok": true,
-      "evidence": "62211 bytes",
+      "evidence": "62109 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-3",
       "label": "Screenshot captured: designed screen 3",
       "ok": true,
-      "evidence": "70813 bytes",
+      "evidence": "70724 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-4",
       "label": "Screenshot captured: designed screen 4",
       "ok": true,
-      "evidence": "66353 bytes",
+      "evidence": "66560 bytes",
       "severity": "fail"
     },
     {
       "key": "content_rendered",
       "label": "Loaded screen shows real rendered content (not a blank view)",
       "ok": true,
-      "evidence": "2918 distinct colours, luminance spread 42.59 (a blank screen has a handful of colours and almost no spread)",
+      "evidence": "2920 distinct colours, luminance spread 42.59 (a blank screen has a handful of colours and almost no spread)",
       "severity": "fail"
     },
     {
@@ -120,14 +120,14 @@
       "key": "native_first_frame",
       "label": "The app drew its first screen immediately",
       "ok": true,
-      "evidence": "2918 distinct colours, luminance spread 42.59 in the launch frame (a designed app has nothing to download, so this is already the finished screen)",
+      "evidence": "2920 distinct colours, luminance spread 42.59 in the launch frame (a designed app has nothing to download, so this is already the finished screen)",
       "severity": "fail"
     },
     {
       "key": "screens_reachable",
       "label": "Each designed screen can be reached and draws its own content",
       "ok": true,
-      "evidence": "every screen differs from the one before it: screen 2 changed by 21.86, screen 3 changed by 14.51, screen 4 changed by 20.08",
+      "evidence": "every screen differs from the one before it: screen 2 changed by 21.86, screen 3 changed by 14.51, screen 4 changed by 20.09",
       "severity": "fail"
     },
     {
@@ -155,79 +155,79 @@
       "key": "video",
       "label": "Screen recording captured",
       "ok": true,
-      "evidence": "747555 bytes",
+      "evidence": "739629 bytes",
       "severity": "warn"
     }
   ],
   "screenshots": {
     "01-launch": {
       "present": true,
-      "bytes": 92832,
+      "bytes": 92733,
       "mean_luminance_pct": 14.63,
       "luminance_stddev": 42.59,
-      "distinct_colours": 2918
+      "distinct_colours": 2920
     },
     "04-after-back": {
       "present": true,
-      "bytes": 93260,
+      "bytes": 93451,
       "mean_luminance_pct": 14.63,
-      "luminance_stddev": 42.56,
-      "distinct_colours": 2935
+      "luminance_stddev": 42.58,
+      "distinct_colours": 2939
     },
     "05-landscape": {
       "present": true,
-      "bytes": 70881,
-      "mean_luminance_pct": 16.21,
-      "luminance_stddev": 40.34,
+      "bytes": 71094,
+      "mean_luminance_pct": 16.22,
+      "luminance_stddev": 40.36,
       "distinct_colours": 1999
     },
     "06-portrait": {
       "present": true,
-      "bytes": 93260,
+      "bytes": 93451,
       "mean_luminance_pct": 14.63,
-      "luminance_stddev": 42.56,
-      "distinct_colours": 2935
+      "luminance_stddev": 42.58,
+      "distinct_colours": 2939
     },
     "02-loaded": {
       "present": true,
-      "bytes": 92832,
+      "bytes": 92733,
       "mean_luminance_pct": 14.63,
       "luminance_stddev": 42.59,
-      "distinct_colours": 2918
+      "distinct_colours": 2920
     },
     "tab-1": {
       "present": true,
-      "bytes": 92832,
+      "bytes": 92733,
       "mean_luminance_pct": 14.63,
       "luminance_stddev": 42.59,
-      "distinct_colours": 2918
+      "distinct_colours": 2920
     },
     "tab-2": {
       "present": true,
-      "bytes": 62211,
+      "bytes": 62109,
       "mean_luminance_pct": 9.39,
-      "luminance_stddev": 24.6,
-      "distinct_colours": 1721
+      "luminance_stddev": 24.61,
+      "distinct_colours": 1724
     },
     "tab-3": {
       "present": true,
-      "bytes": 70813,
+      "bytes": 70724,
       "mean_luminance_pct": 12.03,
       "luminance_stddev": 35.95,
-      "distinct_colours": 1952
+      "distinct_colours": 1955
     },
     "tab-4": {
       "present": true,
-      "bytes": 66353,
+      "bytes": 66560,
       "mean_luminance_pct": 10.64,
-      "luminance_stddev": 32.21,
-      "distinct_colours": 2300
+      "luminance_stddev": 32.23,
+      "distinct_colours": 2304
     }
   },
   "brightness": {
     "01-launch": 14.63,
     "04-after-back": 14.63,
-    "05-landscape": 16.21,
+    "05-landscape": 16.22,
     "06-portrait": 14.63,
     "02-loaded": 14.63,
     "tab-1": 14.63,
@@ -236,17 +236,17 @@
     "tab-4": 10.64
   },
   "single_colour_pct": {
-    "01-launch": 2918,
-    "04-after-back": 2935,
+    "01-launch": 2920,
+    "04-after-back": 2939,
     "05-landscape": 1999,
-    "06-portrait": 2935,
-    "02-loaded": 2918,
-    "tab-1": 2918,
-    "tab-2": 1721,
-    "tab-3": 1952,
-    "tab-4": 2300
+    "06-portrait": 2939,
+    "02-loaded": 2920,
+    "tab-1": 2920,
+    "tab-2": 1724,
+    "tab-3": 1955,
+    "tab-4": 2304
   },
   "diff_launch_to_loaded": 0.0,
-  "video_bytes": 747555,
+  "video_bytes": 739629,
   "package": "com.appmint.nativedemo"
 }
