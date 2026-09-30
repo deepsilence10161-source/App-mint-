@@ -36,63 +36,63 @@
       "key": "alive",
       "label": "App process still alive after all interactions",
       "ok": true,
-      "evidence": "pidof -> alive (pid 4117)",
+      "evidence": "pidof -> alive (pid 4109)",
       "severity": "fail"
     },
     {
       "key": "shot_01-launch",
       "label": "Screenshot captured: launch",
       "ok": true,
-      "evidence": "134125 bytes",
+      "evidence": "134618 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_02-loaded",
       "label": "Screenshot captured: page loaded",
       "ok": true,
-      "evidence": "134691 bytes",
+      "evidence": "134727 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_03-refreshed",
       "label": "Screenshot captured: after pull-to-refresh",
       "ok": true,
-      "evidence": "134691 bytes",
+      "evidence": "134727 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_04-after-back",
       "label": "Screenshot captured: after back press",
       "ok": true,
-      "evidence": "134659 bytes",
+      "evidence": "134693 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_05-landscape",
       "label": "Screenshot captured: landscape rotation",
       "ok": true,
-      "evidence": "134659 bytes",
+      "evidence": "134693 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_06-portrait",
       "label": "Screenshot captured: back to portrait",
       "ok": true,
-      "evidence": "134659 bytes",
+      "evidence": "134693 bytes",
       "severity": "fail"
     },
     {
       "key": "content_rendered",
       "label": "Loaded screen shows real rendered content (not a blank view)",
       "ok": true,
-      "evidence": "3032 distinct colours, luminance spread 81.1 (a blank screen has a handful of colours and almost no spread)",
+      "evidence": "3046 distinct colours, luminance spread 81.09 (a blank screen has a handful of colours and almost no spread)",
       "severity": "fail"
     },
     {
       "key": "js_executed",
       "label": "JavaScript ran inside the WebView",
       "ok": true,
-      "evidence": "APPMINT_READY 2026-09-30 19:22:37\", source: https://appassets.androidplatform.net/assets/www/index.html (153)",
+      "evidence": "APPMINT_READY 2026-09-30 19:29:35\", source: https://appassets.androidplatform.net/assets/www/index.html (153)",
       "severity": "fail"
     },
     {
@@ -106,7 +106,7 @@
       "key": "render_changed",
       "label": "Screen state between launch and load is consistent",
       "ok": true,
-      "evidence": "mean pixel difference 0.03 \u2014 the page rendered and its script ran, so an unchanged screen means it painted immediately, not that it stalled",
+      "evidence": "mean pixel difference 0.05 \u2014 the page rendered and its script ran, so an unchanged screen means it painted immediately, not that it stalled",
       "severity": "fail"
     },
     {
@@ -120,52 +120,52 @@
       "key": "video",
       "label": "Screen recording captured",
       "ok": true,
-      "evidence": "873061 bytes",
+      "evidence": "886863 bytes",
       "severity": "warn"
     }
   ],
   "screenshots": {
     "01-launch": {
       "present": true,
-      "bytes": 134125,
+      "bytes": 134618,
       "mean_luminance_pct": 82.34,
       "luminance_stddev": 81.09,
-      "distinct_colours": 3021
+      "distinct_colours": 3017
     },
     "02-loaded": {
       "present": true,
-      "bytes": 134691,
+      "bytes": 134727,
       "mean_luminance_pct": 82.34,
-      "luminance_stddev": 81.1,
-      "distinct_colours": 3032
+      "luminance_stddev": 81.09,
+      "distinct_colours": 3046
     },
     "03-refreshed": {
       "present": true,
-      "bytes": 134691,
+      "bytes": 134727,
       "mean_luminance_pct": 82.34,
-      "luminance_stddev": 81.1,
-      "distinct_colours": 3032
+      "luminance_stddev": 81.09,
+      "distinct_colours": 3046
     },
     "04-after-back": {
       "present": true,
-      "bytes": 134659,
+      "bytes": 134693,
       "mean_luminance_pct": 82.34,
-      "luminance_stddev": 81.09,
-      "distinct_colours": 3017
+      "luminance_stddev": 81.08,
+      "distinct_colours": 3034
     },
     "05-landscape": {
       "present": true,
-      "bytes": 134659,
+      "bytes": 134693,
       "mean_luminance_pct": 82.34,
-      "luminance_stddev": 81.09,
-      "distinct_colours": 3017
+      "luminance_stddev": 81.08,
+      "distinct_colours": 3034
     },
     "06-portrait": {
       "present": true,
-      "bytes": 134659,
+      "bytes": 134693,
       "mean_luminance_pct": 82.34,
-      "luminance_stddev": 81.09,
-      "distinct_colours": 3017
+      "luminance_stddev": 81.08,
+      "distinct_colours": 3034
     }
   },
   "brightness": {
@@ -177,14 +177,14 @@
     "06-portrait": 82.34
   },
   "single_colour_pct": {
-    "01-launch": 3021,
-    "02-loaded": 3032,
-    "03-refreshed": 3032,
-    "04-after-back": 3017,
-    "05-landscape": 3017,
-    "06-portrait": 3017
+    "01-launch": 3017,
+    "02-loaded": 3046,
+    "03-refreshed": 3046,
+    "04-after-back": 3034,
+    "05-landscape": 3034,
+    "06-portrait": 3034
   },
-  "diff_launch_to_loaded": 0.03,
-  "video_bytes": 873061,
+  "diff_launch_to_loaded": 0.05,
+  "video_bytes": 886863,
   "package": "com.appmint.demo"
 }
