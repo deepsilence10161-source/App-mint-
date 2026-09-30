@@ -200,19 +200,24 @@ function screenDesignerView() {
   const list = screensOf(spec);
   const screen = activeScreen(spec);
 
-  const wrap = el('div', { class: 'designer' }, [
-    screensForTabsNote(spec, list),
-    screenPicker(spec, list),
-  ]);
+  const wrap = el('div', { class: 'designer' }, [screensForTabsNote(spec, list)]);
 
+  // With nothing built yet, the page offers one thing to do. The screen picker
+  // would only add a second button for the same action, which on an otherwise
+  // empty page reads as two different choices.
   if (!screen) {
+    if (list.length) wrap.append(screenPicker(spec, list));
     wrap.append(el('div', { class: 'empty' }, [
-      el('p', {}, 'No screens yet.'),
-      el('button', { class: 'btn primary', onclick: () => { screensOf(spec).push(starterScreen(spec, 'Home', 0)); touch(); hardUpdate(); } }, 'Add the first screen'),
-      el('p', { class: 'sub' }, 'This app is set to native-screens, so it needs at least one screen before it can build.'),
+      el('button', {
+        class: 'btn primary',
+        onclick: () => { screensOf(spec).push(starterScreen(spec, 'Home', 0)); touch(); hardUpdate(); },
+      }, 'Build the first screen'),
+      el('p', { class: 'sub' }, 'This app draws its own screens, so it needs at least one before it can build. Tapping here starts you with a Home screen you can fill in.'),
     ]));
     return wrap;
   }
+
+  wrap.append(screenPicker(spec, list));
 
   const findings = screenFindings(spec, screen);
 

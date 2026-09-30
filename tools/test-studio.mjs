@@ -100,7 +100,7 @@ async function main() {
   check('Health strip reports a verdict', /Valid|Blocked|Ready/.test(health), `health="${health.trim()}"`);
 
   /* ── every section renders ──────────────────────────────────────────── */
-  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'No screens yet'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
+  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
     await page.locator('.tabbar .tab', { hasText: label }).click();
     await page.waitForTimeout(200);
     const text = await page.textContent('#main');
@@ -196,9 +196,9 @@ async function main() {
   await page.waitForTimeout(250);
 
   check('The designer offers to start the first screen',
-    /Add the first screen/i.test(await page.textContent('#main')), 'expected an empty-state call to action');
+    /Build the first screen/i.test(await page.textContent('#main')), 'expected an empty-state call to action');
 
-  await page.locator('button:has-text("Add the first screen")').click();
+  await page.locator('button:has-text("Build the first screen")').click();
   await page.waitForTimeout(300);
   const afterFirst = await page.textContent('#main');
   check('Adding a screen creates a real screen with content',
@@ -335,6 +335,63 @@ async function main() {
     return el ? getComputedStyle(el).backgroundColor : null;
   });
   check('Preview applies the project theme colours', !!screenBg && screenBg !== 'rgba(0, 0, 0, 0)', `screen background ${screenBg}`);
+
+  /* ── nothing on screen may ever read as broken ─────────────────────── */
+  // "undefined", "NaN" and "[object Object]" are how a program tells the user
+  // it has lost track of its own state. They are always a bug, never a value,
+  // and one of them reached the health strip before this check existed.
+  const brokenWords = [];
+  for (const tab of ['Design', 'Screens', 'Features', 'Preview', 'Build']) {
+    await page.locator('.tabbar .tab', { hasText: tab }).click();
+    await page.waitForTimeout(250);
+    const text = await page.textContent('#main');
+    const header = await page.textContent('#health');
+    const top = await page.textContent('.topbar');
+    // Plain substring search on purpose: a regular expression built from a
+    // literal like "[object Object]" is a character class, which matches
+    // practically everything and reports a clean interface as broken.
+    for (const bad of ['undefined', 'NaN', '[object Object]']) {
+      if ((text + ' ' + header + ' ' + top).includes(bad)) brokenWords.push(`${tab}: "${bad}"`);
+    }
+  }
+  check('No section shows a broken value', brokenWords.length === 0,
+    brokenWords.join(', ') || 'no undefined, NaN or [object Object] anywhere in the interface');
+
+  /* ── sections fold, and say what is inside ──────────────────────────── */
+  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
+  await page.waitForTimeout(250);
+  const secCount = await page.locator('.sec').count();
+  check('The design tab is organised into foldable sections', secCount >= 4, `found ${secCount}`);
+  const closedCount = await page.locator('.sec[data-open="0"]').count();
+  check('Some sections start folded away', closedCount > 0, `a page that opens everything is a long scroll`);
+  const closedSummary = (await page.locator('.sec[data-open="0"]').first().textContent()).trim();
+  check('A folded section still says what is inside', closedSummary.length > 20,
+    `closed section reads: "${closedSummary.slice(0, 60)}"`);
+
+  // Pin the section by its id before clicking. A locator meaning "the first
+  // closed section" points at a different section the instant the first one
+  // opens, so asserting through it reads the wrong element and the check fails
+  // while the interface is behaving correctly.
+  const secId = await page.locator('.sec[data-open="0"]').first().getAttribute('id');
+  await page.locator(`#${secId} .sec-head`).click();
+  await page.waitForTimeout(250);
+  check('Tapping a section header opens it',
+    await page.locator(`#${secId}`).getAttribute('data-open') === '1', `section ${secId} should be open`);
+  const nowClosed = await page.locator('.sec[data-open="0"]').count();
+  check('Opening one section closes nothing else', nowClosed === closedCount - 1,
+    `${closedCount} closed before, ${nowClosed} after`);
+
+  /* ── controls are big enough for a thumb ────────────────────────────── */
+  const tooSmall = await page.evaluate(() => {
+    const out = [];
+    for (const node of document.querySelectorAll('#main button, #main input, #main select, #main textarea, .tabbar .tab')) {
+      const r = node.getBoundingClientRect();
+      if (r.height === 0) continue;
+      if (r.height < 38) out.push((node.textContent || node.getAttribute('aria-label') || node.className).trim().slice(0, 26) + ` (${Math.round(r.height)}px)`);
+    }
+    return out;
+  });
+  check('Every control is big enough to tap', tooSmall.length === 0, tooSmall.join(', '));
 
   /* ── no console noise ───────────────────────────────────────────────── */
   check('No uncaught errors', pageErrors.length === 0, pageErrors.join(' | '));

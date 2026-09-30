@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#070B16">
+<meta name="theme-color" content="#080B14">
 <meta name="description" content="App Mint Studio — design an Android app from your phone. Free, offline, no account, no AI.">
 <title>App Mint Studio</title>
 <style>/*__CSS__*/</style>
@@ -14,9 +14,12 @@
 <div class="app">
   <header class="topbar">
     <span class="mark" aria-hidden="true"></span>
-    <h1>App Mint Studio<span class="proj" id="projname">Loading…</span></h1>
+    <div class="identity">
+      <div class="name" id="projname">Loading…</div>
+      <span class="meta" id="projmeta">starting up</span>
+    </div>
     <button class="btn ghost sm" id="importproj" aria-label="Import a specification">Import</button>
-    <button class="btn ghost sm" id="newproj" aria-label="New project">New</button>
+    <button class="btn primary sm" id="newproj" aria-label="New project">New</button>
   </header>
 
   <div class="health" id="health" role="status" aria-live="polite"></div>

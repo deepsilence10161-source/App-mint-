@@ -4,564 +4,919 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#070B16">
+<meta name="theme-color" content="#080B14">
 <meta name="description" content="App Mint Studio — design an Android app from your phone. Free, offline, no account, no AI.">
 <title>App Mint Studio</title>
-<style>/* ============================================================================
-   App Mint Studio — design system
-   Mobile-first, because the Studio is used from a phone.
-   No external fonts, no CDN, no images: everything is inline SVG or system
-   fonts, so the whole thing works offline.
-   ========================================================================= */
+<style>/* ══════════════════════════════════════════════════════════════════════
+   APP MINT STUDIO — the interface
+   ══════════════════════════════════════════════════════════════════════
 
-*, *::before, *::after { box-sizing: border-box; }
+   Written for a phone held in one hand. That decision drives everything here:
+
+   · Every control a thumb has to hit is at least 44px tall, and the ones
+     people use constantly are 48–56px.
+   · Text inputs are 16px, because anything smaller makes iOS zoom the page
+     when the keyboard opens.
+   · Nothing important lives in the top quarter of the screen, which is where
+     a thumb cannot reach.
+   · Sections start collapsed and show their current value. A settings screen
+     that opens everything at once is a wall of text to scroll past, and the
+     thing you came for is always at the bottom.
+
+   The palette is deliberately calm: one accent colour that means "this is
+   interactive", and colour used for meaning (a problem, a success) rather than
+   decoration. The project's own colours never appear here, so what you are
+   designing can never be confused with the tool you are designing it in.
+   ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── colour tokens ─────────────────────────────────────────────────────── */
-  --bg:          #070B16;
-  --bg-raised:   #0E1424;
-  --card:        #141B2E;
-  --card-hi:     #1B2338;
-  --line:        #232D47;
-  --line-soft:   #1A2237;
-  --fg:          #E9EEFB;
-  --fg-dim:      #98A6C2;
-  --fg-faint:    #64748B;
+  color-scheme: dark;
 
-  --brand:       #38BDF8;
-  --brand-ink:   #04212E;
-  --brand-soft:  rgba(56, 189, 248, .12);
+  --bg:        #080B14;
+  --bg-glow:   #101832;
+  --surface:   #111827;
+  --surface-2: #182032;
+  --surface-3: #1F2940;
 
-  --pass:   #34D399;
-  --warn:   #FBBF24;
-  --fail:   #FB7185;
-  --info:   #93C5FD;
+  --line:      rgba(255, 255, 255, 0.075);
+  --line-2:    rgba(255, 255, 255, 0.13);
 
-  /* ── spacing scale (4pt) ───────────────────────────────────────────────── */
-  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
-  --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px;
+  --fg:        #EEF2FB;
+  --fg-2:      #A3AEC6;
+  --fg-3:      #6C7793;
 
-  /* ── radius scale ──────────────────────────────────────────────────────── */
-  --r1: 6px; --r2: 10px; --r3: 14px; --r4: 18px; --r5: 24px; --rpill: 999px;
+  --accent:    #6D6AF8;
+  --accent-2:  #22D3EE;
+  --accent-soft: rgba(109, 106, 248, 0.16);
+  --accent-line: rgba(109, 106, 248, 0.45);
 
-  /* ── type scale ────────────────────────────────────────────────────────── */
-  --t-xs: 11px; --t-sm: 12.5px; --t-md: 14px; --t-lg: 16px;
-  --t-xl: 20px; --t-2xl: 26px;
+  --ok:   #34D399;
+  --warn: #FBBF24;
+  --bad:  #F87171;
 
-  /* ── motion. Short, and only where it communicates state. ──────────────── */
-  --ease: cubic-bezier(.2, .8, .25, 1);
-  --fast: 120ms; --med: 200ms;
+  --r-sm: 10px;
+  --r:    14px;
+  --r-lg: 20px;
+  --r-xl: 26px;
 
-  --tap: 44px; /* minimum touch target */
+  --s1: 4px;  --s2: 8px;  --s3: 12px;
+  --s4: 16px; --s5: 24px; --s6: 32px;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-2: 0 14px 34px -14px rgba(0, 0, 0, 0.75);
+
+  --tabbar-h: 74px;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
-}
+* { box-sizing: border-box; }
 
-html {
-  -webkit-text-size-adjust: 100%;
-  /* Anything scrolled into view must clear the fixed bottom navigation.
-     Without this, a control near the end of a page lands behind the tab bar and
-     cannot be tapped — found when a browser test could not click the advanced
-     section. */
-  scroll-padding-bottom: calc(120px + env(safe-area-inset-bottom));
-}
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  font-size: var(--t-md);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", system-ui, sans-serif;
+  font-size: 15px;
   line-height: 1.5;
-  min-height: 100dvh;
-  overscroll-behavior-y: contain;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
 
-/* ── layout ──────────────────────────────────────────────────────────────── */
-.app { display: flex; flex-direction: column; min-height: 100dvh; max-width: 720px; margin-inline: auto; }
+/* A soft light behind the top of the page. It stops the very dark background
+   reading as flat and gives the header somewhere to sit. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -40% 0 auto 0;
+  height: 60vh;
+  background: radial-gradient(60% 60% at 50% 0%, var(--bg-glow) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+h1, h2, h3, p { margin: 0; }
+
+button, input, select, textarea, a { font: inherit; color: inherit; }
+
+:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.app { position: relative; z-index: 1; }
+
+/* ── the header ─────────────────────────────────────────────────────── */
 
 .topbar {
-  position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: var(--s3);
-  padding: max(var(--s3), env(safe-area-inset-top)) var(--s4) var(--s3);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line-soft);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+  background: linear-gradient(180deg, rgba(8, 11, 20, 0.94), rgba(8, 11, 20, 0.78));
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  border-bottom: 1px solid var(--line);
 }
-.topbar h1 { font-size: var(--t-lg); margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1; min-width: 0; }
-.topbar .proj { display: block; font-size: var(--t-xs); color: var(--fg-faint); font-weight: 500; letter-spacing: 0; }
 
 .mark {
-  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
-  background: linear-gradient(135deg, var(--brand), #818CF8);
+  width: 38px; height: 38px; flex: 0 0 auto;
+  border-radius: 12px;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  box-shadow: 0 6px 16px -6px rgba(109, 106, 248, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-main { flex: 1; padding: var(--s4) var(--s4) calc(128px + env(safe-area-inset-bottom)); }
+.identity { min-width: 0; flex: 1 1 auto; }
+.identity .name {
+  font-size: 16.5px; font-weight: 700; letter-spacing: -0.015em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.identity .meta {
+  display: block; font-size: 11.5px; color: var(--fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
 
-.tabpage { display: none; animation: rise var(--med) var(--ease); }
-.tabpage.on { display: block; }
-@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.topbar .btn.small { flex: 0 0 auto; }
 
-/* ── bottom navigation ───────────────────────────────────────────────────── */
-.tabbar {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
-  display: flex; justify-content: center; gap: 2px;
-  padding: var(--s2) var(--s2) max(var(--s2), env(safe-area-inset-bottom));
-  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+/* ── the status strip ───────────────────────────────────────────────── */
+
+.health {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 58px);
+  z-index: 29;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 9px 14px;
+  font-size: 12.5px;
+  background: rgba(8, 11, 20, 0.9);
   backdrop-filter: blur(14px);
-  border-top: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
 }
-.tabbar .inner { display: flex; width: 100%; max-width: 720px; }
-.tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: none; border: 0; color: var(--fg-faint);
-  font-size: var(--t-xs); font-weight: 600; font-family: inherit;
-  padding: var(--s2) 0; min-height: var(--tap); cursor: pointer;
-  border-radius: var(--r2); transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
-}
-.tab svg { width: 20px; height: 20px; stroke-width: 1.9; }
-.tab[aria-selected="true"] { color: var(--brand); background: var(--brand-soft); }
-.tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.health .spacer { flex: 1 1 auto; }
+.health .val { color: var(--fg-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* ── cards ───────────────────────────────────────────────────────────────── */
-.card {
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r4);
-  padding: var(--s4); margin-bottom: var(--s3);
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 650;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
 }
-.card > h2 {
-  font-size: var(--t-sm); font-weight: 700; text-transform: uppercase;
-  letter-spacing: .06em; color: var(--fg-dim); margin: 0 0 var(--s3);
+.pill::before {
+  content: ""; width: 7px; height: 7px; border-radius: 999px; background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
 }
-.card .hint { font-size: var(--t-sm); color: var(--fg-faint); margin: 0 0 var(--s3); }
-.card.flat { background: var(--bg-raised); }
+.pill.pass { color: var(--ok);   border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.1); }
+.pill.warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.1); }
+.pill.fail { color: var(--bad);  border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.12); }
 
-/* ── form controls ───────────────────────────────────────────────────────── */
-.field { margin-bottom: var(--s4); }
-.field:last-child { margin-bottom: 0; }
+/* ── page ───────────────────────────────────────────────────────────── */
+
+main {
+  display: block;
+  padding: var(--s4) 14px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 28px);
+  scroll-padding-bottom: calc(var(--tabbar-h) + 40px);
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.tabpage { display: flex; flex-direction: column; gap: var(--s3); }
+
+/* ── sections ───────────────────────────────────────────────────────── */
+
+.card, .sec {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.card { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s4); }
+
+.card > h2, .sec .sec-title {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* The header of a section that can be folded away. It shows what is inside, so
+   the answer is often readable without opening anything. */
+.sec-head {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 58px; padding: 10px 14px;
+  background: none; border: 0; text-align: left; cursor: pointer;
+  color: inherit;
+}
+.sec-head:active { background: var(--surface-2); }
+.sec-ico {
+  width: 34px; height: 34px; flex: 0 0 auto; border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: #C7C5FF;
+}
+.sec-ico svg { width: 18px; height: 18px; }
+.sec-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.sec-name { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+.sec-sub {
+  font-size: 12.5px; color: var(--fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chev {
+  flex: 0 0 auto; color: var(--fg-3);
+  transition: transform 0.22s var(--ease);
+}
+.sec[data-open="1"] .chev { transform: rotate(180deg); }
+
+.sec-body {
+  display: none;
+  padding: 0 14px 16px;
+  flex-direction: column;
+  gap: var(--s4);
+}
+.sec[data-open="1"] .sec-body { display: flex; }
+
+/* ── fields ─────────────────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: 7px; }
+
 .field > label {
-  display: block; font-size: var(--t-sm); font-weight: 600;
-  color: var(--fg-dim); margin-bottom: var(--s2);
+  font-size: 13px; font-weight: 600; color: var(--fg-2);
+  display: flex; align-items: center; gap: 6px;
 }
-.field .sub { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 5px; display: block; }
+.field .help {
+  display: inline-grid; place-items: center;
+  width: 15px; height: 15px; border-radius: 999px;
+  font-size: 10px; font-weight: 700;
+  background: var(--surface-3); color: var(--fg-3);
+}
 
-input[type=text], input[type=url], input[type=number], input[type=password], select, textarea {
-  width: 100%; font-family: inherit; font-size: var(--t-md);
-  color: var(--fg); background: var(--bg);
-  border: 1px solid var(--line); border-radius: var(--r2);
-  padding: 12px 13px; min-height: var(--tap);
-  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+.sub { font-size: 12.5px; color: var(--fg-3); line-height: 1.45; }
+.hint {
+  font-size: 13px; color: var(--fg-2); line-height: 1.5;
+  padding: 12px 14px; border-radius: var(--r);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
 }
+
+input[type="text"], input[type="url"], input[type="number"],
+input[type="email"], input[type="tel"], input[type="search"],
+input[type="password"], select, textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 16px; /* below 16px, iOS zooms the page when a field is focused */
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.16s, background 0.16s;
+}
+textarea { min-height: 104px; resize: vertical; line-height: 1.5; }
+
 input:focus, select:focus, textarea:focus {
-  outline: none; border-color: var(--brand);
-  box-shadow: 0 0 0 3px var(--brand-soft);
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-3);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-input::placeholder { color: var(--fg-faint); }
-select { appearance: none; background-image: none; padding-right: 34px; }
-.selectwrap { position: relative; }
+input[aria-invalid="true"] { border-color: var(--bad); }
+
+.selectwrap { position: relative; width: 100%; }
+.selectwrap select { padding-right: 40px; cursor: pointer; }
 .selectwrap::after {
-  content: ""; position: absolute; right: 13px; top: 50%;
-  width: 7px; height: 7px; margin-top: -5px; pointer-events: none;
-  border-right: 2px solid var(--fg-faint); border-bottom: 2px solid var(--fg-faint);
-  transform: rotate(45deg);
+  content: "";
+  position: absolute; right: 16px; top: 50%;
+  width: 8px; height: 8px;
+  border-right: 2px solid var(--fg-3);
+  border-bottom: 2px solid var(--fg-3);
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
 }
-textarea { min-height: 96px; resize: vertical; font-size: var(--t-sm); }
+
+.row { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* a checkbox / switch on its own line */
+.sw { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+
+/* ── buttons ────────────────────────────────────────────────────────── */
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
-  font-family: inherit; font-size: var(--t-md); font-weight: 650;
-  border-radius: var(--r2); border: 1px solid transparent;
-  padding: 13px 18px; min-height: var(--tap); cursor: pointer;
-  transition: transform var(--fast) var(--ease), opacity var(--fast) var(--ease);
-  width: 100%;
+  min-height: 48px; padding: 0 18px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 15px; font-weight: 650; letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: transform 0.08s var(--ease), background 0.16s, opacity 0.16s;
+  text-decoration: none;
 }
-.btn:active { transform: scale(.985); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.primary { background: var(--brand); color: var(--brand-ink); }
-.btn.ghost { background: var(--card-hi); color: var(--fg); border-color: var(--line); }
-.btn.danger { background: transparent; color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, transparent); }
-.btn.sm { padding: 9px 13px; font-size: var(--t-sm); min-height: 38px; width: auto; }
-.row { display: flex; gap: var(--s2); }
-.row > * { flex: 1; }
+.btn:active { transform: scale(0.977); }
+.btn:disabled { opacity: 0.42; cursor: not-allowed; transform: none; }
 
-/* ── switch ──────────────────────────────────────────────────────────────── */
-.opt {
-  display: flex; align-items: flex-start; gap: var(--s3);
-  padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft);
+.btn.primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, #7B78FF, #5A57E4);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px rgba(109, 106, 248, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.opt:last-child { border-bottom: 0; }
-.opt .txt { flex: 1; min-width: 0; }
-.opt .name { font-size: var(--t-md); font-weight: 600; }
-.opt .why { font-size: var(--t-sm); color: var(--fg-faint); margin-top: 2px; }
-.opt .cost { font-size: var(--t-xs); color: var(--warn); margin-top: 4px; display: block; }
+.btn.ghost { background: transparent; border-color: var(--line-2); color: var(--fg-2); }
+.btn.danger { background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.4); color: #FCA5A5; }
+.btn.small { min-height: 40px; padding: 0 14px; font-size: 14px; border-radius: var(--r-sm); }
+.btn.sm { min-height: 38px; padding: 0 13px; font-size: 13.5px; border-radius: var(--r-sm); }
+.btn.block { width: 100%; }
 
-.sw { flex: 0 0 auto; position: relative; width: 46px; height: 28px; margin-top: 2px; }
-.sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.sw .track {
-  position: absolute; inset: 0; border-radius: var(--rpill);
-  background: var(--line); transition: background var(--med) var(--ease); pointer-events: none;
-}
-.sw .knob {
-  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--fg-dim); transition: transform var(--med) var(--ease), background var(--med) var(--ease);
-  pointer-events: none;
-}
-.sw input:checked ~ .track { background: var(--brand); }
-.sw input:checked ~ .knob { transform: translateX(18px); background: #fff; }
-.sw input:focus-visible ~ .track { box-shadow: 0 0 0 3px var(--brand-soft); }
+/* ── chips ──────────────────────────────────────────────────────────── */
 
-/* ── colour swatch ───────────────────────────────────────────────────────── */
-.swatch { display: flex; align-items: center; gap: var(--s3); }
-.swatch input[type=color] {
-  width: 46px; height: 46px; padding: 2px; border: 1px solid var(--line);
-  border-radius: var(--r2); background: var(--bg); cursor: pointer; flex: 0 0 auto;
-}
-.swatch input[type=text] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--t-sm); text-transform: uppercase; }
-
-/* ── chips ───────────────────────────────────────────────────────────────── */
 .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
 .chip {
-  font-size: var(--t-xs); font-weight: 650; padding: 5px 10px; border-radius: var(--rpill);
-  background: var(--card-hi); color: var(--fg-dim); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 38px; padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-size: 13.5px; font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.chip.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 35%, transparent); background: color-mix(in srgb, var(--pass) 12%, transparent); }
-.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
-.chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, transparent); background: color-mix(in srgb, var(--fail) 12%, transparent); }
+.chip.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: #fff;
+  font-weight: 650;
+}
+.chip.pass { color: var(--ok); border-color: rgba(52, 211, 153, 0.35); background: rgba(52, 211, 153, 0.1); }
 
-/* ── findings ────────────────────────────────────────────────────────────── */
-.finding { display: flex; gap: var(--s3); padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); }
-.finding:last-child { border-bottom: 0; }
-.finding .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; flex: 0 0 auto; }
-.finding .dot.critical, .finding .dot.error { background: var(--fail); }
-.finding .dot.warning { background: var(--warn); }
-.finding .dot.info { background: var(--info); }
-.finding .msg { font-size: var(--t-md); }
-.finding .meta { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.finding .fixbtn { margin-top: var(--s2); }
+/* ── the project picker ─────────────────────────────────────────────── */
 
-.layerline {
-  display: flex; align-items: center; gap: var(--s3);
-  padding: var(--s2) 0; font-size: var(--t-sm);
-}
-.layerline .nm { flex: 1; color: var(--fg-dim); }
-.layerline .n { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
-
-/* ── permission table ────────────────────────────────────────────────────── */
-.perm { padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); }
-.perm:last-child { border-bottom: 0; }
-.perm .top { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
-.perm .pname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--t-sm); font-weight: 600; }
-.perm .why { font-size: var(--t-sm); color: var(--fg-dim); margin-top: 3px; }
-.perm .feat { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 2px; }
-.dropped { font-size: var(--t-sm); color: var(--fg-faint); padding: 4px 0; }
-.dropped code { color: var(--fg-dim); }
-
-/* ── device preview ──────────────────────────────────────────────────────── */
-.stage { display: flex; justify-content: center; padding: var(--s2) 0 var(--s4); }
-.device {
-  position: relative; width: 264px; height: 552px; flex: 0 0 auto;
-  border-radius: 38px; padding: 10px;
-  background: #05070d; border: 1px solid var(--line);
-  box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04);
-  transition: width var(--med) var(--ease), height var(--med) var(--ease);
-}
-.device.landscape { width: 480px; height: 250px; border-radius: 26px; }
-.device .notch {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  width: 62px; height: 5px; border-radius: var(--rpill); background: #1c2333; z-index: 3;
-}
-.device.landscape .notch { width: 5px; height: 46px; top: 50%; left: 12px; transform: translateY(-50%); }
-.screen {
-  width: 100%; height: 100%; border-radius: 28px; overflow: hidden;
-  position: relative; display: flex; flex-direction: column;
-  background: var(--pv-bg, #fff); color: var(--pv-fg, #111);
-}
-.device.landscape .screen { border-radius: 18px; }
-
-.sbar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 7px 14px 3px; font-size: 10px; font-weight: 700;
-  color: var(--pv-sb, #111); flex: 0 0 auto;
-}
-.sbar .icons { display: flex; gap: 4px; align-items: center; }
-.sbar .icons i { display: block; background: currentColor; border-radius: 1px; }
-.sbar .sig { width: 12px; height: 8px; clip-path: polygon(0 100%, 100% 0, 100% 100%); }
-.sbar .batt { width: 17px; height: 8px; border-radius: 2px; opacity: .9; }
-
-.pv-body { flex: 1; overflow-y: auto; padding: 10px 13px; }
-.pv-body::-webkit-scrollbar { width: 0; }
-.pv-h1 { font-size: 17px; font-weight: 700; margin: 4px 0 5px; letter-spacing: -.01em; }
-.pv-p { font-size: 11.5px; opacity: .68; margin: 0 0 11px; line-height: 1.45; }
-.pv-card {
-  border-radius: 11px; padding: 10px; margin-bottom: 8px;
-  border: 1px solid color-mix(in srgb, var(--pv-fg) 12%, transparent);
-  background: color-mix(in srgb, var(--pv-fg) 5%, transparent);
-}
-.pv-card .t { font-size: 12px; font-weight: 650; margin: 0 0 4px; }
-.pv-card .d { font-size: 10.5px; opacity: .6; margin: 0; line-height: 1.4; }
-.pv-btn {
-  display: block; width: 100%; text-align: center; font-size: 12px; font-weight: 650;
-  padding: 10px; border-radius: 9px; border: 0; margin-bottom: 7px;
-  background: var(--pv-primary, #2563eb); color: var(--pv-onprimary, #fff);
-}
-.pv-btn.ghost { background: color-mix(in srgb, var(--pv-fg) 9%, transparent); color: var(--pv-fg); }
-.pv-tabs {
-  display: flex; flex: 0 0 auto;
-  border-top: 1px solid color-mix(in srgb, var(--pv-fg) 12%, transparent);
-  background: color-mix(in srgb, var(--pv-fg) 4%, transparent);
-}
-.pv-tabs div { flex: 1; text-align: center; padding: 8px 0 9px; font-size: 9.5px; opacity: .55; }
-.pv-tabs div.on { opacity: 1; color: var(--pv-primary); font-weight: 700; }
-.pv-nav { height: 3.5px; flex: 0 0 auto; background: color-mix(in srgb, var(--pv-fg) 22%, transparent); margin: auto 34% 6px; border-radius: 3px; }
-
-.skel { border-radius: 7px; background: color-mix(in srgb, var(--pv-fg) 11%, transparent); margin-bottom: 7px; }
-
-.pv-note {
-  text-align: center; font-size: var(--t-xs); color: var(--fg-faint);
-  margin: 0 0 var(--s4); line-height: 1.5;
-}
-
-/* ── status strip ────────────────────────────────────────────────────────── */
-.health {
-  display: flex; align-items: center; gap: var(--s2);
-  padding: var(--s2) var(--s4); font-size: var(--t-sm);
-  border-bottom: 1px solid var(--line-soft); font-weight: 600;
-}
-.health .spacer { flex: 1; }
-.health .val { font-variant-numeric: tabular-nums; }
-
-.empty { text-align: center; padding: var(--s8) var(--s4); color: var(--fg-faint); }
-.empty .big { font-size: var(--t-lg); color: var(--fg-dim); font-weight: 600; margin-bottom: var(--s2); }
+.picker { display: flex; flex-direction: column; gap: var(--s2); }
+.picker > p { color: var(--fg-2); font-size: 14px; margin-bottom: var(--s2); }
 
 .tpl {
-  display: flex; align-items: center; gap: var(--s3); width: 100%;
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r3);
-  padding: var(--s3) var(--s4); margin-bottom: var(--s2); cursor: pointer;
-  text-align: left; font-family: inherit; color: var(--fg); min-height: var(--tap);
-  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 66px; padding: 12px 14px;
+  text-align: left; cursor: pointer;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition: transform 0.08s var(--ease), background 0.16s;
 }
-.tpl:hover { background: var(--card-hi); border-color: var(--brand); }
-.tpl .tmark { width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
-.tpl .tmark svg { width: 18px; height: 18px; stroke-width: 1.8; }
-.tpl .tname { font-weight: 650; font-size: var(--t-md); }
-.tpl .ttag { font-size: var(--t-sm); color: var(--fg-faint); }
+.tpl:active { transform: scale(0.985); background: var(--surface-2); }
+.tpl .tpl-ico {
+  width: 42px; height: 42px; flex: 0 0 auto; border-radius: 13px;
+  display: grid; place-items: center;
+  background: linear-gradient(150deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--line-2);
+  color: #C7C5FF;
+}
+.tpl .tpl-ico svg { width: 21px; height: 21px; }
+.tpl .tpl-name { font-size: 15px; font-weight: 650; }
+.tpl .tpl-desc { font-size: 12.5px; color: var(--fg-3); }
+
+/* ── the tab bar ────────────────────────────────────────────────────── */
+
+.tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 40;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: rgba(10, 13, 24, 0.86);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  border-top: 1px solid var(--line);
+}
+.tabbar .inner { display: flex; gap: 4px; max-width: 640px; margin: 0 auto; }
+.tab {
+  flex: 1 1 0; min-height: 56px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 6px 2px;
+  border: 0; border-radius: var(--r);
+  background: none; color: var(--fg-3);
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: color 0.16s, background 0.16s;
+}
+.tab svg { width: 22px; height: 22px; }
+.tab[aria-selected="true"] { color: #fff; background: var(--accent-soft); }
+.tab:active { background: var(--surface-2); }
+
+/* ── findings ───────────────────────────────────────────────────────── */
+
+.findings { display: flex; flex-direction: column; gap: var(--s2); }
+.finding {
+  border-radius: var(--r);
+  padding: 12px 14px;
+  font-size: 13px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+}
+.finding.err  { border-color: rgba(248, 113, 113, 0.45); background: rgba(248, 113, 113, 0.1); }
+.finding.warn { border-color: rgba(251, 191, 36, 0.4);  background: rgba(251, 191, 36, 0.085); }
+.finding-msg { line-height: 1.45; }
+.finding-acts { display: flex; gap: var(--s2); margin-top: 10px; flex-wrap: wrap; }
+
+/* ── the device preview ─────────────────────────────────────────────── */
+
+.device { display: flex; flex-direction: column; gap: var(--s3); max-width: 340px; margin: 0 auto; }
+.device-screen {
+  position: relative;
+  display: flex; flex-direction: column;
+  min-height: 460px;
+  border-radius: 30px;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-2), inset 0 0 0 6px #05070E;
+}
+.pv-caption { font-size: 12px; color: var(--fg-3); text-align: center; line-height: 1.5; }
+
+/* the shell the Preview tab draws */
+.screen {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  overflow: hidden;
+}
+
+/* ── the screen designer ────────────────────────────────────────────── */
+
+.designer { display: flex; flex-direction: column; gap: var(--s3); }
+
+.screen-chips { display: flex; gap: var(--s2); overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+.screen-chips::-webkit-scrollbar { display: none; }
+.screen-chips .chip { flex: 0 0 auto; }
+.screen-chips .chip-n {
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, 0.1); border-radius: 999px; padding: 1px 7px;
+}
+
+/* the component tree */
+.tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tree .node {
+  margin-left: calc(var(--depth) * 10px);
+  display: flex; align-items: center; gap: 4px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.tree .node.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.tree .node-main {
+  flex: 1 1 auto; min-width: 0; min-height: 50px;
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 8px 4px 8px 12px;
+  background: none; border: 0; text-align: left; cursor: pointer;
+}
+.tree .node-name { font-size: 14px; font-weight: 650; }
+.tree .node-id {
+  font-size: 11.5px; color: var(--fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tree .node-acts { display: flex; gap: 2px; padding-right: 6px; }
+
+.ibtn {
+  width: 38px; height: 38px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: transparent; color: var(--fg-3);
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.ibtn:active { background: var(--surface-3); color: var(--fg); }
+
+/* the palette */
+.palette-groups { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.palette-groups::-webkit-scrollbar { display: none; }
+.palette-groups .chip { flex: 0 0 auto; }
+
+.palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: var(--s2); }
+.pitem {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 62px; padding: 10px 12px;
+  text-align: left; cursor: pointer;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: transform 0.08s var(--ease), border-color 0.16s;
+}
+.pitem:active { transform: scale(0.97); border-color: var(--accent-line); }
+.pitem .pitem-ico {
+  width: 32px; height: 32px; flex: 0 0 auto; border-radius: 10px;
+  display: grid; place-items: center;
+  background: linear-gradient(150deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--line-2);
+  font-size: 14px; color: #C7C5FF;
+}
+.pitem-name { font-size: 13.5px; font-weight: 650; }
+.pitem-sub { font-size: 11px; color: var(--fg-3); }
+
+/* the property panel */
+.inspector { display: flex; flex-direction: column; gap: var(--s4); }
+.inspector .field { gap: 7px; }
+.inspector label { font-size: 13px; font-weight: 600; color: var(--fg-2); }
+.sub-field {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-left: 12px; border-left: 2px solid var(--line-2);
+}
+.field.event { padding-top: var(--s4); border-top: 1px solid var(--line); }
+
+.toggle {
+  align-self: flex-start;
+  min-height: 44px; padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.toggle.on { border-color: var(--accent-line); background: var(--accent-soft); color: #fff; }
+
+.colour-row { display: flex; gap: var(--s2); align-items: center; }
+.colour-row input[type="color"] {
+  width: 56px; height: 48px; flex: 0 0 auto; padding: 3px;
+  border-radius: var(--r); border: 1px solid var(--line-2); background: var(--surface-2);
+}
+.swatch { display: flex; gap: var(--s2); align-items: center; }
+.swatch input[type="color"] {
+  width: 56px; height: 48px; flex: 0 0 auto; padding: 3px;
+  border-radius: var(--r); border: 1px solid var(--line-2); background: var(--surface-2);
+}
+
+.sub.err { color: var(--bad); font-weight: 600; }
+
+/* ── running build ──────────────────────────────────────────────────── */
 
 .runrow {
-  display: flex; align-items: center; gap: var(--s3);
-  padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); font-size: var(--t-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding: 12px 14px; border-radius: var(--r); background: var(--surface-2);
 }
-.runrow:last-child { border-bottom: 0; }
-.runrow .rname { flex: 1; font-weight: 600; }
-.runrow .rstate { font-weight: 700; font-size: var(--t-xs); }
-.rstate.success { color: var(--pass); }
-.rstate.failure { color: var(--fail); }
-.rstate.in_progress { color: var(--warn); }
-.rstate.queued { color: var(--fg-faint); }
+.runrow .rname { font-weight: 650; font-size: 14px; }
+.rstate { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.rstate.success { color: var(--ok); }
+.rstate.failure { color: var(--bad); }
+.rstate.in_progress, .rstate.queued { color: var(--warn); }
 
-code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-
-.banner {
-  display: flex; gap: var(--s3); padding: var(--s3) var(--s4);
-  border-radius: var(--r3); font-size: var(--t-sm); margin-bottom: var(--s3);
-  border: 1px solid var(--line);
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s3);
+  padding: var(--s6) var(--s4); text-align: center;
+  border: 1px dashed var(--line-2); border-radius: var(--r-lg);
+  background: var(--surface);
 }
-.banner.warn { background: color-mix(in srgb, var(--warn) 10%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
-.banner.fail { background: color-mix(in srgb, var(--fail) 10%, transparent); border-color: color-mix(in srgb, var(--fail) 32%, transparent); }
-.banner.pass { background: color-mix(in srgb, var(--pass) 10%, transparent); border-color: color-mix(in srgb, var(--pass) 32%, transparent); }
+.empty .big { font-size: 17px; font-weight: 650; }
+.empty p { color: var(--fg-3); font-size: 13.5px; max-width: 34ch; }
+
+/* ── dialogs and toasts ─────────────────────────────────────────────── */
+
+.sheet-back {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(4, 6, 12, 0.66);
+  backdrop-filter: blur(3px);
+  display: grid; place-items: end center;
+  padding: 0;
+}
+.sheet {
+  width: 100%; max-width: 560px;
+  background: var(--surface);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  border-top: 1px solid var(--line-2);
+  padding: var(--s5) var(--s4) calc(var(--s5) + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: var(--s4);
+  max-height: 88vh; overflow: auto;
+}
+.sheet h2 { font-size: 18px; font-weight: 700; }
 
 .toast {
-  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom));
-  transform: translate(-50%, 12px); z-index: 60;
-  background: var(--card-hi); color: var(--fg); border: 1px solid var(--line);
-  padding: 11px 17px; border-radius: var(--rpill); font-size: var(--t-sm); font-weight: 600;
-  box-shadow: 0 12px 32px rgba(0,0,0,.45);
-  opacity: 0; pointer-events: none; transition: opacity var(--med) var(--ease), transform var(--med) var(--ease);
-  max-width: 88vw; text-align: center;
+  position: fixed;
+  left: 50%; transform: translate(-50%, 20px);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 14px);
+  z-index: 70;
+  max-width: min(92vw, 460px);
+  padding: 12px 16px;
+  border-radius: var(--r);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-2);
+  font-size: 13.5px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.22s, transform 0.22s var(--ease);
 }
 .toast.on { opacity: 1; transform: translate(-50%, 0); }
 
-details.adv { border-top: 1px solid var(--line-soft); margin-top: var(--s3); padding-top: var(--s3); }
-details.adv > summary {
-  cursor: pointer; font-size: var(--t-sm); font-weight: 650; color: var(--fg-dim);
-  list-style: none; min-height: 34px; display: flex; align-items: center; gap: var(--s2);
-}
-details.adv > summary::-webkit-details-marker { display: none; }
-details.adv > summary::before { content: "▸"; color: var(--fg-faint); transition: transform var(--fast) var(--ease); }
-details.adv[open] > summary::before { transform: rotate(90deg); }
-details.adv > *:not(summary) { margin-top: var(--s3); }
+/* ── the app being designed, drawn in the preview ───────────────────── */
 
-.sr {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+.sbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 16px 5px; font-size: 12px; font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.sbar .icons { display: flex; gap: 5px; align-items: center; }
+.sbar .sig, .sbar .batt { display: block; background: currentColor; }
+.sbar .sig {
+  width: 15px; height: 10px; opacity: 0.9;
+  clip-path: polygon(0 70%, 22% 70%, 22% 100%, 0 100%, 0 70%, 33% 45%, 55% 45%, 55% 100%, 33% 100%, 33% 45%, 66% 20%, 88% 20%, 88% 100%, 66% 100%, 66% 20%, 100% 0, 100% 100%, 78% 100%, 78% 0);
+}
+.sbar .batt { width: 22px; height: 11px; border-radius: 3px; }
+
+.pv-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow: auto; }
+.pv-empty { opacity: 0.6; font-size: 13px; font-style: italic; }
+.pv-label { font-size: 12.5px; font-weight: 650; }
+.pv-input {
+  width: 100%; padding: 11px 12px; border-radius: var(--r-sm);
+  font: inherit; font-size: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07); color: inherit;
+}
+.pv-btn {
+  min-height: 46px; padding: 0 16px; border-radius: var(--r-sm); border: 1px solid transparent;
+  font: inherit; font-size: 14.5px; font-weight: 650;
+  background: #5A57E4; color: #fff;
+}
+.pv-btn.ghost { background: transparent; border-color: rgba(255, 255, 255, 0.35); color: inherit; }
+.pv-btn.danger { background: #DC2626; color: #fff; }
+.pv-btn.full { width: 100%; }
+.pv-btn.round { width: 48px; min-width: 48px; height: 48px; padding: 0; border-radius: 999px; }
+
+.pv-track { height: 8px; border-radius: 999px; overflow: hidden; }
+.pv-fill { height: 100%; border-radius: 999px; }
+.pv-cap { font-size: 11.5px; opacity: 0.75; margin: 0; }
+
+.pv-spin {
+  width: 22px; height: 22px; border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  animation: pvspin 0.9s linear infinite;
+}
+@keyframes pvspin { to { transform: rotate(360deg); } }
+
+.pv-nav { display: flex; border-top: 1px solid rgba(255, 255, 255, 0.14); }
+.pv-nav-item { flex: 1 1 0; text-align: center; font-size: 11px; padding: 11px 2px; opacity: 0.6; }
+.pv-nav-item.on { opacity: 1; font-weight: 700; box-shadow: inset 0 3px 0 var(--accent-2); }
+
+.pv-appbar { display: flex; align-items: center; gap: 10px; padding: 14px 12px; margin: -12px -12px 4px; font-weight: 650; }
+.pv-appbar-title { flex: 1 1 auto; }
+
+.pv-list-row { padding: 11px 10px; }
+.pv-list-row p { font-size: 14px; }
+.pv-list-row .sub { font-size: 12px; opacity: 0.7; }
+
+.pv-cell {
+  padding: 16px 6px; border-radius: var(--r-sm); text-align: center; font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pv-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.16); }
+.pv-tab { padding: 9px 12px; font-size: 13px; opacity: 0.65; }
+.pv-tab.on { opacity: 1; font-weight: 650; box-shadow: inset 0 -3px 0 var(--accent-2); }
+
+.pv-check { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.pv-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pv-switch-row p { font-size: 14px; }
+.pv-switch {
+  width: 44px; height: 26px; flex: 0 0 auto; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22); position: relative;
+  transition: background 0.2s;
+}
+.pv-switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 999px; background: #fff;
+  transition: left 0.2s var(--ease);
+}
+.pv-switch.on { background: var(--accent-2); }
+.pv-switch.on::after { left: 21px; }
+
+.pv-range { width: 100%; accent-color: var(--accent-2); }
+
+.pv-drawer { padding: 16px; border-radius: var(--r); background: rgba(255, 255, 255, 0.08); }
+.pv-drawer-t { font-weight: 650; }
+.pv-dialog {
+  padding: 16px; border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.pv-dialog-t { font-weight: 650; margin-bottom: 4px; }
+.pv-dialog-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.pv-sheet {
+  padding: 12px 16px 20px; margin: 0 -12px -12px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+.pv-grab {
+  display: block; width: 36px; height: 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32); margin: 0 auto 10px;
+}
+.pv-fab {
+  align-self: flex-end;
+  min-height: 50px; padding: 0 20px; border-radius: 999px; border: 0;
+  font: inherit; font-weight: 700;
+  background: var(--accent-2); color: #06242B;
+  box-shadow: 0 10px 24px -10px rgba(34, 211, 238, 0.9);
+}
+
+/* ── the preview tab's device shell ─────────────────────────────────── */
+
+.pv-h1 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.pv-p { color: var(--fg-3); font-size: 13.5px; }
+.pv-card {
+  padding: 14px; border-radius: var(--r); background: var(--surface-2);
+  border: 1px solid var(--line);
+}
+.pv-card .t { font-weight: 650; font-size: 14px; }
+.pv-card .d { color: var(--fg-3); font-size: 12.5px; margin-top: 3px; }
+.pv-btn-old {
+  min-height: 46px; border-radius: var(--r); border: 0;
+  background: linear-gradient(180deg, #7B78FF, #5A57E4); color: #fff; font-weight: 650;
+}
+.skel { height: 10px; border-radius: 999px; background: var(--surface-3); }
+
+@media (min-width: 560px) {
+  .palette-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation-duration: 0.001ms !important; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   SCREEN DESIGNER
-   Phone first: every control is a thumb-sized target, and the preview is
-   drawn at the width of the phone it is being designed on.
+   FEATURES — the capability list and the permission tables
+   ══════════════════════════════════════════════════════════════════════
+
+   A capability is a decision, so it is laid out as a row: what it does on the
+   left, one switch on the right. The switch is the only thing that changes it,
+   and it is 52×30 with the whole row tappable, because this is the list people
+   scroll through on a phone.
    ══════════════════════════════════════════════════════════════════════ */
-.designer { display: flex; flex-direction: column; gap: 14px; }
-.designer .d-cell {
-  border: 1px solid var(--line); border-radius: 14px; background: var(--card);
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
-}
-.designer .d-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.designer .d-title { font-weight: 650; font-size: 14px; }
-.designer .d-note { font-size: 11px; color: var(--muted); line-height: 1.35; }
-.designer .d-alert {
-  margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 12px; line-height: 1.4;
-  background: color-mix(in srgb, #F59E0B 16%, transparent); border: 1px solid color-mix(in srgb, #F59E0B 45%, transparent);
-}
-.screen-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
-.screen-chips .chip {
-  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line);
-  background: transparent; color: inherit; font: inherit; font-size: 13px; min-height: 40px;
-}
-.screen-chips .chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); font-weight: 600; }
-.screen-chips .chip .chip-n {
-  font-size: 11px; opacity: .75; background: color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 999px; padding: 1px 6px;
-}
-.tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.tree .node {
-  margin-left: calc(var(--depth) * 14px); display: flex; align-items: center; gap: 6px;
-  border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px 4px 2px;
-  background: color-mix(in srgb, currentColor 3%, transparent);
-}
-.tree .node.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.tree .node-main {
-  flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 8px 6px; min-height: 44px;
-}
-.tree .node-name { font-size: 13px; font-weight: 600; }
-.tree .node-id { font-size: 11px; color: var(--muted); }
-.tree .node-acts { display: flex; gap: 2px; flex: 0 0 auto; }
-.ibtn {
-  width: 34px; height: 34px; border-radius: 9px; border: 1px solid transparent;
-  background: color-mix(in srgb, currentColor 8%, transparent); color: inherit; font-size: 14px; line-height: 1;
-}
-.ibtn:hover { border-color: var(--line); }
-.palette-groups { display: flex; gap: 6px; overflow-x: auto; }
-.palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
-.pitem {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  padding: 10px; border-radius: 12px; border: 1px solid var(--line);
-  background: transparent; color: inherit; font: inherit; text-align: left; min-height: 56px;
-}
-.pitem:active { background: color-mix(in srgb, var(--accent) 14%, transparent); }
-.pitem-name { font-size: 13px; font-weight: 600; }
-.pitem-sub { font-size: 11px; color: var(--muted); }
-.inspector { display: flex; flex-direction: column; gap: 12px; }
-.inspector .field { display: flex; flex-direction: column; gap: 5px; }
-.inspector label { font-size: 12px; font-weight: 600; }
-.inspector input[type=text], .inspector input[type=number], .inspector textarea {
-  width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
-  background: color-mix(in srgb, currentColor 4%, transparent); color: inherit; font: inherit;
-  min-height: 44px;
-}
-.inspector textarea { min-height: 88px; resize: vertical; }
-.inspector input[aria-invalid="true"] { border-color: #EF4444; }
-.colour-row { display: flex; gap: 8px; align-items: center; }
-.colour-row input[type=color] { width: 48px; height: 44px; padding: 2px; border-radius: 10px; border: 1px solid var(--line); background: transparent; }
-.toggle {
-  align-self: flex-start; padding: 10px 16px; border-radius: 999px; border: 1px solid var(--line);
-  background: transparent; color: inherit; font: inherit; font-size: 13px; min-height: 44px;
-}
-.toggle.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); font-weight: 600; }
-.sub-field { margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
-.field.event { border-top: 1px dashed var(--line); padding-top: 10px; }
-.findings { display: flex; flex-direction: column; gap: 8px; }
-.finding { border-radius: 10px; padding: 9px 10px; font-size: 12px; border: 1px solid var(--line); }
-.finding.err { border-color: color-mix(in srgb, #EF4444 50%, transparent); background: color-mix(in srgb, #EF4444 10%, transparent); }
-.finding.warn { border-color: color-mix(in srgb, #F59E0B 45%, transparent); background: color-mix(in srgb, #F59E0B 9%, transparent); }
-.finding-msg { margin: 0 0 4px; line-height: 1.4; }
-.finding-acts { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 
-/* the preview device */
-.designer .device { margin: 0 auto; display: flex; flex-direction: column; gap: 8px; max-width: 320px; }
-.device-screen {
-  position: relative; border-radius: 18px; overflow: hidden; display: flex; flex-direction: column;
-  min-height: 420px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.14);
+.opt {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  gap: var(--s3);
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
 }
-.pv-body { flex: 1 1 auto; display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow: auto; }
-.pv-empty { margin: 0; opacity: .6; font-size: 13px; font-style: italic; }
-.pv-caption { margin: 0; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.35; }
-.pv-label { font-size: 12px; font-weight: 600; }
-.pv-input {
-  width: 100%; padding: 10px; border-radius: 10px; font: inherit; font-size: 13px;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  background: color-mix(in srgb, currentColor 6%, transparent); color: inherit;
+.opt:first-of-type { border-top: 0; padding-top: 4px; }
+.opt .txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.opt .name {
+  font-size: 14.5px; font-weight: 620; letter-spacing: -0.005em;
+  display: flex; align-items: center; gap: 6px;
 }
-.pv-btn {
-  padding: 11px 16px; border-radius: 10px; border: 1px solid transparent; font: inherit; font-size: 14px; font-weight: 600;
-  background: #2563EB; color: #fff; min-height: 44px;
-}
-.pv-btn.ghost { background: transparent; border-color: color-mix(in srgb, currentColor 35%, transparent); color: inherit; }
-.pv-btn.danger { background: #DC2626; color: #fff; }
-.pv-btn.full { width: 100%; }
-.pv-btn.round { width: 46px; height: 46px; border-radius: 999px; padding: 0; }
-.pv-track { height: 8px; border-radius: 999px; overflow: hidden; }
-.pv-fill { height: 100%; }
-.pv-cap { margin: 0; font-size: 11px; opacity: .75; }
-.pv-spin {
-  width: 22px; height: 22px; border-radius: 999px; border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
-  border-top-color: currentColor; animation: pvspin 1s linear infinite;
-}
-@keyframes pvspin { to { transform: rotate(360deg); } }
-.pv-nav { display: flex; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
-.pv-nav-item { flex: 1 1 0; text-align: center; font-size: 11px; padding: 9px 2px; opacity: .6; }
-.pv-nav-item.on { opacity: 1; font-weight: 700; box-shadow: inset 0 3px 0 var(--accent); }
-.pv-appbar { display: flex; align-items: center; gap: 10px; padding: 12px; margin: -12px -12px 4px; font-weight: 650; }
-.pv-appbar-title { flex: 1 1 auto; }
-.pv-list-row { padding: 10px; }
-.pv-list-row p { margin: 0; font-size: 14px; }
-.pv-list-row .sub { font-size: 12px; opacity: .7; }
-.pv-cell {
-  padding: 14px 6px; border-radius: 10px; text-align: center; font-size: 12px;
-  background: color-mix(in srgb, currentColor 9%, transparent);
-}
-.pv-tabs { display: flex; gap: 4px; border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent); }
-.pv-tab { padding: 8px 12px; font-size: 13px; opacity: .65; }
-.pv-tab.on { opacity: 1; font-weight: 650; box-shadow: inset 0 -3px 0 var(--accent); }
-.pv-check { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.pv-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.pv-switch-row p { margin: 0; font-size: 14px; }
-.pv-switch { width: 40px; height: 22px; border-radius: 999px; background: color-mix(in srgb, currentColor 25%, transparent); position: relative; }
-.pv-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 999px; background: #fff; }
-.pv-switch.on { background: var(--accent); }
-.pv-switch.on::after { left: 20px; }
-.pv-range { width: 100%; }
-.pv-drawer { padding: 14px; border-radius: 12px; background: color-mix(in srgb, currentColor 8%, transparent); }
-.pv-drawer-t { margin: 0; font-weight: 650; }
-.pv-dialog { padding: 14px; border-radius: 14px; background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 18%, transparent); }
-.pv-dialog-t { margin: 0 0 4px; font-weight: 650; }
-.pv-dialog-acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
-.pv-sheet { padding: 10px 14px 16px; border-radius: 16px 16px 0 0; background: color-mix(in srgb, currentColor 8%, transparent); margin: 0 -12px -12px; }
-.pv-grab { display: block; width: 34px; height: 4px; border-radius: 999px; background: color-mix(in srgb, currentColor 35%, transparent); margin: 0 auto 8px; }
-.pv-fab {
-  align-self: flex-end; padding: 12px 18px; border-radius: 999px; border: 0; font: inherit; font-weight: 700;
-  background: var(--accent); color: #fff; box-shadow: 0 6px 18px rgba(0,0,0,.25); min-height: 48px;
+.opt .why { font-size: 12.5px; color: var(--fg-3); line-height: 1.45; }
+.opt .cost {
+  align-self: flex-start;
+  margin-top: 5px; padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 650;
+  color: var(--warn);
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.32);
 }
 
-.inspector .sub.err, .sub.err { color: #EF4444; font-weight: 600; }
-.hint {
-  margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 12px; line-height: 1.45;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+/* The switch. The native checkbox stays in the document — it carries the label
+   and the keyboard behaviour — but it is drawn as a track and a knob. */
+.sw {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px; height: 32px;
+  cursor: pointer;
 }
+.sw input {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  margin: 0; opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+.sw .track {
+  position: absolute; inset: 0;
+  border-radius: 999px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  transition: background 0.2s var(--ease), border-color 0.2s;
+}
+.sw .knob {
+  position: absolute;
+  top: 4px; left: 4px;
+  width: 24px; height: 24px;
+  border-radius: 999px;
+  background: #8A93A8;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  transition: transform 0.22s var(--ease), background 0.2s;
+  pointer-events: none;
+}
+.sw input:checked ~ .track {
+  background: linear-gradient(180deg, #7B78FF, #5A57E4);
+  border-color: transparent;
+}
+.sw input:checked ~ .knob { transform: translateX(20px); background: #fff; }
+.sw input:focus-visible ~ .track { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+
+/* A row that is entirely the label: tapping anywhere on it flips the switch. */
+.opt > .sw { margin-top: -2px; }
+
+/* ── the permission table ───────────────────────────────────────────── */
+
+.perm {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.perm:first-of-type { border-top: 0; padding-top: 0; }
+.perm .top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.perm .pname {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px; font-weight: 600;
+  word-break: break-all;
+}
+.perm .why { font-size: 12.5px; color: var(--fg-2); margin-top: 4px; line-height: 1.45; }
+.perm .feat { font-size: 11.5px; color: var(--fg-3); margin-top: 3px; }
+
+/* A permission that is deliberately NOT requested: quieter, and marked. */
+.perm.off { opacity: 0.78; }
+.perm.off .pname { text-decoration: line-through; text-decoration-color: rgba(255,255,255,0.3); }
+
+.chip.warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   VALIDATION, FINDINGS, LAYERS
+   ══════════════════════════════════════════════════════════════════════ */
+
+.banner {
+  padding: 14px 15px;
+  border-radius: var(--r2);
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: var(--s3);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+}
+.banner strong { display: block; font-size: 14.5px; font-weight: 660; margin-bottom: 3px; }
+/* The headline is what the reader came for, so it is the brightest text on the
+   card; the sentence under it explains, and stays quiet. */
+.banner.warn { border-color: rgba(251, 191, 36, 0.34); background: rgba(251, 191, 36, 0.08); }
+.banner.warn strong { color: var(--warn); }
+.banner.pass { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.07); }
+.banner.pass strong { color: var(--ok); }
+.banner.fail { border-color: rgba(248, 113, 113, 0.34); background: rgba(248, 113, 113, 0.08); }
+.banner.fail strong { color: var(--bad); }
+
+/* One validation layer per row: verdict, name, and how much it found. */
+.layerline {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.layerline:first-of-type { border-top: 0; padding-top: 2px; }
+.layerline .nm { flex: 1; font-size: 13.5px; font-weight: 560; min-width: 0; }
+.layerline .n { font-size: 12px; color: var(--fg-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* A finding: coloured dot, plain sentence, and the exact field it came from. */
+.finding {
+  display: grid;
+  grid-template-columns: 8px 1fr;
+  gap: 11px;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}
+.finding:first-of-type { border-top: 0; padding-top: 2px; }
+.finding .dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 6px; background: var(--fg-3); }
+.finding .dot.critical, .finding .dot.error { background: var(--bad); box-shadow: 0 0 0 3px rgba(248,113,113,0.16); }
+.finding .dot.warning { background: var(--warn); box-shadow: 0 0 0 3px rgba(251,191,36,0.14); }
+.finding .dot.info { background: var(--accent-2); }
+.finding .msg { font-size: 13.5px; line-height: 1.5; }
+.finding .meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: var(--fg-3); margin-top: 5px;
+  word-break: break-all;
+}
+.finding .fixbtn { margin-top: 9px; }
 </style>
-<meta name="appmint-build" content="97a9e05cfe43fdd9">
+<meta name="appmint-build" content="28745541f56dfb43">
 </head>
 <body>
 
 <div class="app">
   <header class="topbar">
     <span class="mark" aria-hidden="true"></span>
-    <h1>App Mint Studio<span class="proj" id="projname">Loading…</span></h1>
+    <div class="identity">
+      <div class="name" id="projname">Loading…</div>
+      <span class="meta" id="projmeta">starting up</span>
+    </div>
     <button class="btn ghost sm" id="importproj" aria-label="Import a specification">Import</button>
-    <button class="btn ghost sm" id="newproj" aria-label="New project">New</button>
+    <button class="btn primary sm" id="newproj" aria-label="New project">New</button>
   </header>
 
   <div class="health" id="health" role="status" aria-live="polite"></div>
@@ -2392,19 +2747,24 @@ function screenDesignerView() {
   const list = screensOf(spec);
   const screen = activeScreen(spec);
 
-  const wrap = el('div', { class: 'designer' }, [
-    screensForTabsNote(spec, list),
-    screenPicker(spec, list),
-  ]);
+  const wrap = el('div', { class: 'designer' }, [screensForTabsNote(spec, list)]);
 
+  // With nothing built yet, the page offers one thing to do. The screen picker
+  // would only add a second button for the same action, which on an otherwise
+  // empty page reads as two different choices.
   if (!screen) {
+    if (list.length) wrap.append(screenPicker(spec, list));
     wrap.append(el('div', { class: 'empty' }, [
-      el('p', {}, 'No screens yet.'),
-      el('button', { class: 'btn primary', onclick: () => { screensOf(spec).push(starterScreen(spec, 'Home', 0)); touch(); hardUpdate(); } }, 'Add the first screen'),
-      el('p', { class: 'sub' }, 'This app is set to native-screens, so it needs at least one screen before it can build.'),
+      el('button', {
+        class: 'btn primary',
+        onclick: () => { screensOf(spec).push(starterScreen(spec, 'Home', 0)); touch(); hardUpdate(); },
+      }, 'Build the first screen'),
+      el('p', { class: 'sub' }, 'This app draws its own screens, so it needs at least one before it can build. Tapping here starts you with a Home screen you can fill in.'),
     ]));
     return wrap;
   }
+
+  wrap.append(screenPicker(spec, list));
 
   const findings = screenFindings(spec, screen);
 
@@ -3219,6 +3579,29 @@ function screenSummary(spec) {
 
 
 /* ── tiny DOM helpers ──────────────────────────────────────────────────── */
+/**
+ * Count something that may not be the shape it was assumed to be.
+ * Returns null rather than undefined, so the interface can tell "none" apart
+ * from "I could not work it out".
+ */
+function count(value) {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+}
+
+/**
+ * Nothing in this interface may ever print the word "undefined", "NaN" or
+ * "[object Object]". They are how a program tells the user it has lost track of
+ * its own state, and they are always a bug rather than a value. When a number is
+ * not known, say so in words instead; when it is known, agree with the noun.
+ */
+function say(n, noun) {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return `— ${noun}s`;
+  const v = Number(n);
+  return `${v} ${noun}${v === 1 ? '' : 's'}`;
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -3244,6 +3627,17 @@ function el(tag, attrs = {}, ...kids) {
 /* ── icons (inline SVG, so nothing loads from the network) ─────────────── */
 const I = {
   layers: '<rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/>',
+  // section icons
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 2.8 12V4.8A2 2 0 0 1 4.8 2.8H12a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  palette: '<circle cx="13.5" cy="6.5" r="2"/><circle cx="17.5" cy="12.5" r="2"/><circle cx="8.5" cy="7.5" r="2"/><circle cx="6.5" cy="14" r="2"/><path d="M12 22a5 5 0 0 1 0-10h1.5a2.5 2.5 0 0 0 0-5H11"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
+  download: '<path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 20h16"/>',
+  code: '<path d="m9 8-5 4 5 4M15 8l5 4-5 4"/>',
+  palette2: '<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9.5" cy="15" r="1.2"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
@@ -3356,8 +3750,13 @@ function viewDesign() {
   const mode = spec.app.mode || 'webview';
 
   return [
-    card('How this app is built', [
-      field('Architecture', kvSelect(
+    section('How this app is built', {
+      icon: I.spark,
+      id: 'arch',
+      open: true,
+      summary: () => (spec.app.mode === 'native-screens' ? 'Screens you design — no website' : 'A website shown in the app'),
+      children: [
+      fieldBox('Architecture', kvSelect(
         mode,
         [
           ['native-screens', 'Screens I design here — no website needed'],
@@ -3394,9 +3793,15 @@ function viewDesign() {
       ), mode === 'native-screens'
         ? 'The app draws its own screens. Nothing is downloaded, so it opens instantly and works with no internet at all. Build the screens in the Screens section.'
         : 'The app shows a web page. Its screens come from the address below.'),
-    ]),
+      ],
+    }),
 
-    card('Application', [
+    section('Application', {
+      icon: I.tag,
+      id: 'app',
+      open: true,
+      summary: () => id.appName ? `${id.appName} · ${id.packageName}` : 'Not named yet',
+      children: [
       field('Application name', el('input', {
         type: 'text', value: id.appName, maxlength: 60, 'aria-label': 'Application name',
         oninput: (e) => { id.appName = e.target.value; touch(); softUpdate(); },
@@ -3407,20 +3812,30 @@ function viewDesign() {
         'aria-label': 'Package name',
         oninput: (e) => { id.packageName = e.target.value.trim(); touch(); softUpdate(); },
       }), 'Permanent once published. Google Play rejects names starting with com.example.'),
-    ]),
+      ],
+    }),
 
-    card('Appearance', [
-      colourField('Primary', 'primary', th),
-      colourField('Accent', 'accent', th),
-      colourField('Background', 'background', th),
-      colourField('Surface', 'surface', th),
-      colourField('Text on surface', 'onSurface', th),
-    ], 'Colours are applied to the generated Android theme and to the preview.'),
+    section('Appearance', {
+      icon: I.palette,
+      id: 'look',
+      summary: () => `${th.primary} · ${th.background}`,
+      children: [
+        colourField('Primary', 'primary', th),
+        colourField('Accent', 'accent', th),
+        colourField('Background', 'background', th),
+        colourField('Surface', 'surface', th),
+        colourField('Text on surface', 'onSurface', th),
+      ],
+    }),
 
     mode === 'native-screens' ? el('p', { class: 'hint' },
-      'This app draws its own screens, so the web content settings below are not used. Build the screens in the Screens section.') : null,
+      'This app draws its own screens, so there is no web page to configure. Build them in the Screens section.') : null,
 
-    card('Web content', [
+    mode === 'native-screens' ? null : section('Web content', {
+      icon: I.code,
+      id: 'web',
+      summary: () => (wv.localAsset || wv.startUrl || 'No address set'),
+      children: [
       field('Content source', el('div', { class: 'selectwrap' }, el('select', {
         'aria-label': 'Content source',
         onchange: (e) => {
@@ -3453,9 +3868,14 @@ function viewDesign() {
         el('option', { value: 'external-browser', selected: wv.externalLinks === 'external-browser' }, 'Open the browser'),
         el('option', { value: 'in-app', selected: wv.externalLinks === 'in-app' }, 'Always inside the app'),
       )), 'Payment and login pages usually need to hand off to another app.'),
-    ]),
+      ],
+    }),
 
-    detailsAdvanced('Advanced appearance', [
+    section('Advanced appearance', {
+      icon: I.sliders,
+      id: 'adv',
+      summary: () => `Android ${a.minSdk}+ · ${a.orientation}`,
+      children: [
       field('Minimum Android version', kvSelect(
         a.minSdk,
         [[24, 'Android 7.0 — widest reach'], [26, 'Android 8.0'], [28, 'Android 9'], [29, 'Android 10'], [31, 'Android 12'], [33, 'Android 13']],
@@ -3474,7 +3894,8 @@ function viewDesign() {
         }),
         el('span', { class: 'track' }), el('span', { class: 'knob' }),
       ]), 'Off is safer. Turning it on can make a page unreadable if the page was not built for dark mode.'),
-    ]),
+      ],
+    }),
   ];
 }
 
@@ -3486,7 +3907,7 @@ function viewCaps() {
 
   const toggles = Object.entries(CAPABILITIES)
     .filter(([, c]) => !c.implicit)
-    .map(([key, cap]) => el('div', { class: 'opt' }, [
+    .map(([key, cap]) => el('label', { class: 'opt' }, [
       el('div', { class: 'txt' }, [
         el('div', { class: 'name' }, cap.label),
         el('div', { class: 'why' }, cap.reason),
@@ -3522,7 +3943,7 @@ function viewCaps() {
     : [el('p', { class: 'hint' }, 'No permissions are required by this configuration.')];
 
   return [
-    card('Capabilities', toggles,
+    card('What this app can do', toggles,
       'Turn a feature on and its Android permission appears automatically. Turn it off and the permission is removed from the app.'),
 
     card('Permissions this app will request', [
@@ -3628,7 +4049,10 @@ function viewBuild() {
     return el('div', { class: 'layerline' }, [
       el('span', { class: bad ? 'chip fail' : (found.length ? 'chip warn' : 'chip pass') }, bad ? 'FAIL' : (found.length ? 'WARN' : 'PASS')),
       el('span', { class: 'nm' }, `Layer ${L.n} — ${L.name}`),
-      el('span', { class: 'n' }, found.length ? `${found.length} finding${found.length === 1 ? '' : 's'}` : ''),
+      // The count sits at the far end of the row, where a stray gap between the
+      // layer name and the number cannot read as part of the name itself
+      // ("Layer 2 — Semantic1 finding" was exactly that).
+      el('span', { class: 'n' }, found.length ? say(found.length, 'finding') : ''),
     ]);
   });
 
@@ -3655,8 +4079,8 @@ function viewBuild() {
       ]))
     : (r.counts.warning
         ? el('div', { class: 'banner warn' }, el('div', {}, [
-            el('strong', {}, 'Ready to build, with warnings. '),
-            `${r.counts.warning} warning${r.counts.warning === 1 ? '' : 's'} will not stop the build but are worth reading.`,
+            el('strong', {}, r.counts.warning === 1 ? 'Ready to build, with 1 warning.' : `Ready to build, with ${r.counts.warning} warnings.`),
+            ' Nothing here stops the build, but each one is worth a look before you release.'
           ]))
         : el('div', { class: 'banner pass' }, el('div', {}, [
             el('strong', {}, 'Specification is valid. '), 'All five validation layers passed.',
@@ -3668,11 +4092,11 @@ function viewBuild() {
   }, svg(I.build) + ' Start build');
 
   return [
-    card('Validation', [statusBanner, ...layers], null),
+    card('Validation layers', [statusBanner, ...layers], null),
 
     r.issues.length
-      ? card('Findings', findings, 'Every finding names the exact field, so nothing is vague.')
-      : card('Findings', el('p', { class: 'hint' }, 'Nothing to report.'), null),
+      ? card('What needs attention', findings, 'Every finding names the exact field, so nothing is vague.')
+      : card('What needs attention', el('p', { class: 'hint' }, 'Nothing to report.'), null),
 
     card('Build', [
       el('p', { class: 'hint' },
@@ -3723,6 +4147,11 @@ function viewBuild() {
 }
 
 /* ── view helpers ──────────────────────────────────────────────────────── */
+
+/**
+ * A plain card: a heading and its contents, always visible.
+ * Kept for the sections where nothing is gained by folding them away.
+ */
 function card(title, kids, hint) {
   return el('section', { class: 'card' }, [
     title ? el('h2', {}, title) : null,
@@ -3731,7 +4160,70 @@ function card(title, kids, hint) {
   ]);
 }
 
+/* Which sections a person has opened. Kept for the life of the page rather than
+   saved, so reopening the Studio always starts from the same tidy state. */
+const OPEN = new Set();
+
+/**
+ * A section that folds away, showing its current value when closed.
+ *
+ * This is the shape most of the interface uses, and the reason is comfort on a
+ * phone: a settings page that opens everything at once is a long scroll, and
+ * whatever you came for is always below the fold. Closed, this shows what is
+ * inside ("Application · Phone Test App"), so most of the time the answer is
+ * readable without opening anything.
+ *
+ * The contents stay in the document while closed — hidden, not removed — so
+ * searching the page and the automated tests both still see them.
+ */
+function section(name, { icon, summary, open = false, id, children } = {}) {
+  const key = id || name;
+  const isOpen = open || OPEN.has(key);
+  const body = el('div', { class: 'sec-body' }, ...(children || []).filter(Boolean));
+  const sub = el('span', { class: 'sec-sub' }, typeof summary === 'function' ? summary() : (summary || ''));
+
+  const head = el('button', {
+    class: 'sec-head',
+    type: 'button',
+    'aria-expanded': isOpen ? 'true' : 'false',
+    onclick: () => {
+      const nowOpen = !sec.dataset.open || sec.dataset.open === '0';
+      sec.dataset.open = nowOpen ? '1' : '0';
+      head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      if (nowOpen) OPEN.add(key); else OPEN.delete(key);
+    },
+  }, [
+    el('span', { class: 'sec-ico', html: svg(icon || I.sliders) }),
+    el('span', { class: 'sec-text' }, [
+      el('span', { class: 'sec-name' }, name),
+      sub,
+    ]),
+    el('span', { class: 'chev', html: svg('<path d="m6 9 6 6 6-6"/>') }),
+  ]);
+
+  const sec = el('section', { class: 'sec', id: `sec-${key}`, 'data-open': isOpen ? '1' : '0' }, [head, body]);
+  // Keep the summary function on the element so a later edit can refresh it.
+  sec.__summary = typeof summary === 'function' ? summary : () => (summary || '');
+  return sec;
+}
+
+/**
+ * One labelled control.
+ *
+ * The label is wrapped around the control rather than given a `for`, so
+ * tapping the words focuses the field even when the control is a group of
+ * things rather than a single input.
+ */
 function field(label, control, sub) {
+  return el('label', { class: 'field' }, [
+    el('span', {}, label),
+    control,
+    sub ? el('span', { class: 'sub' }, sub) : null,
+  ].filter(Boolean));
+}
+
+/** The same, but for a control that must not be a nested label target. */
+function fieldBox(label, control, sub) {
   return el('div', { class: 'field' }, [
     el('label', {}, label),
     control,
@@ -3829,17 +4321,49 @@ function renderHealth() {
   const r = check();
   const node = $('#health');
   const total = r.counts.critical + r.counts.error + r.counts.warning;
+  const caps = (S.active.spec.capabilities || []).length;
+
+  // The verdict is the first thing on the page, because the only question that
+  // really matters is "will this build?" — and if it will not, how many things
+  // are in the way.
+  const verdict = r.blocked
+    ? `Blocked · ${r.counts.critical + r.counts.error} to fix`
+    : (total ? `Ready · ${total} warning${total === 1 ? '' : 's'}` : 'Ready to build');
+
+  // The permission count is the number people care about most, because it is the
+  // one Google Play shows to everyone who installs the app.
+  //
+  // derivePermissions returns { permissions, dropped, unknownCapabilities }, not
+  // an array. Reading .length off it gave undefined, and the strip cheerfully
+  // printed "undefined permissions" — so this reads the field, and everything
+  // below goes through the same helper that refuses to print nothing.
+  const perms = count(derivePermissions(S.active.spec).permissions);
+  const right = `${say(perms, 'permission')} · ${say(caps, 'feature')}`;
+
   node.replaceChildren(
-    el('span', { class: 'chip ' + (r.blocked ? 'fail' : (total ? 'warn' : 'pass')) },
-      r.blocked ? 'Blocked' : (total ? 'Ready, warnings' : 'Valid')),
+    el('span', { class: 'pill ' + (r.blocked ? 'fail' : (total ? 'warn' : 'pass')) }, verdict),
     el('span', { class: 'spacer' }),
-    el('span', { class: 'val' },
-      `${(S.active.spec.capabilities || []).length} feature${(S.active.spec.capabilities || []).length === 1 ? '' : 's'}`),
+    el('span', { class: 'val' }, right),
   );
+}
+
+/** The one-line description of the project under its name. */
+function projectMeta(spec) {
+  const mode = (spec.app || {}).mode || 'webview';
+  const bits = [];
+  if (mode === 'native-screens') {
+    const n = (spec.screens || []).length;
+    bits.push(n ? `${n} screen${n === 1 ? '' : 's'}` : 'no screens yet');
+  } else {
+    bits.push((spec.app?.webview?.localAsset || spec.app?.webview?.startUrl || 'no address').replace(/^https?:\/\//, '').slice(0, 34));
+  }
+  bits.push(spec.android.theme === 'dark' ? 'dark' : 'light');
+  return bits.join(' · ');
 }
 
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
+  $('#projmeta').textContent = projectMeta(S.active.spec);
   const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
@@ -3850,10 +4374,30 @@ function renderActive() {
 /** Light refresh for typing: a full redraw would steal focus mid-keystroke. */
 function softUpdate() {
   renderHealth();
-  // The title bar shows the app name, so it has to follow what is being typed.
-  // Previously it kept showing the name from when the project was created.
+  // The title bar shows the app name and its one-line description, so both have
+  // to follow what is being typed. Previously the name was written once and then
+  // kept showing whatever the project was called when it was created.
   const t = $('#projname');
-  if (t && S.active) t.textContent = S.active.spec.identity.appName || 'Untitled';
+  const m = $('#projmeta');
+  if (!S.active) return;
+  if (t) t.textContent = S.active.spec.identity.appName || 'Untitled';
+  if (m) m.textContent = projectMeta(S.active.spec);
+  // and any section that shows a summary of the thing being typed
+  refreshSectionSummaries();
+}
+
+/**
+ * Sections show their current value while closed, so a change made inside one
+ * has to be reflected on its closed header. Without this the summary keeps
+ * describing what the value used to be, which is worse than showing nothing.
+ */
+function refreshSectionSummaries() {
+  for (const sec of $$('.sec')) {
+    const fn = sec.__summary;
+    if (!fn) continue;
+    const sub = sec.querySelector('.sec-sub');
+    if (sub) sub.textContent = fn();
+  }
 }
 /** Full redraw. */
 function hardUpdate() { renderActive(); }

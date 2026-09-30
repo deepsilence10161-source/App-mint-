@@ -20,6 +20,29 @@ import { permissionReport, derivePermissions } from '../../engine/capability/per
 import { TOOLCHAIN_PROFILES } from '../../engine/spec/toolchain.mjs';
 
 /* ── tiny DOM helpers ──────────────────────────────────────────────────── */
+/**
+ * Count something that may not be the shape it was assumed to be.
+ * Returns null rather than undefined, so the interface can tell "none" apart
+ * from "I could not work it out".
+ */
+function count(value) {
+  if (Array.isArray(value)) return value.length;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+}
+
+/**
+ * Nothing in this interface may ever print the word "undefined", "NaN" or
+ * "[object Object]". They are how a program tells the user it has lost track of
+ * its own state, and they are always a bug rather than a value. When a number is
+ * not known, say so in words instead; when it is known, agree with the noun.
+ */
+function say(n, noun) {
+  if (n === null || n === undefined || !Number.isFinite(Number(n))) return `— ${noun}s`;
+  const v = Number(n);
+  return `${v} ${noun}${v === 1 ? '' : 's'}`;
+}
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -45,6 +68,17 @@ function el(tag, attrs = {}, ...kids) {
 /* ── icons (inline SVG, so nothing loads from the network) ─────────────── */
 const I = {
   layers: '<rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/>',
+  // section icons
+  spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/>',
+  tag: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 2.8 12V4.8A2 2 0 0 1 4.8 2.8H12a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  palette: '<circle cx="13.5" cy="6.5" r="2"/><circle cx="17.5" cy="12.5" r="2"/><circle cx="8.5" cy="7.5" r="2"/><circle cx="6.5" cy="14" r="2"/><path d="M12 22a5 5 0 0 1 0-10h1.5a2.5 2.5 0 0 0 0-5H11"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
+  download: '<path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 20h16"/>',
+  code: '<path d="m9 8-5 4 5 4M15 8l5 4-5 4"/>',
+  palette2: '<circle cx="12" cy="12" r="9"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="9" r="1.2"/><circle cx="9.5" cy="15" r="1.2"/>',
+  shield: '<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
@@ -157,8 +191,13 @@ function viewDesign() {
   const mode = spec.app.mode || 'webview';
 
   return [
-    card('How this app is built', [
-      field('Architecture', kvSelect(
+    section('How this app is built', {
+      icon: I.spark,
+      id: 'arch',
+      open: true,
+      summary: () => (spec.app.mode === 'native-screens' ? 'Screens you design — no website' : 'A website shown in the app'),
+      children: [
+      fieldBox('Architecture', kvSelect(
         mode,
         [
           ['native-screens', 'Screens I design here — no website needed'],
@@ -195,9 +234,15 @@ function viewDesign() {
       ), mode === 'native-screens'
         ? 'The app draws its own screens. Nothing is downloaded, so it opens instantly and works with no internet at all. Build the screens in the Screens section.'
         : 'The app shows a web page. Its screens come from the address below.'),
-    ]),
+      ],
+    }),
 
-    card('Application', [
+    section('Application', {
+      icon: I.tag,
+      id: 'app',
+      open: true,
+      summary: () => id.appName ? `${id.appName} · ${id.packageName}` : 'Not named yet',
+      children: [
       field('Application name', el('input', {
         type: 'text', value: id.appName, maxlength: 60, 'aria-label': 'Application name',
         oninput: (e) => { id.appName = e.target.value; touch(); softUpdate(); },
@@ -208,20 +253,30 @@ function viewDesign() {
         'aria-label': 'Package name',
         oninput: (e) => { id.packageName = e.target.value.trim(); touch(); softUpdate(); },
       }), 'Permanent once published. Google Play rejects names starting with com.example.'),
-    ]),
+      ],
+    }),
 
-    card('Appearance', [
-      colourField('Primary', 'primary', th),
-      colourField('Accent', 'accent', th),
-      colourField('Background', 'background', th),
-      colourField('Surface', 'surface', th),
-      colourField('Text on surface', 'onSurface', th),
-    ], 'Colours are applied to the generated Android theme and to the preview.'),
+    section('Appearance', {
+      icon: I.palette,
+      id: 'look',
+      summary: () => `${th.primary} · ${th.background}`,
+      children: [
+        colourField('Primary', 'primary', th),
+        colourField('Accent', 'accent', th),
+        colourField('Background', 'background', th),
+        colourField('Surface', 'surface', th),
+        colourField('Text on surface', 'onSurface', th),
+      ],
+    }),
 
     mode === 'native-screens' ? el('p', { class: 'hint' },
-      'This app draws its own screens, so the web content settings below are not used. Build the screens in the Screens section.') : null,
+      'This app draws its own screens, so there is no web page to configure. Build them in the Screens section.') : null,
 
-    card('Web content', [
+    mode === 'native-screens' ? null : section('Web content', {
+      icon: I.code,
+      id: 'web',
+      summary: () => (wv.localAsset || wv.startUrl || 'No address set'),
+      children: [
       field('Content source', el('div', { class: 'selectwrap' }, el('select', {
         'aria-label': 'Content source',
         onchange: (e) => {
@@ -254,9 +309,14 @@ function viewDesign() {
         el('option', { value: 'external-browser', selected: wv.externalLinks === 'external-browser' }, 'Open the browser'),
         el('option', { value: 'in-app', selected: wv.externalLinks === 'in-app' }, 'Always inside the app'),
       )), 'Payment and login pages usually need to hand off to another app.'),
-    ]),
+      ],
+    }),
 
-    detailsAdvanced('Advanced appearance', [
+    section('Advanced appearance', {
+      icon: I.sliders,
+      id: 'adv',
+      summary: () => `Android ${a.minSdk}+ · ${a.orientation}`,
+      children: [
       field('Minimum Android version', kvSelect(
         a.minSdk,
         [[24, 'Android 7.0 — widest reach'], [26, 'Android 8.0'], [28, 'Android 9'], [29, 'Android 10'], [31, 'Android 12'], [33, 'Android 13']],
@@ -275,7 +335,8 @@ function viewDesign() {
         }),
         el('span', { class: 'track' }), el('span', { class: 'knob' }),
       ]), 'Off is safer. Turning it on can make a page unreadable if the page was not built for dark mode.'),
-    ]),
+      ],
+    }),
   ];
 }
 
@@ -287,7 +348,7 @@ function viewCaps() {
 
   const toggles = Object.entries(CAPABILITIES)
     .filter(([, c]) => !c.implicit)
-    .map(([key, cap]) => el('div', { class: 'opt' }, [
+    .map(([key, cap]) => el('label', { class: 'opt' }, [
       el('div', { class: 'txt' }, [
         el('div', { class: 'name' }, cap.label),
         el('div', { class: 'why' }, cap.reason),
@@ -323,7 +384,7 @@ function viewCaps() {
     : [el('p', { class: 'hint' }, 'No permissions are required by this configuration.')];
 
   return [
-    card('Capabilities', toggles,
+    card('What this app can do', toggles,
       'Turn a feature on and its Android permission appears automatically. Turn it off and the permission is removed from the app.'),
 
     card('Permissions this app will request', [
@@ -429,7 +490,10 @@ function viewBuild() {
     return el('div', { class: 'layerline' }, [
       el('span', { class: bad ? 'chip fail' : (found.length ? 'chip warn' : 'chip pass') }, bad ? 'FAIL' : (found.length ? 'WARN' : 'PASS')),
       el('span', { class: 'nm' }, `Layer ${L.n} — ${L.name}`),
-      el('span', { class: 'n' }, found.length ? `${found.length} finding${found.length === 1 ? '' : 's'}` : ''),
+      // The count sits at the far end of the row, where a stray gap between the
+      // layer name and the number cannot read as part of the name itself
+      // ("Layer 2 — Semantic1 finding" was exactly that).
+      el('span', { class: 'n' }, found.length ? say(found.length, 'finding') : ''),
     ]);
   });
 
@@ -456,8 +520,8 @@ function viewBuild() {
       ]))
     : (r.counts.warning
         ? el('div', { class: 'banner warn' }, el('div', {}, [
-            el('strong', {}, 'Ready to build, with warnings. '),
-            `${r.counts.warning} warning${r.counts.warning === 1 ? '' : 's'} will not stop the build but are worth reading.`,
+            el('strong', {}, r.counts.warning === 1 ? 'Ready to build, with 1 warning.' : `Ready to build, with ${r.counts.warning} warnings.`),
+            ' Nothing here stops the build, but each one is worth a look before you release.'
           ]))
         : el('div', { class: 'banner pass' }, el('div', {}, [
             el('strong', {}, 'Specification is valid. '), 'All five validation layers passed.',
@@ -469,11 +533,11 @@ function viewBuild() {
   }, svg(I.build) + ' Start build');
 
   return [
-    card('Validation', [statusBanner, ...layers], null),
+    card('Validation layers', [statusBanner, ...layers], null),
 
     r.issues.length
-      ? card('Findings', findings, 'Every finding names the exact field, so nothing is vague.')
-      : card('Findings', el('p', { class: 'hint' }, 'Nothing to report.'), null),
+      ? card('What needs attention', findings, 'Every finding names the exact field, so nothing is vague.')
+      : card('What needs attention', el('p', { class: 'hint' }, 'Nothing to report.'), null),
 
     card('Build', [
       el('p', { class: 'hint' },
@@ -524,6 +588,11 @@ function viewBuild() {
 }
 
 /* ── view helpers ──────────────────────────────────────────────────────── */
+
+/**
+ * A plain card: a heading and its contents, always visible.
+ * Kept for the sections where nothing is gained by folding them away.
+ */
 function card(title, kids, hint) {
   return el('section', { class: 'card' }, [
     title ? el('h2', {}, title) : null,
@@ -532,7 +601,70 @@ function card(title, kids, hint) {
   ]);
 }
 
+/* Which sections a person has opened. Kept for the life of the page rather than
+   saved, so reopening the Studio always starts from the same tidy state. */
+const OPEN = new Set();
+
+/**
+ * A section that folds away, showing its current value when closed.
+ *
+ * This is the shape most of the interface uses, and the reason is comfort on a
+ * phone: a settings page that opens everything at once is a long scroll, and
+ * whatever you came for is always below the fold. Closed, this shows what is
+ * inside ("Application · Phone Test App"), so most of the time the answer is
+ * readable without opening anything.
+ *
+ * The contents stay in the document while closed — hidden, not removed — so
+ * searching the page and the automated tests both still see them.
+ */
+function section(name, { icon, summary, open = false, id, children } = {}) {
+  const key = id || name;
+  const isOpen = open || OPEN.has(key);
+  const body = el('div', { class: 'sec-body' }, ...(children || []).filter(Boolean));
+  const sub = el('span', { class: 'sec-sub' }, typeof summary === 'function' ? summary() : (summary || ''));
+
+  const head = el('button', {
+    class: 'sec-head',
+    type: 'button',
+    'aria-expanded': isOpen ? 'true' : 'false',
+    onclick: () => {
+      const nowOpen = !sec.dataset.open || sec.dataset.open === '0';
+      sec.dataset.open = nowOpen ? '1' : '0';
+      head.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      if (nowOpen) OPEN.add(key); else OPEN.delete(key);
+    },
+  }, [
+    el('span', { class: 'sec-ico', html: svg(icon || I.sliders) }),
+    el('span', { class: 'sec-text' }, [
+      el('span', { class: 'sec-name' }, name),
+      sub,
+    ]),
+    el('span', { class: 'chev', html: svg('<path d="m6 9 6 6 6-6"/>') }),
+  ]);
+
+  const sec = el('section', { class: 'sec', id: `sec-${key}`, 'data-open': isOpen ? '1' : '0' }, [head, body]);
+  // Keep the summary function on the element so a later edit can refresh it.
+  sec.__summary = typeof summary === 'function' ? summary : () => (summary || '');
+  return sec;
+}
+
+/**
+ * One labelled control.
+ *
+ * The label is wrapped around the control rather than given a `for`, so
+ * tapping the words focuses the field even when the control is a group of
+ * things rather than a single input.
+ */
 function field(label, control, sub) {
+  return el('label', { class: 'field' }, [
+    el('span', {}, label),
+    control,
+    sub ? el('span', { class: 'sub' }, sub) : null,
+  ].filter(Boolean));
+}
+
+/** The same, but for a control that must not be a nested label target. */
+function fieldBox(label, control, sub) {
   return el('div', { class: 'field' }, [
     el('label', {}, label),
     control,
@@ -630,17 +762,49 @@ function renderHealth() {
   const r = check();
   const node = $('#health');
   const total = r.counts.critical + r.counts.error + r.counts.warning;
+  const caps = (S.active.spec.capabilities || []).length;
+
+  // The verdict is the first thing on the page, because the only question that
+  // really matters is "will this build?" — and if it will not, how many things
+  // are in the way.
+  const verdict = r.blocked
+    ? `Blocked · ${r.counts.critical + r.counts.error} to fix`
+    : (total ? `Ready · ${total} warning${total === 1 ? '' : 's'}` : 'Ready to build');
+
+  // The permission count is the number people care about most, because it is the
+  // one Google Play shows to everyone who installs the app.
+  //
+  // derivePermissions returns { permissions, dropped, unknownCapabilities }, not
+  // an array. Reading .length off it gave undefined, and the strip cheerfully
+  // printed "undefined permissions" — so this reads the field, and everything
+  // below goes through the same helper that refuses to print nothing.
+  const perms = count(derivePermissions(S.active.spec).permissions);
+  const right = `${say(perms, 'permission')} · ${say(caps, 'feature')}`;
+
   node.replaceChildren(
-    el('span', { class: 'chip ' + (r.blocked ? 'fail' : (total ? 'warn' : 'pass')) },
-      r.blocked ? 'Blocked' : (total ? 'Ready, warnings' : 'Valid')),
+    el('span', { class: 'pill ' + (r.blocked ? 'fail' : (total ? 'warn' : 'pass')) }, verdict),
     el('span', { class: 'spacer' }),
-    el('span', { class: 'val' },
-      `${(S.active.spec.capabilities || []).length} feature${(S.active.spec.capabilities || []).length === 1 ? '' : 's'}`),
+    el('span', { class: 'val' }, right),
   );
+}
+
+/** The one-line description of the project under its name. */
+function projectMeta(spec) {
+  const mode = (spec.app || {}).mode || 'webview';
+  const bits = [];
+  if (mode === 'native-screens') {
+    const n = (spec.screens || []).length;
+    bits.push(n ? `${n} screen${n === 1 ? '' : 's'}` : 'no screens yet');
+  } else {
+    bits.push((spec.app?.webview?.localAsset || spec.app?.webview?.startUrl || 'no address').replace(/^https?:\/\//, '').slice(0, 34));
+  }
+  bits.push(spec.android.theme === 'dark' ? 'dark' : 'light');
+  return bits.join(' · ');
 }
 
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
+  $('#projmeta').textContent = projectMeta(S.active.spec);
   const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
@@ -651,10 +815,30 @@ function renderActive() {
 /** Light refresh for typing: a full redraw would steal focus mid-keystroke. */
 function softUpdate() {
   renderHealth();
-  // The title bar shows the app name, so it has to follow what is being typed.
-  // Previously it kept showing the name from when the project was created.
+  // The title bar shows the app name and its one-line description, so both have
+  // to follow what is being typed. Previously the name was written once and then
+  // kept showing whatever the project was called when it was created.
   const t = $('#projname');
-  if (t && S.active) t.textContent = S.active.spec.identity.appName || 'Untitled';
+  const m = $('#projmeta');
+  if (!S.active) return;
+  if (t) t.textContent = S.active.spec.identity.appName || 'Untitled';
+  if (m) m.textContent = projectMeta(S.active.spec);
+  // and any section that shows a summary of the thing being typed
+  refreshSectionSummaries();
+}
+
+/**
+ * Sections show their current value while closed, so a change made inside one
+ * has to be reflected on its closed header. Without this the summary keeps
+ * describing what the value used to be, which is worse than showing nothing.
+ */
+function refreshSectionSummaries() {
+  for (const sec of $$('.sec')) {
+    const fn = sec.__summary;
+    if (!fn) continue;
+    const sub = sec.querySelector('.sec-sub');
+    if (sub) sub.textContent = fn();
+  }
 }
 /** Full redraw. */
 function hardUpdate() { renderActive(); }
