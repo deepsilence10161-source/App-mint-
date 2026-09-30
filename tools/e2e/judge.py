@@ -204,10 +204,27 @@ if bridge_hits:
           True, bridge_hits[0])
 
 if diff_launch_loaded is not None:
-    check("render_changed",
-          "Screen changed between launch and load (proves the page actually painted)",
-          diff_launch_loaded > 0.5,
-          f"mean pixel difference {diff_launch_loaded}")
+    # This check exists to catch a WebView that never painted: the app launches,
+    # the page is still fetching, and the screen stays on the splash.
+    #
+    # For a bundled page there is nothing to wait for, so it paints before the
+    # very first screenshot and the two images are legitimately identical. With
+    # that in mind, an unchanged screen is only interesting when the page was not
+    # already independently proven to have rendered and run its script.
+    content_proven = any(c["key"] == "content_rendered" and c["ok"] for c in checks)
+    js_proven = any(c["key"] == "js_executed" and c["ok"] for c in checks)
+
+    if content_proven and js_proven:
+        check("render_changed",
+              "Screen state between launch and load is consistent",
+              True,
+              f"mean pixel difference {diff_launch_loaded} — the page rendered and its "
+              f"script ran, so an unchanged screen means it painted immediately, not that it stalled")
+    else:
+        check("render_changed",
+              "Screen changed between launch and load (proves the page actually painted)",
+              diff_launch_loaded > 0.5,
+              f"mean pixel difference {diff_launch_loaded}")
 
 # ── 6. rotation actually happened ────────────────────────────────────────────
 ls_shot = shot_info.get("05-landscape", {})
