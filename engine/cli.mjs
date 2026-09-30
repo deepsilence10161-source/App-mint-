@@ -471,6 +471,87 @@ async function cmdAnalyse(args) {
   return counts.blocking ? 1 : 0;
 }
 
+/* ---------------------------------------------------------------- *
+ * rls
+ *
+ * Read migrations and answer the only question that matters about a
+ * backend an app depends on: can someone who is not the owner of a row
+ * read it, or change it, or tell the database it has been paid?
+ * ---------------------------------------------------------------- */
+async function cmdRls(args) {
+  const target = args._[1];
+  if (!target) return fail('Usage: rls <migrations directory or .sql file> [--spec <spec.json>] [--json]');
+  const { gate } = await import('./backend/rls.mjs');
+
+  // A file or a directory; a directory is read in name order, which is the
+  // order a migration runner applies it in.
+  let files = [];
+  try {
+    const stat = fs.statSync(target);
+    if (stat.isDirectory()) {
+      files = fs.readdirSync(target).filter((f) => f.endsWith('.sql')).sort()
+        .map((f) => ({ path: path.join(target, f), sql: fs.readFileSync(path.join(target, f), 'utf8') }));
+    } else {
+      files = [{ path: target, sql: fs.readFileSync(target, 'utf8') }];
+    }
+  } catch (err) {
+    return fail(`Could not read ${target}: ${err.message}`);
+  }
+  if (!files.length) return fail(`No .sql files in ${target}.`);
+
+  let spec = null;
+  if (args.spec) {
+    try { spec = readSpec(args.spec); } catch (err) { return fail(`Could not read the specification: ${err.message}`); }
+  }
+
+  const result = gate(files, { spec });
+
+  if (args.json) {
+    console.log(JSON.stringify({
+      counts: result.counts,
+      examined: result.examined,
+      findings: result.findings,
+    }, null, 2));
+    return result.counts.blocking ? 1 : 0;
+  }
+
+  const levelColour = { blocking: C.red, warning: C.yellow, info: C.cyan };
+  console.log('');
+  console.log(`  ${paint(C.bold, 'APP MINT — row level security gate')}`);
+  console.log(`  ${target}`);
+  console.log('');
+  console.log(`  ${paint(C.bold, 'What was examined')}`);
+  console.log(`    ${files.length} migration(s), ${result.examined.statements} statement(s)`);
+  console.log(`    ${result.examined.tables.length} table(s): ${result.examined.tables.join(', ') || 'none'}`);
+  console.log(`    ${result.examined.withRls.length} with row level security on`);
+  console.log(`    ${result.examined.policies} polic${result.examined.policies === 1 ? 'y' : 'ies'}${result.examined.functions.length ? `, ${result.examined.functions.length} function(s)` : ''}`);
+  if (spec) console.log(`    checked against ${spec.identity?.appName || 'the specification'}${spec.capabilities?.includes('payments') ? ' (takes payments)' : ''}`);
+
+  console.log('');
+  const c = result.counts;
+  console.log(`  ${paint(C.bold, 'Findings')}  ${paint(C.dim, `${c.blocking} blocking · ${c.warning} warning · ${c.info} notes`)}`);
+  if (!result.findings.length) {
+    console.log('');
+    console.log(`  ${paint(C.green, 'Nothing found.')} Every table above has row level security on, no policy is open to the anonymous role, no write policy permits everything, and nothing lets the app set a payment state by itself.`);
+  }
+  for (const f of result.findings) {
+    console.log('');
+    console.log(`    ${paint(levelColour[f.level] || C.reset, f.level.padEnd(8))} ${paint(C.bold, f.title)}`);
+    console.log(`             ${f.detail}`);
+    if (f.action && f.action !== 'Nothing to do.') console.log(`             ${paint(C.dim, f.action)}`);
+    for (const e of f.evidence.slice(0, 3)) console.log(`             ${paint(C.dim, `· ${e}`)}`);
+  }
+  console.log('');
+  if (c.blocking) {
+    console.log(`  ${paint(C.red, 'REFUSED')} — ${c.blocking} problem(s) would let somebody read or change data they should not.`);
+  } else {
+    console.log(`  ${paint(C.green, 'PASSED')} — no blocking problems found in what was examined.`);
+  }
+  console.log(`  ${paint(C.dim, 'This reads the migrations, not a running database: it says these holes are absent, not that the schema is provably safe.')}`);
+  console.log('');
+  return c.blocking ? 1 : 0;
+}
+
 const ROUTES = {
   validate: cmdValidate,
   generate: cmdGenerate,
@@ -479,6 +560,7 @@ const ROUTES = {
   'build-key': cmdBuildKey,
   cache: cmdCache,
   analyse: cmdAnalyse,
+  rls: cmdRls,
 };
 
 if (!cmd) { cmdExplain(); process.exit(0); }

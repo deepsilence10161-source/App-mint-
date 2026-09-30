@@ -219,6 +219,11 @@ const KEYWORDS = new Set([
  * Only names that are neither declared here nor imported are candidates, and
  * anything that appears as a property (`x.y(`) is excluded by the regex, which
  * is what keeps this from firing on methods, however many there are.
+ *
+ * Known limitation: regular expression literals are not treated as text, so a
+ * regex containing something that looks like a call — /needs the site('|’)/ —
+ * is read as a call to `site`. It fired once, on a field that turned out to be
+ * unused. Extend this scanner rather than working around it twice.
  */
 function calledButUndeclared(file) {
   const raw = fs.readFileSync(path.join(ROOT, file), 'utf8');

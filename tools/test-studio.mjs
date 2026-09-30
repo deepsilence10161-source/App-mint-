@@ -645,7 +645,6 @@ a { color: #6B3A1F; }</style></head>
       findings: document.querySelectorAll('#sec-website .wv-finding').length,
       changes: /What applying this changes/.test(text),
       applyLabel: (box.querySelector('.wv-acts .btn.primary') || {}).textContent || '',
-      saysServer: /needs the site('|\u2019)s own server/.test(text) || /needs its server|submit/i.test(text),
     };
   });
   check('The screen says how many pages it read', screen.pages, 'no page count on screen');

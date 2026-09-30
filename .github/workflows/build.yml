@@ -107,6 +107,54 @@ jobs:
           " >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+      # ---- Backend security ----------------------------------------------
+      # A mobile app cannot keep a secret: its key is inside the app, so every
+      # rule about who may read and write what has to live in the database. This
+      # gate reads the migrations and checks that it does.
+      - name: Row level security gate
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          checked=0
+          for spec in apps/*/spec.json; do
+            dir="$(dirname "$spec")/db/migrations"
+            if [ -d "$dir" ]; then
+              node engine/cli.mjs rls "$dir" --spec "$spec"
+              checked=$((checked + 1))
+            fi
+          done
+          echo "checked $checked app(s) with migrations"
+
+          # And the gate is proven to bite, on every commit. A gate that quietly
+          # stops working is indistinguishable from a gate with nothing to
+          # report, so a schema that would let the app mark its own orders paid
+          # must be refused here, loudly.
+          cat > build/insecure.sql <<'SQL'
+          create table public.orders (
+            id uuid primary key,
+            user_id uuid not null,
+            status text not null default 'awaiting_payment'
+          );
+          alter table public.orders enable row level security;
+          create policy "own" on public.orders for update to authenticated
+            using (user_id = auth.uid()) with check (user_id = auth.uid());
+          SQL
+          if node engine/cli.mjs rls build/insecure.sql --json > build/gate-should-fail.json 2>&1; then
+            echo "::error::the gate accepted a schema it must refuse — every payment rule below it is unproven"
+            cat build/gate-should-fail.json
+            exit 1
+          fi
+          # Named, not merely non-zero: the refusal has to be the payment rule.
+          node -e "
+            const r = require('./build/gate-should-fail.json');
+            const codes = r.findings.map(f => f.code);
+            if (!codes.includes('CLIENT_CAN_WRITE_PAYMENT_STATE')) {
+              console.error('refused, but not for the payment rule:', codes.join(', '));
+              process.exit(1);
+            }
+            console.log('and it refused the unsafe schema for the right reason:', codes.join(', '));
+          "
+
       # ---- Generate ------------------------------------------------------
       - name: Generate Android project
         id: gen

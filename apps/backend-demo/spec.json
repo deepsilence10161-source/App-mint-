@@ -1,0 +1,55 @@
+{
+  "specVersion": "1.0",
+  "identity": {
+    "appName": "Bakery Orders",
+    "packageName": "com.appmint.bakeryorders",
+    "versionName": "1.0.0",
+    "versionCode": 1,
+    "description": "Order from the Greenfield Bakery. Payments are verified on the server; the app never decides that an order is paid."
+  },
+  "android": {
+    "minSdk": 24, "targetSdk": 36, "compileSdk": 36,
+    "orientation": "portrait", "theme": "system",
+    "allowBackup": false, "cleartextTraffic": false
+  },
+  "app": {
+    "mode": "native-screens",
+    "splash": { "enabled": true, "backgroundColor": "#7C3F00", "durationMs": 600 }
+  },
+  "capabilities": ["internet", "payments", "upi", "share"],
+  "theme": {
+    "primary": "#7C3F00", "onPrimary": "#FFFFFF",
+    "background": "#FFFAF3", "surface": "#F1E7D8", "onSurface": "#241A12",
+    "accent": "#C98F3C", "statusBarStyle": "dark"
+  },
+  "screens": [
+    {
+      "id": "home", "name": "Home", "title": "Order bread", "showInTabs": true,
+      "components": [
+        { "id": "heading", "type": "Heading", "props": { "text": "Order bread" } },
+        { "id": "intro", "type": "Text", "props": { "text": "Sourdough, whole wheat, and cakes made to order." } },
+        { "id": "menu", "type": "List", "props": { "items": "Sourdough, Whole wheat, Cinnamon buns" } }
+      ]
+    },
+    {
+      "id": "orders", "name": "Orders", "title": "Your orders", "showInTabs": true,
+      "components": [
+        { "id": "t", "type": "Heading", "props": { "text": "Your orders" } },
+        { "id": "e", "type": "Text", "props": { "text": "Nothing ordered yet." } }
+      ]
+    }
+  ],
+  "navigation": { "type": "bottom-tabs" },
+  "build": {
+    "engine": "github-actions", "outputs": ["debug-apk"], "minify": false,
+    "abiSplits": false, "cache": true, "r8": false,
+    "toolchain": { "agp": "8.13.2", "gradle": "8.13", "buildTools": "36.0.0", "jdk": "17" }
+  },
+  "signing": { "mode": "debug", "failClosed": true },
+  "backend": {
+    "kind": "supabase",
+    "url": "https://example.supabase.co",
+    "requiresAuth": true,
+    "tablesRequiringRls": ["public.profiles", "public.orders", "public.order_items"]
+  }
+}
