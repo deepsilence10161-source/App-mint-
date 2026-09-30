@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<title>App Mint — device test FAIL</title>
+<title>App Mint — device test PASS</title>
 <style>
   * { box-sizing: border-box; }
   :root {
@@ -23,7 +23,7 @@
   header { text-align:center; padding: 8px 0 20px; }
   .verdict {
     display:inline-block; font-weight:800; font-size:2rem; letter-spacing:.02em;
-    color:#dc2626; margin: 4px 0 6px;
+    color:#16a34a; margin: 4px 0 6px;
   }
   .sub { color:var(--dim); font-size:.875rem; }
   .card {
@@ -58,32 +58,32 @@
 <body>
   <header>
     <div class="dim" style="font-size:.75rem;letter-spacing:.08em;text-transform:uppercase">App Mint · device test</div>
-    <div class="verdict">FAIL</div>
-    <div class="sub">1 of 14 checks passed · run #12 · <code>e483c869</code></div>
+    <div class="verdict">PASS</div>
+    <div class="sub">22 of 22 checks passed · run #13 · <code>b042c8be</code></div>
   </header>
 
   <section class="card">
     <h2>What was checked</h2>
     <ul>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">APK installed on the device</div>
-          <div class="ev">adb install rc=?</div>
+          <div class="ev">adb install rc=0</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Activity started</div>
-          <div class="ev">(no start output)</div>
+          <div class="ev">Complete</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Package is registered on the device</div>
-          <div class="ev">dumpsys package : 0 bytes</div>
+          <div class="ev">dumpsys package com.appmint.nativedemo: 6078 bytes</div>
         </div>
       </li>
       <li>
@@ -94,73 +94,129 @@
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">App process still alive after all interactions</div>
-          <div class="ev">pidof -&gt; unknown (pid n/a)</div>
+          <div class="ev">pidof -&gt; alive (pid 6678)</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: launch</div>
-          <div class="ev">0 bytes</div>
+          <div class="ev">92924 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: page loaded</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: after pull-to-refresh</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: after back press</div>
-          <div class="ev">0 bytes</div>
+          <div class="ev">93220 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: landscape rotation</div>
-          <div class="ev">0 bytes</div>
+          <div class="ev">70839 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: back to portrait</div>
-          <div class="ev">0 bytes</div>
+          <div class="ev">93220 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
-          <div class="lbl">Loaded screen shows real rendered content</div>
-          <div class="ev">no loaded screenshot to inspect</div>
+          <div class="lbl">Screenshot captured: first screen drawn</div>
+          <div class="ev">92924 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
-          <div class="lbl">JavaScript ran inside the WebView</div>
-          <div class="ev">no APPMINT_READY marker in logcat — the page may have loaded but its script did not run</div>
+          <div class="lbl">Screenshot captured: designed screen 1</div>
+          <div class="ev">92924 bytes</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#d97706">WARN</span>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Screenshot captured: designed screen 2</div>
+          <div class="ev">62300 bytes</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Screenshot captured: designed screen 3</div>
+          <div class="ev">70897 bytes</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Screenshot captured: designed screen 4</div>
+          <div class="ev">66282 bytes</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Loaded screen shows real rendered content (not a blank view)</div>
+          <div class="ev">2921 distinct colours, luminance spread 42.62 (a blank screen has a handful of colours and almost no spread)</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">This app draws its own screens, so no page script is expected</div>
+          <div class="ev">architecture=native-screens: the interface comes from 4 designed screen(s) compiled into the app, not from a web page</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">The app drew its first screen immediately</div>
+          <div class="ev">2921 distinct colours, luminance spread 42.62 in the launch frame (a designed app has nothing to download, so this is already the finished screen)</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Each designed screen can be reached and draws its own content</div>
+          <div class="ev">every screen differs from the one before it: screen 2 changed by 21.86, screen 3 changed by 14.51, screen 4 changed by 20.09</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">The first tab leads back to the screen the app opens on</div>
+          <div class="ev">difference 0.0 between the launch screen and the first tab</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">Pressing back from another tab returns to the first screen</div>
+          <div class="ev">difference 0.05 between the launch screen and the screen after back</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
+        <div class="ck">
+          <div class="lbl">App survived a rotation cycle</div>
+          <div class="ev">landscape and portrait screenshots both captured</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screen recording captured</div>
-          <div class="ev">0 bytes</div>
+          <div class="ev">737338 bytes</div>
         </div>
       </li></ul>
   </section>
@@ -168,9 +224,34 @@
   <section class="card">
     <h2>Screenshots from the emulator</h2>
     <p class="sub" style="margin:0 0 12px">Captured with <code>adb exec-out screencap</code> on a real Android 34 emulator — not a mock-up.</p>
-    <div class="grid"><p class="dim">No screenshots were captured.</p></div>
+    <div class="grid">
+      <figure>
+        <img src="shots/01-launch.png" alt="Launch" loading="lazy">
+        <figcaption>Launch <span class="dim">90 KB</span></figcaption>
+      </figure>
+      <figure>
+        <img src="shots/02-loaded.png" alt="Page loaded" loading="lazy">
+        <figcaption>Page loaded <span class="dim">90 KB</span></figcaption>
+      </figure>
+      <figure>
+        <img src="shots/04-after-back.png" alt="After back press" loading="lazy">
+        <figcaption>After back press <span class="dim">91 KB</span></figcaption>
+      </figure>
+      <figure>
+        <img src="shots/05-landscape.png" alt="Landscape" loading="lazy">
+        <figcaption>Landscape <span class="dim">69 KB</span></figcaption>
+      </figure>
+      <figure>
+        <img src="shots/06-portrait.png" alt="Portrait" loading="lazy">
+        <figcaption>Portrait <span class="dim">91 KB</span></figcaption>
+      </figure></div>
   </section>
   
+    <section class="card">
+      <h2>Screen recording</h2>
+      <video controls playsinline preload="metadata" src="e2e.mp4"></video>
+      <p class="dim">Recorded live on the emulator. 720 KB.</p>
+    </section>
 
   <section class="card">
     <h2>Reproduce this yourself</h2>
