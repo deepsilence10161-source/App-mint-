@@ -191,7 +191,7 @@ export function mainActivityJava(cfg) {
   const {
     packageName, appName,
     startUrl, allowedHosts,
-    javascriptEnabled, domStorage, zoom, fileUploads, forceDark,
+    javascriptEnabled, domStorage, zoom, fileUploads, forceDark, canvasBackground, acceptLanguage,
     externalLinks, offlinePage, splashEnabled, splashColor,
     hasNotifications, hasBridge, bridgeMethods, orientation, cleartext, hasFiles,
   } = cfg;
@@ -327,7 +327,15 @@ ${screenSecurity}
             webView.restoreState(savedInstanceState);
         } else {
             String target = START_URL;
-${offlinePage ? `            if (!isOnline()) { showOffline("You are offline. Connect to load ${appName}."); return; }\n` : ''}            webView.loadUrl(target);
+${offlinePage ? `            if (!isOnline()) { showOffline("You are offline. Connect to load ${appName}."); return; }\n` : ''}${acceptLanguage
+      ? `            // A fixed Accept-Language keeps the served page in one language
+            // regardless of the device locale. Without this the same build shows
+            // different content on different devices, which makes screenshots
+            // from a test run impossible to compare.
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            headers.put("Accept-Language", "${acceptLanguage}");
+            webView.loadUrl(target, headers);`
+      : '            webView.loadUrl(target);'}
         }
 
         handleDeepLink(getIntent());
@@ -384,7 +392,18 @@ ${hasNotifications ? '        requestNotificationPermissionIfNeeded();\n' : ''}$
             try { CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false); } catch (Throwable ignored) { }
         }
 
-        webView.setBackgroundColor(Color.parseColor("${splashColor}"));
+        // ── WebView canvas colour ──────────────────────────────────────────
+        // A web page that does not set its own background is painted on the
+        // VIEW's background, not on a white canvas the way a browser does it.
+        // Setting this to the app's dark theme colour therefore produced black
+        // default text on a dark background: the page loaded correctly and was
+        // unreadable. This was found by looking at a screenshot from a real
+        // emulator, not by reading code.
+        //
+        // The canvas must match what the page expects, so it defaults to white
+        // and can be overridden through app.webview.canvasBackground.
+        webView.setBackgroundColor(Color.parseColor("${canvasBackground}"));
+        refresh.setBackgroundColor(Color.parseColor("${canvasBackground}"));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
 ${bridgeAttach}

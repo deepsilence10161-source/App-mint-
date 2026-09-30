@@ -356,3 +356,15 @@ test('the offline notice is a sibling of the WebView, not added after setContent
     'addContentView ordering is fragile; use a root FrameLayout');
   assert.ok(activity.includes('root.addView(offlineView'), 'the offline view must be a sibling of the scroll view');
 });
+
+test('the WebView canvas is white by default so unstyled pages stay readable', () => {
+  // A page with no CSS background is painted on the VIEW background. Using the
+  // dark app theme there produced black text on a dark canvas — the page loaded
+  // and could not be read. Caught by looking at an emulator screenshot.
+  const s = goodSpec();
+  s.theme.background = '#0B1020';
+  const g = generateAndroidProject(s);
+  const activity = String(g.files.find((f) => f.path.endsWith('MainActivity.java')).data);
+  assert.ok(activity.includes('webView.setBackgroundColor(Color.parseColor("#FFFFFF"))'),
+    'the web canvas must default to white, not to the dark app background');
+});

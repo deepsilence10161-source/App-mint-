@@ -89,6 +89,8 @@ export function generateAndroidProject(spec, opts = {}) {
     domStorage: app.webview?.domStorage !== false,
     zoom: !!app.webview?.zoom,
     forceDark: app.webview?.forceDark === true,
+    acceptLanguage: app.webview?.acceptLanguage || null,
+    canvasBackground: app.webview?.canvasBackground || (app.webview?.forceDark === true ? (theme.background || '#0B1020') : '#FFFFFF'),
     fileUploads: !!app.webview?.fileUploads,
     externalLinks: app.webview?.externalLinks || 'custom-tab',
     offlinePage: app.webview?.offlinePage !== false,
