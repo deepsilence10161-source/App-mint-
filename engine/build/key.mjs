@@ -80,20 +80,38 @@ export function sha256(text) {
 /* ── the generators ─────────────────────────────────────────────────────── */
 
 /**
- * A digest of every file under engine/ that could change what gets generated.
+ * A digest of the files that decide what gets generated.
  *
- * Deliberately broad, and deliberately not clever about which file does what.
- * A precise map of "this file affects output, that one does not" is a
- * maintenance burden that is wrong the first time someone moves a helper, and
- * being wrong in that direction means shipping a stale APK. Including the whole
- * engine can only cost a rebuild.
+ * The line is drawn at "does this file put bytes into the app?" and everything
+ * that does is included:
+ *
+ *   engine/gen/          the generators themselves
+ *   engine/components/   what a component or an action becomes in Java
+ *   engine/spec/         the version numbers and defaults written into the project
+ *   engine/capability/   which permissions end up in the manifest
+ *
+ * Two directories are left out, and the reasoning matters because both are
+ * cases where the conservative answer is the wrong one:
+ *
+ *   engine/cli.mjs       a front end; it generates nothing
+ *   engine/build/        the cache and the key. These decide whether to rebuild,
+ *                        never what to build.
+ *
+ * Including the build machinery would have made the cache invalidate itself:
+ * every improvement to caching would discard every cached build, so the cache
+ * would work perfectly and never once save anything. A digest that covers too
+ * much is not "safe", it is a cache that costs more than it returns.
+ *
+ * The boundary is checked rather than assumed — there are tests that change a
+ * generator and require the digest to move, and change the cache itself and
+ * require it not to.
  */
+const GENERATOR_DIRS = ['gen', 'components', 'spec', 'capability'];
+
 export function generatorDigest(engineDir = ENGINE_DIR) {
   const files = [];
-  walk(path.join(engineDir, 'engine'), files);
-  // The command line interface produces no build output of its own, so changing
-  // it should not invalidate anything that was built.
-  const relevant = files.filter((f) => !f.endsWith(path.join('engine', 'cli.mjs'))).sort();
+  for (const dir of GENERATOR_DIRS) walk(path.join(engineDir, 'engine', dir), files);
+  const relevant = files.sort();
 
   const h = crypto.createHash('sha256');
   for (const file of relevant) {

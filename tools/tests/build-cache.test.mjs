@@ -97,7 +97,7 @@ test('the toolchain is part of the key', () => {
 });
 
 test('the generators are part of the key', () => {
-  // Build a throwaway engine tree, change one file's bytes, and watch the
+  // Build a throwaway engine tree, change a generator's bytes, and watch the
   // digest move. If this did not happen, updating a generator would keep
   // serving APKs built by the old one.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'appmint-engine-'));
@@ -116,18 +116,71 @@ test('the generators are part of the key', () => {
   }
 });
 
-test('renaming a generator file changes the digest even if the bytes are the same', () => {
+test('the build cache is not part of the digest, so it cannot invalidate itself', () => {
+  /*
+   * engine/build/ decides whether to rebuild; it never decides what to build.
+   * Including it made every improvement to the cache discard every cached
+   * build, so the cache worked perfectly and could never save anything. This is
+   * the boundary the digest is drawn at, and it is asserted rather than
+   * assumed.
+   */
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'appmint-engine-'));
   try {
-    fs.mkdirSync(path.join(dir, 'engine'), { recursive: true });
-    fs.writeFileSync(path.join(dir, 'engine', 'a.mjs'), 'export const v = 1;\n');
+    fs.mkdirSync(path.join(dir, 'engine', 'gen'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'engine', 'build'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'engine', 'diagnose'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'engine', 'gen', 'android.mjs'), 'export const v = 1;\n');
+    fs.writeFileSync(path.join(dir, 'engine', 'build', 'cache.mjs'), 'export const cache = 1;\n');
+    fs.writeFileSync(path.join(dir, 'engine', 'cli.mjs'), 'console.log(1);\n');
     const before = generatorDigest(dir);
-    fs.renameSync(path.join(dir, 'engine', 'a.mjs'), path.join(dir, 'engine', 'b.mjs'));
+
+    fs.writeFileSync(path.join(dir, 'engine', 'build', 'cache.mjs'), 'export const cache = 2;\n');
+    fs.writeFileSync(path.join(dir, 'engine', 'cli.mjs'), 'console.log(2);\n');
     const after = generatorDigest(dir);
-    assert.notEqual(before.digest, after.digest, 'the file name is part of the identity');
+
+    assert.equal(before.digest, after.digest,
+      'changing the cache or the command line must not discard every cached build');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('every directory that does put bytes into the app IS part of the digest', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'appmint-engine-'));
+  try {
+    for (const d of ['gen', 'components', 'spec', 'capability']) {
+      fs.mkdirSync(path.join(dir, 'engine', d), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'engine', d, 'x.mjs'), 'export const v = 1;\n');
+    }
+    const base = generatorDigest(dir).digest;
+    for (const d of ['gen', 'components', 'spec', 'capability']) {
+      fs.writeFileSync(path.join(dir, 'engine', d, 'x.mjs'), 'export const v = 2;\n');
+      assert.notEqual(generatorDigest(dir).digest, base, `a change under engine/${d}/ must change the digest`);
+      fs.writeFileSync(path.join(dir, 'engine', d, 'x.mjs'), 'export const v = 1;\n');
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an entry from an older cache format explains itself as one', () => {
+  const w = workspace();
+  try {
+    const key = buildKey(specFor());
+    w.cache.put(key, [w.fakeApk('app-debug.apk', 'built by an older version')]);
+    const manifestFile = w.cache.manifestPath(key.short);
+    const m = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    m.cacheVersion = 1;
+    fs.writeFileSync(manifestFile, JSON.stringify(m));
+
+    const got = w.cache.get(key);
+    assert.equal(got.hit, false, 'an entry from an older format is not a hit');
+    const why = w.cache.explain(key);
+    assert.equal(why.reason, 'old-format');
+    assert.match(why.message, /older version of the cache/);
+    assert.doesNotMatch(why.message, /records what it was built from/,
+      'a format change must not be described as corruption');
+  } finally { w.cleanup(); }
 });
 
 test('a miss can say which input changed', () => {
