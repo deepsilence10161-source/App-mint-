@@ -1008,8 +1008,48 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .repair-declined .rs-change { color: var(--warn); }
 
 .repair-decision .row, .repair-done .row { margin-top: 10px; }
+
+/* ── start from a website ─────────────────────────────────────────────────
+   Sized for a thumb: the two routes are full-width rows, and the things that
+   matter (what it found, what it would change) are readable without opening
+   anything else. */
+.wv-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s2) 0; }
+.wv-row input[type="url"] {
+  flex: 1 1 12rem; min-width: 0; font: inherit; padding: 12px var(--s3);
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.wv-row .btn { flex: 0 0 auto; }
+.wv-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--s2) 0; }
+.wv-h { margin: var(--s3) 0 var(--s1); font-size: .95rem; }
+.wv-acts { display: grid; gap: var(--s2); margin-top: var(--s2); }
+/* One change per block: the field on its own line, then what it becomes. A
+   four-column row put long values — an address, a package name — off the side of
+   a phone screen, where they were invisible rather than merely tight. */
+.wv-change { display: block; padding: 8px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.wv-change:first-child { border-top: 0; }
+.wv-what { display: block; color: var(--fg-3); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
+.wv-from { text-decoration: line-through; color: var(--fg-3); word-break: break-word; }
+.wv-arrow { color: var(--fg-3); margin: 0 6px; }
+.wv-to { font-weight: 600; word-break: break-word; }
+.wv-finding { border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--s2); margin: var(--s2) 0; }
+.wv-finding.lvl-blocking { border-left: 3px solid var(--bad); }
+.wv-finding.lvl-warning { border-left: 3px solid var(--fg-2); }
+.wv-finding.lvl-info { border-left: 3px solid var(--line); }
+.wv-finding-head { display: flex; gap: var(--s2); align-items: flex-start; flex-wrap: wrap; }
+.wv-finding-head .chip { flex: 0 0 auto; }
+.wv-finding-msg { font-weight: 600; }
+.wv-finding .why { margin: 6px 0 0; font-size: .92rem; color: var(--fg); line-height: 1.5; }
+.wv-finding .hint { margin: 6px 0 0; line-height: 1.5; }
+.wv-finding details.ev { margin-top: 8px; font-size: .85rem; color: var(--fg-3); }
+.wv-finding details.ev summary { cursor: pointer; padding: 4px 0; }
+.wv-finding details.ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
+.wv-finding details.ev li { word-break: break-word; line-height: 1.5; }
+.wv-finding .ev { margin-top: 6px; font-size: .85rem; color: var(--fg-3); }
+.wv-finding .ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
+.wv-finding .ev li { word-break: break-all; }
 </style>
-<meta name="appmint-build" content="13052f8185f82a78">
+<meta name="appmint-build" content="cd0635716823b041">
 </head>
 <body>
 
@@ -3035,6 +3075,1165 @@ function permissionReport(spec) {
 }
 
 
+/* ═══ engine/analyse/html.mjs ═══ */
+/**
+ * READING A WEB PAGE WITHOUT A BROWSER
+ * =====================================
+ *
+ * The analyser has to understand enough HTML and CSS to answer practical
+ * questions — what is this page called, what does it link to, does it work
+ * without a network, what colour is it — and it has to answer them the same way
+ * every time, on a phone, with no browser, no dependencies and no AI.
+ *
+ * So this is a small tolerant scanner rather than a full HTML parser. It is
+ * written to the parts that matter and honest about the parts it does not do:
+ *
+ *   What it does:  tags, attributes, quoted values, comments, raw text inside
+ *                  <script> and <style>, text content, and enough structure to
+ *                  follow <nav>, <header>, <main>, <footer>, headings, links,
+ *                  images and forms.
+ *
+ *   What it does not: the full HTML5 tree-building algorithm. No implied
+ *                  <tbody>, no foster parenting, no error recovery to the
+ *                  specification. A page that relies on those to look right will
+ *                  still be read correctly for everything above, because none of
+ *                  it depends on element nesting being legal — but the *browser*
+ *                  is what renders the app, not this file, so an approximation
+ *                  that only feeds decisions is the right size of tool.
+ *
+ * Every function here is pure: same input, same output, no I/O, no clock.
+ */
+
+const VOID_ELEMENTS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+  'link', 'meta', 'param', 'source', 'track', 'wbr']);
+
+const RAW_TEXT_ELEMENTS = new Set(['script', 'style', 'textarea', 'title']);
+
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  hellip: '…', mdash: '—', ndash: '–', rsquo: '’', lsquo: '‘',
+  rdquo: '”', ldquo: '“', copy: '©', reg: '®', trade: '™', pound: '£', euro: '€', rupee: '₹',
+};
+
+/** Decode the entities that actually appear in titles and link text. */
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => safeCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => safeCodePoint(parseInt(d, 10)))
+    .replace(/&([a-z]+);/gi, (m, name) => (ENTITIES[name.toLowerCase()] ?? m));
+}
+
+function safeCodePoint(n) {
+  // A page can contain any number at all; String.fromCodePoint throws outside
+  // the Unicode range, and one malformed entity should not stop an analysis.
+  if (!Number.isFinite(n) || n < 0 || n > 0x10ffff) return '';
+  try { return String.fromCodePoint(n); } catch { return ''; }
+}
+
+/** Collapse whitespace the way rendered text does. */
+const squash = (s) => String(s).replace(/\s+/g, ' ').trim();
+
+/**
+ * Scan an attribute string into an object.
+ * Unquoted values are accepted because real pages contain them.
+ */
+function parseAttributes(source) {
+  const attrs = {};
+  const re = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let m;
+  while ((m = re.exec(source))) {
+    const name = m[1].toLowerCase();
+    const value = m[3] ?? m[4] ?? m[5] ?? '';
+    if (!(name in attrs)) attrs[name] = decodeEntities(value);
+  }
+  return attrs;
+}
+
+/**
+ * Split a document into elements and text.
+ *
+ * Returns a flat list rather than a tree. Everything the analyser asks is a
+ * question about what appears in the document — is there a viewport tag, which
+ * links are relative, what does the first heading say — and flattening avoids
+ * inventing a nesting model that would be wrong on malformed pages.
+ */
+function scanHtml(html) {
+  const elements = [];
+  const textParts = [];
+  const source = String(html);
+  let i = 0;
+  let textStart = 0;
+
+  const flushText = (end) => {
+    if (end > textStart) textParts.push(decodeEntities(source.slice(textStart, end)));
+  };
+
+  while (i < source.length) {
+    const lt = source.indexOf('<', i);
+    if (lt === -1) break;
+
+    // Comments: skipped whole, including the conditional-comment syntax that
+    // old pages still carry.
+    if (source.startsWith('<!--', lt)) {
+      flushText(lt);
+      const end = source.indexOf('-->', lt + 4);
+      i = end === -1 ? source.length : end + 3;
+      textStart = i;
+      continue;
+    }
+
+    // Doctypes and processing instructions.
+    if (source.startsWith('<!', lt) || source.startsWith('<?', lt)) {
+      flushText(lt);
+      const end = source.indexOf('>', lt);
+      i = end === -1 ? source.length : end + 1;
+      textStart = i;
+      continue;
+    }
+
+    const gt = findTagEnd(source, lt + 1);
+    if (gt === -1) break;
+
+    flushText(lt);
+
+    const raw = source.slice(lt + 1, gt);
+    const closing = raw.startsWith('/');
+    const body = closing ? raw.slice(1) : raw;
+    const m = /^([a-zA-Z][-a-zA-Z0-9:]*)/.exec(body);
+    if (!m) { i = gt + 1; textStart = i; continue; }
+
+    const name = m[1].toLowerCase();
+    const attrs = parseAttributes(body.slice(m[1].length));
+    const selfClosing = raw.endsWith('/') || VOID_ELEMENTS.has(name);
+
+    i = gt + 1;
+    textStart = i;
+
+    if (closing) {
+      elements.push({ type: 'end', name });
+      continue;
+    }
+
+    elements.push({ type: 'start', name, attrs, selfClosing });
+
+    if (!selfClosing && RAW_TEXT_ELEMENTS.has(name)) {
+      // Inside <script>, <style>, <textarea> and <title> nothing is markup until
+      // the matching close tag: a `<` in JavaScript or a CSS child combinator is
+      // not the start of an element, and treating it as one corrupts the scan
+      // for the rest of the document.
+      const closer = new RegExp(`</${name}\\s*>`, 'i');
+      const rest = source.slice(i);
+      const found = closer.exec(rest);
+      const inner = found ? rest.slice(0, found.index) : rest;
+      // <title> is a raw-text element because a title may contain a `<`, but it
+      // is text a person reads, so its entities are decoded. The first version
+      // pushed it raw, and every page title arrived in the analysis still
+      // spelled &amp;.
+      if (name === 'title') textParts.push(decodeEntities(inner));
+      elements.push({ type: 'raw', name, text: inner });
+      i = found ? i + found.index + found[0].length : source.length;
+      textStart = i;
+    }
+  }
+  flushText(source.length);
+
+  return { elements, text: textParts.join(' ') };
+}
+
+/** Find the '>' that closes a tag, ignoring '>' inside quoted attributes. */
+function findTagEnd(source, from) {
+  let quote = null;
+  for (let i = from; i < source.length; i += 1) {
+    const ch = source[i];
+    if (quote) { if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === '>') return i;
+  }
+  return -1;
+}
+
+/* ── what the document says ───────────────────────────────────────────────── */
+
+/** Classify a URL the way a WebView will have to. */
+function classifyUrl(href) {
+  const value = String(href || '').trim();
+  if (!value) return { kind: 'empty' };
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    const scheme = value.split(':')[0].toLowerCase();
+    if (scheme === 'http' || scheme === 'https') return { kind: 'absolute', scheme, url: value };
+    return { kind: 'scheme', scheme, url: value };
+  }
+  if (value.startsWith('//')) return { kind: 'absolute', scheme: 'inherit', url: value };
+  if (value.startsWith('#')) return { kind: 'fragment', url: value };
+  if (value.startsWith('/')) return { kind: 'root-relative', url: value };
+  return { kind: 'relative', url: value };
+}
+
+/** Strip the tag soup and leave the words a person would read. */
+function visibleText(html) {
+  const { text } = scanHtml(html);
+  return squash(text);
+}
+
+/**
+ * Everything the analyser wants to know about one page.
+ *
+ * Deliberately one pass over the scan: the shape of this object is the contract
+ * between reading a page and deciding what kind of app it becomes.
+ */
+function parsePage(html) {
+  const { elements, text } = scanHtml(html);
+  const page = {
+    title: null,
+    lang: null,
+    meta: {},
+    stylesheets: [],
+    scripts: [],
+    inlineScripts: 0,
+    inlineStyles: 0,
+    icons: [],
+    links: [],
+    images: [],
+    forms: [],
+    headings: [],
+    landmarks: [],
+    bodyText: squash(text),
+    styleText: '',
+  };
+
+  let openForm = null;
+  let openHeading = null;
+  const openLandmarks = [];
+
+  for (const el of elements) {
+    if (el.type === 'raw') {
+      if (el.name === 'style') page.styleText += `${el.text}\n`;
+      if (el.name === 'script') page.inlineScripts += 1;
+      continue;
+    }
+    if (el.type === 'end') {
+      if (el.name === 'form' && openForm) { page.forms.push(openForm); openForm = null; }
+      if (openHeading && el.name === `h${openHeading.level}`) openHeading = null;
+      const at = openLandmarks.lastIndexOf(el.name);
+      if (at !== -1) openLandmarks.splice(at, 1);
+      continue;
+    }
+
+    const { name, attrs } = el;
+    switch (name) {
+      case 'html':
+        if (attrs.lang) page.lang = attrs.lang;
+        break;
+      case 'title':
+        break;                                   // captured through the raw text
+      case 'meta': {
+        const key = (attrs.name || attrs.property || attrs['http-equiv'] || '').toLowerCase();
+        if (key === 'viewport') page.meta.viewport = attrs.content || '';
+        else if (key === 'description') page.meta.description = squash(attrs.content || '');
+        else if (key === 'theme-color') page.meta.themeColor = (attrs.content || '').trim();
+        else if (key === 'charset') page.meta.charset = attrs.charset;
+        else if (key === 'og:title') page.meta.ogTitle = squash(attrs.content || '');
+        else if (key === 'og:image') page.meta.ogImage = (attrs.content || '').trim();
+        else if (key === 'og:description') page.meta.ogDescription = squash(attrs.content || '');
+        break;
+      }
+      case 'link': {
+        const rel = (attrs.rel || '').toLowerCase();
+        if (rel.includes('stylesheet') && attrs.href) page.stylesheets.push(attrs.href);
+        else if (rel.includes('icon') && attrs.href) page.icons.push(attrs.href);
+        break;
+      }
+      case 'script':
+        if (attrs.src) page.scripts.push({ src: attrs.src, async: !!attrs.async, defer: !!attrs.defer });
+        break;
+      case 'style':
+        page.inlineStyles += 1;
+        break;
+      case 'a': {
+        const href = attrs.href;
+        if (href === undefined) break;
+        page.links.push({ href, text: '', rel: attrs.rel || null, target: attrs.target || null, ...classifyUrl(href) });
+        break;
+      }
+      case 'img':
+        if (attrs.src) {
+          page.images.push({
+            src: attrs.src, alt: attrs.alt ?? null,
+            width: attrs.width ? Number(attrs.width) || null : null,
+            height: attrs.height ? Number(attrs.height) || null : null,
+            loading: attrs.loading || null,
+            ...classifyUrl(attrs.src),
+          });
+        }
+        break;
+      case 'form':
+        openForm = { action: attrs.action || '', method: (attrs.method || 'get').toLowerCase(), inputs: [] };
+        break;
+      case 'input':
+      case 'textarea':
+      case 'select':
+        if (openForm) {
+          openForm.inputs.push({
+            tag: name, type: (attrs.type || (name === 'input' ? 'text' : name)).toLowerCase(),
+            name: attrs.name || '', required: attrs.required !== undefined,
+          });
+        }
+        break;
+      case 'h1': case 'h2': case 'h3': case 'h4':
+        openHeading = { level: Number(name[1]), text: '' };
+        page.headings.push(openHeading);
+        break;
+      case 'header': case 'nav': case 'main': case 'footer': case 'section':
+        page.landmarks.push(name);
+        openLandmarks.push(name);
+        break;
+      default:
+        break;
+    }
+  }
+
+  // Fill in link and heading text from the flattened text is not possible
+  // without ordering, so the caller re-reads these from the source when it needs
+  // the words. What matters for decisions is which URLs are used and how.
+  return page;
+}
+
+/* ── CSS, for colour and responsiveness ───────────────────────────────────── */
+
+const NAMED_COLOURS = {
+  white: '#FFFFFF', black: '#000000', red: '#FF0000', green: '#008000', blue: '#0000FF',
+  transparent: null, grey: '#808080', gray: '#808080', silver: '#C0C0C0', orange: '#FFA500',
+  brown: '#A52A2A', beige: '#F5F5DC', ivory: '#FFFFF0', navy: '#000080', teal: '#008080',
+  olive: '#808000', maroon: '#800000', purple: '#800080', yellow: '#FFFF00', pink: '#FFC0CB',
+};
+
+/** Any CSS colour to #RRGGBB, or null when it cannot be understood. */
+function normaliseColour(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (!v) return null;
+  if (v in NAMED_COLOURS) return NAMED_COLOURS[v];
+  const hex = /^#([0-9a-f]{3,8})$/.exec(v);
+  if (hex) {
+    const h = hex[1];
+    if (h.length === 3 || h.length === 4) return `#${h.slice(0, 3).split('').map((c) => c + c).join('').toUpperCase()}`;
+    if (h.length === 6 || h.length === 8) return `#${h.slice(0, 6).toUpperCase()}`;
+    return null;
+  }
+  const rgb = /^rgba?\(\s*([\d.]+%?)\s*[, ]\s*([\d.]+%?)\s*[, ]\s*([\d.]+%?)/.exec(v);
+  if (rgb) {
+    const part = (p) => (p.endsWith('%') ? Math.round(parseFloat(p) * 2.55) : Math.round(parseFloat(p)));
+    const [r, g, b] = [part(rgb[1]), part(rgb[2]), part(rgb[3])];
+    if ([r, g, b].some((n) => !Number.isFinite(n) || n < 0 || n > 255)) return null;
+    return `#${[r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+  }
+  return null;
+}
+
+/** WCAG relative luminance, used for contrast decisions. */
+function luminance(hex) {
+  const c = normaliseColour(hex);
+  if (!c) return null;
+  const channels = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/** Contrast ratio between two colours, 1 (identical) to 21 (black on white). */
+function contrast(a, b) {
+  const la = luminance(a); const lb = luminance(b);
+  if (la === null || lb === null) return null;
+  const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Black or white, whichever reads better on this colour. */
+function readableOn(colour) {
+  const l = luminance(colour);
+  if (l === null) return null;
+  return l > 0.35 ? '#000000' : '#FFFFFF';
+}
+
+/**
+ * Nudge a colour until text in `on` is readable on it.
+ *
+ * Used when a page's theme colour cannot carry white text: rather than shipping
+ * a spec with a contrast failure that the validator would reject, darken (or
+ * lighten) the colour in fixed steps and report that it was changed. Predictable
+ * and reversible — the original value stays in the findings.
+ */
+function ensureContrast(colour, on, target = 4.5) {
+  let value = normaliseColour(colour);
+  const text = normaliseColour(on);
+  if (!value || !text) return { colour: value, changed: false };
+  if ((contrast(value, text) ?? 0) >= target) return { colour: value, changed: false };
+
+  const towardBlack = (luminance(text) ?? 0) > 0.5;
+  for (let step = 1; step <= 20; step += 1) {
+    value = shade(value, step * 5, towardBlack);
+    if ((contrast(value, text) ?? 0) >= target) return { colour: value, changed: true, steps: step };
+  }
+  return { colour: towardBlack ? '#000000' : '#FFFFFF', changed: true, steps: 20 };
+}
+
+/** Move a colour toward black (darken) or white (lighten) by a percentage. */
+function shade(colour, percent, darken = true) {
+  const c = normaliseColour(colour);
+  if (!c) return colour;
+  const target = darken ? 0 : 255;
+  const parts = [1, 3, 5].map((i) => {
+    const v = parseInt(c.slice(i, i + 2), 16);
+    return Math.round(v + (target - v) * (percent / 100));
+  });
+  return `#${parts.map((n) => n.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+/**
+ * Read a stylesheet for the decisions the analyser makes: which colours carry
+ * the design, what font it asks for, whether it adapts to small screens, and
+ * what it loads from where.
+ */
+function parseCss(css) {
+  const text = String(css).replace(/\/\*[\s\S]*?\*\//g, ' ');
+  const out = {
+    colours: new Map(),        // colour -> how often it appears
+    background: [],
+    foreground: [],
+    fonts: [],
+    mediaQueries: [],
+    imports: [],
+    urlRefs: [],
+    // `50vw` has a digit in front of it, which is how a viewport unit is
+    // normally written. Requiring a space or bracket before it — which an
+    // earlier version did — meant this was false for every real stylesheet.
+    hasViewportUnit: /(?:^|[\s(\d.:])(?:vw|vh|vmin|vmax)\b/.test(text),
+    hasFlexOrGrid: /\b(?:flex|grid)\b/.test(text),
+  };
+
+  for (const m of text.matchAll(/(?<![\w-])(#[0-9a-f]{3,8}|rgba?\([^)]*\)|\b[a-z]{3,20}\b)(?![\w-])/gi)) {
+    const colour = normaliseColour(m[1]);
+    if (colour) out.colours.set(colour, (out.colours.get(colour) || 0) + 1);
+  }
+  // A declaration's value may be `rgb(36, 26, 18)`, `#fff`, or `#fff !important`.
+  // Splitting on whitespace first — which is what an earlier version did —
+  // breaks every functional colour into `rgb(36,` and loses it silently.
+  const colourFrom = (value) => normaliseColour(value) || normaliseColour(String(value).trim().split(/\s+/)[0]);
+  for (const m of text.matchAll(/(background(?:-color)?)\s*:\s*([^;{}]+)/gi)) {
+    const colour = colourFrom(m[2]);
+    if (colour) out.background.push(colour);
+  }
+  for (const m of text.matchAll(/(?<![-\w])color\s*:\s*([^;{}]+)/gi)) {
+    const colour = colourFrom(m[1]);
+    if (colour) out.foreground.push(colour);
+  }
+  for (const m of text.matchAll(/font-family\s*:\s*([^;{}]+)/gi)) {
+    const first = m[1].split(',')[0].replace(/["']/g, '').trim();
+    if (first) out.fonts.push(first);
+  }
+  for (const m of text.matchAll(/@media([^{]+)\{/gi)) out.mediaQueries.push(squash(m[1]));
+  for (const m of text.matchAll(/@import\s+(?:url\()?["']?([^"')]+)["']?\)?/gi)) out.imports.push(m[1].trim());
+  for (const m of text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)) out.urlRefs.push(m[1].trim());
+
+  return out;
+}
+
+/** The colours a page is built from, most used first. */
+function rankedColours(...cssObjects) {
+  const total = new Map();
+  for (const css of cssObjects) {
+    if (!css?.colours) continue;
+    for (const [colour, count] of css.colours) total.set(colour, (total.get(colour) || 0) + count);
+  }
+  return [...total.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([colour, count]) => ({ colour, count }));
+}
+
+
+/* ═══ engine/analyse/site.mjs ═══ */
+/**
+ * WHAT A SITE IS, AND WHAT APP IT SHOULD BECOME
+ * =============================================
+ *
+ * This module is deliberately pure. It reads a description of a collected site
+ * and answers questions about it; it never opens a file, never fetches anything,
+ * never reads a clock and never looks at the environment. Everything with a side
+ * effect lives in website.mjs next door.
+ *
+ * The split is not tidiness. The Studio runs in a browser with no filesystem and
+ * no network, and it has to give the same answers as the command line. Two
+ * implementations of "what does this site become" would drift, and the drift
+ * would show up as a person being told one thing on their phone and another by
+ * the build — so there is one implementation and both callers use it. It is also
+ * why nothing here imports `node:` anything.
+ *
+ * The rules that shape every choice below:
+ *
+ *   Deterministic. The same site produces the same specification, byte for byte.
+ *   No clock, no randomness, no environment.
+ *
+ *   Never silently destructive. Bundling a site for offline use means rewriting
+ *   URLs that cannot resolve from where the app serves it. Every rewrite is
+ *   recorded, and a link to a page that was not collected is reported rather
+ *   than quietly left broken.
+ *
+ *   Say what it cannot do. A form that posts to a server still needs the server.
+ *   A page whose words arrive from a fetch will be empty offline. Those are
+ *   findings, not failures to hide.
+ */
+
+
+/* ── relative paths, without a path library ───────────────────────────────── */
+/*
+ * These replace what the path module was doing here, and they are what lets this
+ * module run unchanged in a browser. The paths involved are always relative URL
+ * paths inside one site, which is a much smaller problem than a general path
+ * library: no drives, no absolute roots, no symlinks.
+ */
+
+const dirOf = (rel) => {
+  const i = String(rel).lastIndexOf('/');
+  return i === -1 ? '' : String(rel).slice(0, i);
+};
+
+/** Join and normalise, resolving '.' and '..'. */
+function joinRel(a, b) {
+  const out = [];
+  for (const part of `${a || ''}/${b || ''}`.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      if (out.length && out[out.length - 1] !== '..') out.pop();
+      else out.push('..');
+    } else out.push(part);
+  }
+  return out.join('/');
+}
+
+/** The path that leads from a directory to a file, walking up as needed. */
+function relativeRel(fromDir, target) {
+  const from = String(fromDir || '').split('/').filter(Boolean);
+  const to = String(target || '').split('/').filter(Boolean);
+  let i = 0;
+  while (i < from.length && i < to.length && from[i] === to[i]) i += 1;
+  const parts = [...Array(from.length - i).fill('..'), ...to.slice(i)];
+  return parts.join('/') || to[to.length - 1] || target;
+}
+
+/* ── collecting files that are already in memory ──────────────────────────── */
+
+/**
+ * The text of a collected asset.
+ *
+ * A collector decides how its assets are read: one holding the bytes in memory
+ * provides `data`, one reading from disk provides `readText`. Nothing here knows
+ * which, and nothing here has to.
+ */
+function assetText(asset) {
+  if (asset.readText) return String(asset.readText());
+  if (asset.data !== undefined) return String(asset.data);
+  return '';
+}
+
+const TEXT_ASSET_EXT = new Set(['.css', '.js', '.mjs', '.json', '.svg', '.txt', '.webmanifest']);
+const isTextExt = (ext) => TEXT_ASSET_EXT.has(ext);
+const byteLength = (data) => (typeof data === 'string' ? new TextEncoder().encode(data).length : (data?.byteLength ?? data?.length ?? 0));
+const asText = (data) => (typeof data === 'string' ? data : new TextDecoder().decode(data));
+
+/**
+ * Collect a site from files that are already in memory.
+ *
+ * This is what the Studio uses: a phone can pick files from storage but cannot
+ * read a directory path, and the analysis does not care where the bytes came
+ * from. It produces the same shape readLocalSite produces, so everything
+ * downstream is the same code.
+ */
+function siteFromFiles(files, { entry = null, rootName = null } = {}) {
+  const pages = [];
+  const assets = [];
+  const skipped = [];
+  for (const file of files) {
+    const rel = String(file.rel || '').replace(/^\/+/, '');
+    const ext = (rel.match(/\.[a-z0-9]+$/i) || [''])[0].toLowerCase();
+    if (PAGE_EXT.has(ext)) {
+      pages.push({ rel, html: asText(file.data), bytes: byteLength(file.data) });
+    } else if (ASSET_EXT.has(ext)) {
+      assets.push({
+        rel,
+        bytes: byteLength(file.data),
+        data: file.data,
+        readText: isTextExt(ext) ? () => asText(file.data) : undefined,
+      });
+    } else {
+      skipped.push({ rel, why: `not a file type a WebView serves (${ext || 'no extension'})` });
+    }
+  }
+  pages.sort((a, b) => a.rel.localeCompare(b.rel));
+  assets.sort((a, b) => a.rel.localeCompare(b.rel));
+  return {
+    // The folder a person chose, when the browser tells us its name. It is only
+    // used to build a package name, and it is better than a generic default:
+    // picking a folder called "beanleaf" should give com.appmint.beanleaf.
+    kind: 'files', root: rootName || null, host: null,
+    entry: entry || pages.find((p) => /(^|\/)index\.html$/.test(p.rel))?.rel || pages[0]?.rel || null,
+    pages, assets, skipped, notes: [],
+  };
+}
+
+
+const PAGE_EXT = new Set(['.html', '.htm']);
+const ASSET_EXT = new Set(['.css', '.js', '.mjs', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
+  '.ico', '.avif', '.woff', '.woff2', '.ttf', '.otf', '.json', '.txt', '.webmanifest', '.mp4', '.webm']);
+
+/** Hosts that mean something specific when a page loads from them. */
+const KNOWN_THIRD_PARTIES = [
+  { pattern: /(^|\.)google-analytics\.com$|(^|\.)googletagmanager\.com$|(^|\.)analytics\.google\.com$/, kind: 'analytics', what: 'Google Analytics' },
+  { pattern: /(^|\.)doubleclick\.net$|(^|\.)googlesyndication\.com$/, kind: 'advertising', what: 'an advertising network' },
+  { pattern: /(^|\.)facebook\.net$|(^|\.)facebook\.com$/, kind: 'tracking', what: 'a Facebook pixel' },
+  { pattern: /(^|\.)hotjar\.com$|(^|\.)clarity\.ms$|(^|\.)mixpanel\.com$|(^|\.)segment\.(com|io)$/, kind: 'tracking', what: 'an analytics or session-recording script' },
+  { pattern: /(^|\.)sentry\.io$|(^|\.)bugsnag\.com$/, kind: 'error-reporting', what: 'an error reporter' },
+  { pattern: /fonts\.googleapis\.com$|fonts\.gstatic\.com$/, kind: 'fonts', what: 'Google Fonts' },
+  { pattern: /(^|\.)jsdelivr\.net$|(^|\.)unpkg\.com$|(^|\.)cdnjs\.cloudflare\.com$/, kind: 'cdn', what: 'a content delivery network' },
+];
+
+const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app';
+const compact = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, '') || 'app';
+
+function hostOf(url) {
+  try { return new URL(url).hostname.toLowerCase(); } catch { return null; }
+}
+
+/* ── collecting a site ────────────────────────────────────────────────────── */
+
+/**
+ * Read a site from a directory.
+ *
+ * Only files that a WebView can serve are taken: pages and assets. Anything else
+ * (source maps, editor backups, a .git directory) is left behind, and the count
+ * of what was left is reported so nobody wonders where it went.
+ */
+function describeSite(site) {
+  const pages = site.pages.map((p) => {
+    const page = parsePage(p.html);
+    const stylesheets = [];
+    for (const href of page.stylesheets) {
+      const target = resolveInSite(href, p.rel, site);
+      if (target) {
+        const found = site.assets.find((a) => a.rel === target);
+        if (found) stylesheets.push({ rel: target, css: assetText(found) });
+      }
+    }
+    const css = [page.styleText, ...stylesheets.map((s) => s.css)].filter(Boolean).join('\n');
+    const parsedCss = parseCss(css);
+    return { rel: p.rel, bytes: p.bytes, html: p.html, page, css: parsedCss, stylesheetCount: stylesheets.length, title: titleOf(p.html) };
+  });
+
+  const links = pages.flatMap((p) => p.page.links.map((l) => ({ ...l, from: p.rel })));
+  const images = pages.flatMap((p) => p.page.images.map((i) => ({ ...i, from: p.rel })));
+  const scripts = pages.flatMap((p) => p.page.scripts.map((s) => ({ ...s, from: p.rel })));
+  const forms = pages.flatMap((p) => p.page.forms.map((f) => ({ ...f, from: p.rel })));
+
+  const allCss = pages.reduce((acc, p) => { mergeColours(acc, p.css); return acc; }, { colours: new Map(), background: [], foreground: [], mediaQueries: [], fonts: [], imports: [], urlRefs: [] });
+
+  const external = [];
+  for (const s of scripts) collectExternal(external, s.src, p0(s.from), 'script');
+  for (const i of images) collectExternal(external, i.src, p0(i.from), 'image');
+  for (const l of links) if (l.kind === 'absolute') collectExternal(external, l.url, p0(l.from), 'link');
+  for (const p of pages) for (const href of p.page.stylesheets) collectExternal(external, href, p.rel, 'stylesheet');
+  for (const p of pages) for (const asset of p.css.urlRefs) collectExternal(external, asset, p.rel, 'asset');
+
+  const inHtmlText = pages.map((p) => p.page.bodyText).join(' ');
+  return {
+    site,
+    pages,
+    links,
+    images,
+    scripts,
+    forms,
+    css: allCss,
+    external: dedupeExternal(external),
+    title: pages.find((p) => p.rel === site.entry)?.title || pages[0]?.title || null,
+    textLength: inHtmlText.length,
+  };
+}
+
+function p0(rel) { return rel; }
+function titleOf(html) {
+  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
+  return m ? squash(m[1].replace(/&amp;/g, '&').replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')) : null;
+}
+
+function mergeColours(acc, css) {
+  for (const [c, n] of css.colours) acc.colours.set(c, (acc.colours.get(c) || 0) + n);
+  acc.background.push(...css.background);
+  acc.foreground.push(...css.foreground);
+  acc.mediaQueries.push(...css.mediaQueries);
+  acc.fonts.push(...css.fonts);
+  acc.imports.push(...css.imports);
+  acc.urlRefs.push(...css.urlRefs);
+}
+
+function collectExternal(list, url, from, kind) {
+  const c = classifyUrl(url);
+  if (c.kind !== 'absolute') return;
+  const host = hostOf(c.url) || (c.url.startsWith('//') ? hostOf(`https:${c.url}`) : null);
+  if (!host) return;
+  list.push({ url: c.url, host, kind, from, scheme: c.url.startsWith('//') ? 'inherit' : c.scheme });
+}
+
+function dedupeExternal(list) {
+  const byKey = new Map();
+  for (const e of list) {
+    const key = `${e.host}|${e.kind}`;
+    if (!byKey.has(key)) byKey.set(key, { ...e, pages: [e.from] });
+    else if (!byKey.get(key).pages.includes(e.from)) byKey.get(key).pages.push(e.from);
+  }
+  return [...byKey.values()].sort((a, b) => a.host.localeCompare(b.host) || a.kind.localeCompare(b.kind));
+}
+
+/** Resolve a URL from a page to a path inside the collected site, if it is there. */
+
+function resolveInSite(url, pageRel, site) {
+  const c = classifyUrl(url);
+  if (c.kind === 'fragment' || c.kind === 'empty' || c.kind === 'scheme') return null;
+  let target;
+  if (c.kind === 'absolute') {
+    const host = hostOf(c.url);
+    if (site.host && host !== site.host) return null;
+    try { target = new URL(c.url).pathname; } catch { return null; }
+  } else if (c.kind === 'root-relative') {
+    target = c.url;
+  } else {
+    target = joinRel(dirOf(pageRel), c.url.split('#')[0].split('?')[0]);
+  }
+  let rel = String(target).replace(/^\//, '').split('?')[0].split('#')[0];
+  if (rel === '' || rel.endsWith('/')) rel += 'index.html';
+  return rel;
+}
+
+/* ── the findings ─────────────────────────────────────────────────────────── */
+
+const F = (code, level, title, detail, action, evidence = []) => ({ code, level, title, detail, action, evidence });
+
+/**
+ * What a person needs to know before this becomes an app.
+ *
+ * Levels mean what they say:
+ *   blocking — an app built from this would not work as it stands
+ *   warning  — it will work, but something needs a decision
+ *   info     — worth knowing, nothing to do
+ */
+function findingsFor(site, model) {
+  const found = [];
+  const { pages, external, forms, links, images, textLength } = model;
+
+  if (!pages.length) {
+    found.push(F('no-pages', 'blocking', 'No pages were found',
+      site.kind === 'local' ? `Nothing to read in ${site.root}: no .html or .htm files.` : `Nothing was fetched from ${site.entryUrl}.`,
+      'Check the address, or point the analyser at a directory containing the site.'));
+    return found;
+  }
+
+  const noTitle = pages.filter((p) => !p.title);
+  if (!model.title) {
+    found.push(F('no-title', 'blocking', 'The pages have no title',
+      'Every page is missing <title>, so the app has no name to take and no label for the recent-apps list.',
+      'Pass --name to choose one.',
+      noTitle.map((p) => p.rel)));
+  }
+
+  const noViewport = pages.filter((p) => !p.page.meta.viewport);
+  if (noViewport.length) {
+    found.push(F('no-viewport', 'warning', 'No mobile viewport',
+      'Without <meta name="viewport" content="width=device-width"> the WebView renders the page at desktop width and shrinks it to fit, so the text is small and the layout is wrong on a phone.',
+      'Add the viewport meta tag to the site, or accept that the app will show the desktop layout.',
+      noViewport.map((p) => p.rel)));
+  }
+
+  const mixed = external.filter((e) => e.scheme === 'http');
+  if (mixed.length) {
+    found.push(F('mixed-content', 'blocking', 'Part of the page is served over http',
+      `The app refuses cleartext traffic by default (Android blocks it on modern versions), so these will not load: ${mixed.map((e) => e.host).join(', ')}.`,
+      'Serve them over https, or accept a broken-looking page.',
+      mixed.map((e) => e.url)));
+  }
+
+  const third = external.filter((e) => KNOWN_THIRD_PARTIES.some((k) => k.pattern.test(e.host)));
+  if (third.length) {
+    const described = [...new Set(third.map((e) => {
+      const known = KNOWN_THIRD_PARTIES.find((k) => k.pattern.test(e.host));
+      return `${e.host} (${known.what})`;
+    }))];
+    found.push(F('third-parties', 'warning', 'The page loads from other companies',
+      `The site calls out to ${described.join(', ')}. The app does not block or rewrite these: they load when the phone has a network, exactly as they do in a browser. Anyone using the app is subject to those parties' tracking just as on the website.`,
+      'Leave it, or remove the third-party tags from the site before bundling.',
+      third.map((e) => e.url)));
+  }
+
+  const remoteAssets = external.filter((e) => !KNOWN_THIRD_PARTIES.some((k) => k.pattern.test(e.host)));
+  if (remoteAssets.length) {
+    found.push(F('external-assets', 'warning', 'Some files are not bundled for offline use',
+      `These load from other hosts, so they need a network connection and will be missing offline: ${[...new Set(remoteAssets.map((e) => e.url))].slice(0, 8).join(', ')}${remoteAssets.length > 8 ? `, and ${remoteAssets.length - 8} more` : ''}.`,
+      'Download them into the site so the app is complete offline, or accept that the app needs a connection for those files.',
+      remoteAssets.map((e) => e.url)));
+  }
+
+  const serverForms = forms.filter((f) => f.action && classifyUrl(f.action).kind === 'absolute');
+  if (serverForms.length) {
+    found.push(F('form-needs-server', 'warning', 'A form submits to a server',
+      `The app can show and fill in ${serverForms.length === 1 ? 'a form' : 'these forms'}, but pressing send needs the site's own server to accept it. Offline, the person will fill it in and nothing will happen.`,
+      'Keep the form for online use, or add a telephone or email link as an offline path.',
+      serverForms.map((f) => `${f.from}: ${f.method.toUpperCase()} ${f.action}`)));
+  }
+
+  const fileInputs = forms.flatMap((f) => f.inputs.filter((i) => i.type === 'file'));
+  if (fileInputs.length) {
+    found.push(F('file-upload', 'info', 'The page has a file picker',
+      'A file input needs the app to hand the chosen file to the page; the generated app enables that.',
+      'Nothing to do.'));
+  }
+
+  /*
+   * Will the page be empty until a script runs?
+   *
+   * The first version of this asked whether a page had fewer than 200
+   * characters of text and any script at all, which flagged three ordinary small
+   * pages of a working website — a menu, an order form, an about page — as
+   * probably client-rendered. A warning that fires on healthy input is worse than
+   * no warning, because it teaches people to ignore the list.
+   *
+   * So it now looks for the two things that actually mean it. A framework's
+   * mount point is one: an empty container plus the framework's own marker is
+   * what a single-page app looks like before it runs. Failing that, text that is
+   * a vanishingly small share of the file: a page that is almost all markup has
+   * its words somewhere else.
+   */
+  const SPA_MARKERS = [
+    /id=["'](root|app|__next|__nuxt|svelte)["']/i,
+    /__NEXT_DATA__|window\.__NUXT__|__remixContext|data-reactroot/i,
+    /<script[^>]+type=["']module["'][^>]*src=/i,
+  ];
+  const clientRendered = pages.filter((p) => {
+    const text = p.page.bodyText.length;
+    const scripts = p.page.scripts.length + p.page.inlineScripts;
+    if (!scripts) return false;
+    const emptyContainer = SPA_MARKERS.some((re) => re.test(p.html ?? ''));
+    // 400 characters is a paragraph; below that with almost no text per byte of
+    // markup, the words are arriving from somewhere else.
+    const starved = text < 400 && p.bytes > 400 && text / p.bytes < 0.05;
+    return emptyContainer || starved;
+  });
+  if (clientRendered.length) {
+    found.push(F('client-rendered', 'warning', 'Some pages may be drawn by JavaScript',
+      `${clientRendered.map((p) => p.rel).join(', ')} ${clientRendered.length === 1 ? 'looks' : 'look'} like a page whose content is built or fetched after it loads, rather than written in the HTML. The app allows JavaScript, so with a network this works exactly as it does in a browser — but with the network off, the page may arrive empty.`,
+      'Check the app on a device with the network off before trusting it offline.',
+      clientRendered.map((p) => `${p.rel}: ${p.page.bodyText.length} characters of text in ${p.bytes} bytes`)));
+  }
+
+  const internalLinks = links.filter((l) => l.kind === 'relative' || l.kind === 'root-relative');
+  const outside = [];
+  for (const l of internalLinks) {
+    const target = resolveInSite(l.url, l.from, site);
+    if (!target) continue;
+    const exists = site.pages.some((p) => p.rel === target) || site.assets.some((a) => a.rel === target);
+    if (!exists) outside.push(`${l.from} → ${l.url}`);
+  }
+  if (outside.length) {
+    found.push(F('missing-targets', 'warning', `${outside.length} link${outside.length === 1 ? ' goes' : 's go'} somewhere that is not in the app`,
+      `These point to pages or files that were not collected, so in the app they will show "page not found": ${outside.slice(0, 6).join(', ')}${outside.length > 6 ? `, and ${outside.length - 6} more` : ''}.`,
+      'Collect the missing files, or accept the broken links.',
+      outside));
+  }
+
+  const phoneLinks = links.filter((l) => l.kind === 'scheme' && ['tel', 'mailto', 'sms', 'whatsapp'].includes(l.scheme));
+  if (phoneLinks.length) {
+    found.push(F('hand-off-links', 'info', `${phoneLinks.length} link${phoneLinks.length === 1 ? '' : 's'} handed to another app`,
+      `Links to ${[...new Set(phoneLinks.map((l) => `${l.scheme}:`))].join(', ')} open the phone, mail or messaging app. The generated app allows this.`,
+      'Nothing to do.'));
+  }
+
+  if (!model.css.mediaQueries.length) {
+    found.push(F('no-media-queries', 'info', 'The stylesheet does not adapt to screen width',
+      'No @media rules were found, so one layout serves every screen. On a phone it will look like the desktop version, scaled.',
+      'Nothing to do if the layout is already narrow.'));
+  }
+
+  const heavy = site.pages.reduce((n, p) => n + p.bytes, 0) + site.assets.reduce((n, a) => n + a.bytes, 0);
+  found.push(F('bundle-size', heavy > 8 * 1024 * 1024 ? 'warning' : 'info',
+    `The app carries ${humanBytes(heavy)} of pages and files`,
+    `${pages.length} page${pages.length === 1 ? '' : 's'} and ${site.assets.length} file${site.assets.length === 1 ? '' : 's'} travel inside the app. That is what makes it work with no network.`,
+    heavy > 8 * 1024 * 1024 ? 'Consider compressing the images: everything here is downloaded once per install.' : 'Nothing to do.'));
+
+  if (site.skipped?.length) {
+    found.push(F('skipped-files', 'info', `${site.skipped.length} file${site.skipped.length === 1 ? '' : 's'} left out`,
+      `Not bundled: ${site.skipped.slice(0, 6).map((s) => `${s.rel} (${s.why})`).join(', ')}${site.skipped.length > 6 ? `, and ${site.skipped.length - 6} more` : ''}.`,
+      'Nothing to do unless one of them was needed.'));
+  }
+
+  for (const note of site.notes || []) found.push(F('collection-limit', 'warning', 'Not everything on the site was collected', note, 'Raise the limit if the whole site is wanted.'));
+  if (!images.some((i) => i.alt)) found.push(F('no-alt-text', 'info', 'Images have no alt text', 'No image describes itself in words. That affects screen-reader users of the website and of the app, which shows the same pages.', 'Nothing to do here; a note for the site itself.'));
+
+  return found.sort((a, b) => levelRank(a.level) - levelRank(b.level) || a.code.localeCompare(b.code));
+}
+
+const levelRank = (l) => ({ blocking: 0, warning: 1, info: 2 }[l] ?? 3);
+
+/** Sizes in the unit a person would use: 480 KB, not 0.0 MB. */
+function humanBytes(n) {
+  if (n < 1024) return `${n} bytes`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/* ── the specification ────────────────────────────────────────────────────── */
+
+/** A name that fits Google Play, cut at a word boundary rather than mid-word. */
+
+function playSafeName(raw, { limit = 30 } = {}) {
+  const clean = squash(String(raw || '')).replace(/\s*[|·•]\s*/g, ' — ');
+  // Marketing titles are usually "Name — tagline". Take the name, when what is
+  // left still looks like one.
+  const head = clean.split(/\s+—\s+|\s+-\s+/)[0].trim();
+  const candidate = head.length >= 3 ? head : clean;
+  if (candidate.length <= limit) return { name: candidate, truncated: false, original: clean };
+  const cut = candidate.slice(0, limit + 1);
+  const atWord = cut.lastIndexOf(' ');
+  const name = (atWord >= limit * 0.5 ? cut.slice(0, atWord) : cut.slice(0, limit)).trim();
+  return { name, truncated: true, original: clean };
+}
+
+/** Directory names that say nothing about the app they hold. */
+const GENERIC_DIRS = new Set(['site', 'www', 'public', 'dist', 'build', 'out', 'htdocs', 'web', 'html', 'src']);
+
+/**
+ * A package name that is valid, stable, and says where it came from.
+ *
+ * `provided` is what a person asked for and is returned untouched — if someone
+ * types a package name they mean it, and the validator will tell them if it is
+ * malformed rather than this quietly rewriting it.
+ *
+ * The first version of this function returned `hint` whenever one was given,
+ * which is how a local site in a directory called "site" produced the package
+ * name `site`: not a package name at all, and it validated, because the
+ * validator only checks the shape. `hint` is now a suggestion to build from, and
+ * `provided` is the one that is obeyed.
+ */
+function packageFor({ provided, hint, host } = {}) {
+  if (provided) return provided;
+  if (host) {
+    const labels = host.split('.').filter(Boolean);
+    const withoutWww = labels[0] === 'www' ? labels.slice(1) : labels;
+    // A hostname read backwards is already the package name Android expects:
+    // bakery.example.org becomes org.example.bakery, and greenfield.in becomes
+    // in.greenfield. The first version appended the first label as well, which
+    // produced org.example.bakery.bakery — the label is already there, because it
+    // is the last one after reversing.
+    const reversed = [...withoutWww].reverse();
+    if (reversed.length >= 2) return reversed.join('.');
+    return ['com', 'appmint', compact(reversed[0] || 'site')].join('.');
+  }
+  // A local directory: use its name, but skip past names that describe a
+  // hosting layout rather than an app ("web", "public", "dist").
+  const parts = String(hint || '').split(/[\\/]+/).filter(Boolean);
+  const useful = [...parts].reverse().find((p) => !GENERIC_DIRS.has(p.toLowerCase())) || parts[0] || 'site';
+  return ['com', 'appmint', compact(useful)].join('.');
+}
+
+/** The palette, taken from the site rather than invented. */
+
+function themeFor(model) {
+  const meta = model.pages.map((p) => p.page.meta.themeColor).find(Boolean) || null;
+  const candidates = rankedColours(model.css).map((r) => r.colour).filter((c) => normaliseColour(c));
+  const relLum = (c) => {
+    const n = normaliseColour(c);
+    if (!n) return null;
+    return (0.2126 * parseInt(n.slice(1, 3), 16) + 0.7152 * parseInt(n.slice(3, 5), 16) + 0.0722 * parseInt(n.slice(5, 7), 16)) / 255;
+  };
+
+  // Which colour is "the" colour: the one the site repeats most that is not
+  // nearly-white or nearly-black, because those carry no identity. A declared
+  // theme-color beats any inference — the site said so itself.
+  const colourful = candidates.filter((c) => { const l = relLum(c); return l !== null && l > 0.02 && l < 0.9; });
+  let primary = normaliseColour(meta) || colourful[0] || candidates[0] || '#2563EB';
+
+  // The background is chosen by what a background is, not by popularity: the
+  // most-used colour that is actually light (or, failing that, actually dark).
+  // Reading this off a plain "most common colour" list once produced a dark navy
+  // background for a cream-coloured bakery's website, because the fallback
+  // assumed a dark primary implied a dark site.
+  const byLum = (test) => candidates.find((c) => { const l = relLum(c); return l !== null && test(l); });
+  // A colour that a stylesheet used in a background declaration is better
+  // evidence than one that merely appears often: a repeated colour is usually
+  // text, a background colour is a background.
+  const declared = (model.css.background || []).filter(Boolean);
+  const background = declared.find((c) => (relLum(c) ?? 1) > 0.75)
+    || declared.find((c) => (relLum(c) ?? 0) < 0.12)
+    || byLum((l) => l > 0.75) || byLum((l) => l < 0.12) || '#FFFFFF';
+
+  // Surfaces are a small step away from the background. They are not taken from
+  // the site's text colour, which is what the first version did — the most-used
+  // `color:` value is ink, and using it as a surface produced a card the exact
+  // colour of the text on it.
+  const surface = shadeIfNeeded(background);
+
+  // The palette must not fail the contrast rules the validator enforces. If the
+  // site's own colour cannot carry its text, it is nudged until it can, and the
+  // adjustment is recorded rather than hidden.
+  const onPrimaryWanted = readableOn(primary);
+  const primaryFix = ensureContrast(primary, onPrimaryWanted === '#000000' ? '#000000' : '#FFFFFF');
+  primary = primaryFix.colour;
+
+  return {
+    theme: {
+      primary,
+      onPrimary: readableOn(primary) || '#FFFFFF',
+      background,
+      surface,
+      onSurface: readableOn(surface) || '#FFFFFF',
+      accent: candidates.find((c) => c !== primary && c !== background && relLum(c) > 0.15 && relLum(c) < 0.95) || primary,
+      statusBarStyle: readableOn(primary) === '#000000' ? 'light' : 'dark',
+    },
+    evidence: {
+      metaThemeColor: normaliseColour(meta),
+      coloursSeen: candidates.slice(0, 8),
+      contrastAdjusted: primaryFix.changed,
+      adjustedFrom: primaryFix.changed ? normaliseColour(meta) || null : null,
+    },
+  };
+}
+
+function shadeIfNeeded(background) {
+  const b = normaliseColour(background) || '#FFFFFF';
+  const lightBg = (parseInt(b.slice(1, 3), 16) + parseInt(b.slice(3, 5), 16) + parseInt(b.slice(5, 7), 16)) / 3 > 128;
+  return lightBg ? '#F1F4F9' : '#151B2E';
+}
+
+/**
+ * Turn a described site into a specification.
+ *
+ * The output is an ordinary specification — the same object a person would type
+ * — so everything downstream (validation, permissions, generation, the cache)
+ * treats an analysed site exactly like a hand-written app.
+ */
+
+function proposeApp(model, { name, packageName, versionName = '1.0.0' } = {}) {
+  const spec = defaultSpec();
+  const site = model.site;
+  const named = name ? { name, truncated: false, original: name } : playSafeName(model.title || site.host || 'My app');
+  const themeResult = themeFor(model);
+
+  spec.identity.appName = named.name;
+  // `packageName` is what the caller asked for and is obeyed; the hint is the
+  // directory the site came from, used only to build a name when nothing was
+  // asked for.
+  spec.identity.packageName = packageFor({
+    provided: packageName,
+    hint: site.root || null,
+    host: site.host,
+  });
+  spec.identity.versionName = versionName;
+  spec.identity.description = model.pages.map((p) => p.page.meta.description).find(Boolean)
+    || `The ${named.name} website, in an app that works offline.`;
+
+  spec.app.mode = 'webview';
+  spec.app.webview = {
+    ...spec.app.webview,
+    /*
+     * Where the app opens, stated honestly.
+     *
+     * For a site that was fetched, this is its real address. For a directory of
+     * files there may be no address at all, and the first version left the
+     * placeholder https://example.com in place — a specification claiming the app
+     * opens a website that has nothing to do with it. When the site's address is
+     * unknown, this records the bundled asset URL, which is precisely the address
+     * the generated app loads, so the field is true even when it is not a
+     * website.
+     */
+    startUrl: site.entryUrl
+      || `https://appassets.androidplatform.net/assets/www/${(site.entry || 'index.html').replace(/^\/+/, '')}`,
+    localAsset: site.entry || 'index.html',
+    allowedHosts: site.host ? [site.host] : [],
+    javascriptEnabled: true,
+    domStorage: true,
+    externalLinks: 'custom-tab',
+    fileUploads: model.forms.some((f) => f.inputs.some((i) => i.type === 'file')),
+    zoom: false,
+  };
+  spec.android.orientation = 'unspecified';
+  spec.theme = themeResult.theme;
+  spec.deepLinks.customScheme = compact(named.name);
+
+  // Only capabilities the site actually shows a need for. Nothing is added for
+  // symmetry, and nothing here grants a permission that the analyser did not
+  // find a reason for.
+  const caps = new Set();
+  const capReasons = [];
+  const add = (cap, why) => { if (!caps.has(cap)) { caps.add(cap); capReasons.push({ cap, why }); } };
+  add('share', 'a page in an app is worth sharing, and sharing needs no permission');
+  if (model.links.some((l) => l.kind === 'scheme' && l.scheme === 'tel') || model.textLength > 0) add('clipboard', 'copying an address or a price out of the page; Android restricts background reads itself');
+  if (model.forms.some((f) => f.inputs.some((i) => i.type === 'file'))) add('files', 'the site has a file picker');
+  spec.capabilities = [...caps];
+  spec.capabilitiesReason = capReasons;
+
+  return { spec, name: named, theme: themeResult };
+}
+
+/* ── writing the app ──────────────────────────────────────────────────────── */
+
+/**
+ * Rewrite the URLs a local WebView cannot resolve.
+ *
+ * The generated app serves bundled pages through Android's WebViewAssetLoader at
+ * https://appassets.androidplatform.net/assets/www/<entry>, whose /assets/ path
+ * is the app's own asset root. A page that asks for `/assets/style.css` therefore
+ * asks for a file at the asset root, not for the one at assets/www/assets/, and
+ * arrives unstyled and without images. Absolute URLs pointing at the site itself
+ * fail the other way round: they reach across the network for a copy of a file
+ * that is already inside the app.
+ *
+ * Both are rewritten to a path relative to the page, and every single rewrite is
+ * returned so it can be shown. A link to something that is not in the bundle is
+ * left exactly as it was — rewriting it to a path that does not exist would turn
+ * a working link into a broken one.
+ */
+
+function planRewrites(site, pageRel, html) {
+  const rewrites = [];
+  const pageDir = dirOf(pageRel);
+  const known = new Set([...site.pages.map((p) => p.rel), ...site.assets.map((a) => a.rel)]);
+
+  const resolved = (url) => {
+    const target = resolveInSite(url, pageRel, site);
+    if (!target || !known.has(target)) return null;
+    const relative = relativeRel(pageDir, target) || target;
+    return relative.startsWith('.') ? relative : `./${relative}`;
+  };
+
+  const out = html.replace(/\b(href|src|poster|action|data-src)\s*=\s*("([^"]*)"|'([^']*)')/gi, (whole, attr, quoted, dq, sq) => {
+    const value = dq ?? sq ?? '';
+    const kind = classifyUrl(value);
+    if (kind.kind !== 'root-relative' && kind.kind !== 'absolute') return whole;
+    const rel = resolved(value);
+    if (!rel) return whole;
+    rewrites.push({ page: pageRel, attr, from: value, to: rel });
+    const quote = dq !== undefined ? '"' : "'";
+    return `${attr}=${quote}${rel}${quote}`;
+  }).replace(/url\(\s*(['"]?)(\/[^'")]+)\1\s*\)/g, (whole, quote, value) => {
+    const rel = resolved(value);
+    if (!rel) return whole;
+    rewrites.push({ page: pageRel, attr: 'css url()', from: value, to: rel });
+    return `url(${quote}${rel}${quote})`;
+  });
+
+  return { html: out, rewrites };
+}
+
+/**
+ * Write an analysed site out as an app: the bundle, the specification, and the
+ * analysis itself.
+ *
+ * The analysis is written next to the app because a specification built by a
+ * tool has to be able to answer "why does it say that?" months later, when the
+ * person who ran it has forgotten and the site has changed.
+ */
+
+
 /* ═══ studio/src/designer.js ═══ */
 /* ==================================================================== *
  * THE SCREEN DESIGNER  (M5)
@@ -4051,6 +5250,355 @@ function screenSummary(spec) {
 }
 
 
+/* ═══ studio/src/website.js ═══ */
+/**
+ * START FROM A WEBSITE
+ * ====================
+ *
+ * The screen that turns a website into an app, on a phone, with no network and
+ * no AI — and the rules it follows, which are the same ones the repair screen
+ * follows:
+ *
+ *   Nothing is applied without being shown first. The analysis produces a
+ *   proposal, the proposal is listed as a set of changes, and the changes happen
+ *   when the person presses the button that says so. A tool that quietly edits
+ *   your project is one you cannot check.
+ *
+ *   It runs the same code the command line runs. The analysis lives in
+ *   engine/analyse/site.mjs, which is pure — no filesystem, no network — and is
+ *   compiled into this bundle. If the Studio had its own copy, a phone and a
+ *   build pipeline would eventually disagree, and the person holding the phone
+ *   would have no way to know which one to believe.
+ *
+ *   It says what it cannot do. Some of what a website needs cannot be solved by
+ *   adding it to an app: a form still needs its server, a page whose words
+ *   arrive from a request will be empty with the network off. Those come back as
+ *   findings with a level, not as failures and not as silence.
+ *
+ * Two things it can do, because they are genuinely different:
+ *
+ *   Address   Point the app at a live website. Everything stays on the site and
+ *             the app needs a connection. Nothing to upload, works immediately.
+ *
+ *   Files     Give it the site's files and it works offline: the pages and their
+ *             assets travel inside the app. This is the one that needs the files
+ *             to reach the build, so the screen says so plainly.
+ */
+
+const LEVEL_LABEL = { blocking: 'Cannot work', warning: 'Needs a decision', info: 'Worth knowing' };
+
+/** What the analysis found, if one has been run. Kept on the project, so it persists. */
+function webState() {
+  if (!S.active) return null;
+  return S.active.website || null;
+}
+
+function setWebState(next) {
+  S.active.website = next;
+  touch();
+}
+
+/** The section's one-line summary when it is closed. */
+function websiteSummary() {
+  const w = webState();
+  if (!w) return 'Read a site and let it fill this in';
+  if (w.status === 'working') return 'Reading the files…';
+  if (w.status === 'failed') return `Could not read them: ${w.error}`;
+  const s = w.analysis.summary;
+  const bits = [`${w.analysis.pages.length} page${w.analysis.pages.length === 1 ? '' : 's'}`];
+  if (s.blocking) bits.push(`${s.blocking} cannot work`);
+  if (s.warning) bits.push(`${s.warning} to decide`);
+  return `${w.analysis.proposal.appName} · ${bits.join(' · ')}`;
+}
+
+/* ── reading files a person picked ────────────────────────────────────────── */
+
+/**
+ * Read the chosen files and analyse them.
+ *
+ * A phone cannot hand a page a directory path, so the files are read here
+ * instead. Each file's name inside its folder comes from webkitRelativePath when
+ * the browser provides it — that is what makes `assets/style.css` resolvable
+ * from `index.html` — and falls back to the plain name when it does not.
+ */
+async function readChosenFiles(fileList) {
+  const files = [];
+  const tooBig = [];
+  let rootName = null;
+  for (const file of Array.from(fileList)) {
+    // Guard the phone's memory: a site is text and images, not video libraries.
+    if (file.size > 12 * 1024 * 1024) { tooBig.push(file.name); continue; }
+    const parts = (file.webkitRelativePath || file.name).split('/');
+    // The first segment is the folder the person picked, which is the only name
+    // the browser gives us for their site.
+    if (!rootName && parts.length > 1) rootName = parts[0];
+    const rel = parts.slice(1).join('/') || file.name;
+    const isText = /\.(html?|css|js|mjs|json|svg|txt|webmanifest)$/i.test(file.name);
+    files.push({ rel, data: isText ? await file.text() : new Uint8Array(await file.arrayBuffer()) });
+  }
+  return { files, tooBig, rootName };
+}
+
+async function analyseChosen(target) {
+  const list = target.files;
+  if (!list || !list.length) return;
+  setWebState({ status: 'working', at: new Date().toISOString() });
+  hardUpdate();
+
+  try {
+    const { files, tooBig, rootName } = await readChosenFiles(list);
+    if (!files.some((f) => /\.html?$/i.test(f.rel))) {
+      setWebState({ status: 'failed', error: 'no .html file among them', tooBig });
+      toast('None of those files is a web page.');
+      hardUpdate();
+      return;
+    }
+    const site = siteFromFiles(files, { rootName });
+    const model = describeSite(site);
+    const findings = findingsFor(site, model);
+    const proposal = proposeApp(model, {});
+
+    setWebState({
+      status: 'ready',
+      at: new Date().toISOString(),
+      files: files.map((f) => ({ rel: f.rel, bytes: (typeof f.data === 'string' ? f.data.length : f.data.byteLength) })),
+      tooBig,
+      analysis: {
+        pages: model.pages.map((p) => ({ rel: p.rel, bytes: p.bytes, title: p.title })),
+        assets: model.assets ? site.assets.map((a) => ({ rel: a.rel, bytes: a.bytes })) : [],
+        entry: site.entry,
+        summary: {
+          blocking: findings.filter((f) => f.level === 'blocking').length,
+          warning: findings.filter((f) => f.level === 'warning').length,
+          info: findings.filter((f) => f.level === 'info').length,
+        },
+        findings,
+        proposal: {
+          appName: proposal.spec.identity.appName,
+          packageName: proposal.spec.identity.packageName,
+          capabilities: proposal.spec.capabilities,
+          theme: proposal.spec.theme,
+          localAsset: proposal.spec.app.webview.localAsset,
+          startUrl: proposal.spec.app.webview.startUrl,
+        },
+      },
+    });
+    toast(`Read ${model.pages.length} page${model.pages.length === 1 ? '' : 's'}: ${findings.length} thing${findings.length === 1 ? '' : 's'} to look at.`);
+  } catch (err) {
+    setWebState({ status: 'failed', error: (err && err.message) || String(err) });
+    toast('Could not read those files.');
+  }
+  hardUpdate();
+}
+
+/* ── applying what was proposed ───────────────────────────────────────────── */
+
+/**
+ * What applying the proposal would change, in words.
+ *
+ * Built by comparing the project with the proposal, so a person sees exactly the
+ * fields that move and nothing else. If this list is empty there is nothing to
+ * apply and the button says so, rather than pretending to work.
+ */
+function proposalChanges() {
+  const w = webState();
+  if (!w || w.status !== 'ready') return [];
+  const spec = S.active.spec;
+  const p = w.analysis.proposal;
+  const changes = [];
+  const push = (label, from, to) => {
+    if (to === undefined || to === null || to === '') return;
+    if (String(from ?? '') === String(to)) return;
+    changes.push({ label, from: from === undefined || from === null || from === '' ? '(not set)' : from, to });
+  };
+
+  push('Application name', spec.identity.appName, p.appName);
+  push('Package name', spec.identity.packageName, p.packageName);
+  push('Bundled page', spec.app?.webview?.localAsset, p.localAsset);
+  push('Address', spec.app?.webview?.startUrl, p.startUrl);
+  const before = (spec.capabilities || []).join(', ');
+  if (before !== p.capabilities.join(', ')) {
+    changes.push({ label: 'Features', from: before || '(none)', to: p.capabilities.join(', ') || '(none)' });
+  }
+  const t = spec.theme || {};
+  const nt = p.theme || {};
+  for (const [key, label] of [['primary', 'App colour'], ['background', 'Background'], ['surface', 'Panels'], ['accent', 'Accent']]) {
+    push(label, t[key], nt[key]);
+  }
+  return changes;
+}
+
+function applyProposal() {
+  const w = webState();
+  if (!w || w.status !== 'ready') return;
+  const spec = S.active.spec;
+  const p = w.analysis.proposal;
+
+  spec.identity.appName = p.appName;
+  spec.identity.packageName = p.packageName;
+  spec.app.mode = 'webview';
+  spec.app.webview = spec.app.webview || {};
+  spec.app.webview.localAsset = p.localAsset;
+  spec.app.webview.startUrl = p.startUrl;
+  spec.app.webview.allowedHosts = [];
+  spec.capabilities = p.capabilities.slice();
+  spec.theme = { ...spec.theme, ...p.theme };
+
+  S.active.website = { ...w, appliedAt: new Date().toISOString() };
+  touch();
+  hardUpdate();
+  toast('Applied. The specification below shows every change.');
+}
+
+function forgetAnalysis() {
+  if (!S.active.website) return;
+  delete S.active.website;
+  touch();
+  hardUpdate();
+  toast('The analysis was removed from this project.');
+}
+
+/* ── the address route ────────────────────────────────────────────────────── */
+
+function useAddress(value) {
+  const raw = String(value || '').trim();
+  if (!raw) { toast('Paste a website address first.'); return; }
+  let url;
+  try { url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`); }
+  catch { toast('That does not look like an address.'); return; }
+  if (!/^https?:$/.test(url.protocol)) { toast('Only http and https addresses can be used.'); return; }
+
+  const spec = S.active.spec;
+  spec.app.mode = 'webview';
+  spec.app.webview = spec.app.webview || {};
+  spec.app.webview.startUrl = url.href;
+  // The bundled page is cleared deliberately: this app opens the live site, and
+  // leaving a stale localAsset behind would silently win over the address and
+  // ship a copy of a different site.
+  delete spec.app.webview.localAsset;
+  spec.app.webview.allowedHosts = [url.hostname];
+  if (spec.android) spec.android.cleartextTraffic = false;
+  touch();
+  hardUpdate();
+  toast(`The app will open ${url.hostname}. Anyone using it needs a connection.`);
+}
+
+/* ── rendering ────────────────────────────────────────────────────────────── */
+
+function websiteFinding(f) {
+  return el('div', { class: `wv-finding lvl-${f.level}` }, [
+    el('div', { class: 'wv-finding-head' }, [
+      el('span', { class: `chip ${f.level === 'blocking' ? 'bad' : (f.level === 'warning' ? 'warn' : 'info')}` }, LEVEL_LABEL[f.level] || f.level),
+      el('span', { class: 'wv-finding-msg' }, f.title),
+    ]),
+    el('p', { class: 'why' }, f.detail),
+    f.action && f.action !== 'Nothing to do.' ? el('p', { class: 'hint' }, f.action) : null,
+    f.evidence && f.evidence.length
+      ? el('details', { class: 'ev' }, [
+        el('summary', {}, `${f.evidence.length} detail${f.evidence.length === 1 ? '' : 's'}`),
+        el('ul', {}, ...f.evidence.slice(0, 12).map((e) => el('li', {}, String(e)))),
+      ])
+      : null,
+  ]);
+}
+
+function websiteSection() {
+  const w = webState();
+  const body = [];
+
+  body.push(el('p', { class: 'hint' },
+    'If the app is a website, let the site fill in the details. It reads nothing until you pick files, and it changes nothing until you say so.'));
+
+  // ---- the address route
+  const addressInput = el('input', {
+    type: 'url', inputmode: 'url', placeholder: 'greenfieldbakery.in',
+    'aria-label': 'Website address',
+  });
+  body.push(el('div', { class: 'wv-row' }, [
+    addressInput,
+    el('button', { class: 'btn primary', onclick: () => useAddress(addressInput.value) }, 'Use this address'),
+  ]));
+  body.push(el('p', { class: 'hint' }, 'The app opens the live site. It needs a connection, and nothing is stored on the phone.'));
+
+  // ---- the files route
+  const picker = el('input', {
+    type: 'file', multiple: true, webkitdirectory: 'true', directory: 'true',
+    style: 'display:none', 'aria-hidden': 'true', tabindex: '-1',
+    onchange: (e) => analyseChosen(e.target),
+  });
+  body.push(el('div', { class: 'wv-row' }, [
+    el('button', { class: 'btn ghost', onclick: () => picker.click() }, 'Choose my site’s files'),
+    el('span', { class: 'hint' }, 'Works offline — the pages travel inside the app.'),
+  ]));
+  body.push(picker);
+
+  if (w && w.status === 'working') {
+    body.push(el('p', { class: 'hint' }, 'Reading the files…'));
+  }
+
+  if (w && w.status === 'failed') {
+    body.push(el('div', { class: 'banner fail' }, [
+      el('strong', {}, 'That did not work.'),
+      el('div', {}, w.error),
+    ]));
+  }
+
+  if (w && w.status === 'ready') {
+    const a = w.analysis;
+    const counts = a.summary;
+    body.push(el('div', { class: 'wv-summary' }, [
+      el('span', { class: 'pill pass' }, `${a.pages.length} page${a.pages.length === 1 ? '' : 's'}`),
+      el('span', { class: 'pill' }, `${a.assets.length} file${a.assets.length === 1 ? '' : 's'}`),
+      el('span', { class: 'pill' }, humanBytes(a.pages.reduce((n, p) => n + p.bytes, 0) + a.assets.reduce((n, x) => n + x.bytes, 0))),
+      counts.blocking ? el('span', { class: 'pill fail' }, `${counts.blocking} cannot work`) : null,
+      counts.warning ? el('span', { class: 'pill warn' }, `${counts.warning} to decide`) : null,
+    ].filter(Boolean)));
+
+    body.push(el('p', { class: 'hint' }, `The app would open ${a.entry}.`));
+
+    if (a.findings.length) {
+      body.push(el('div', { class: 'wv-findings' }, ...a.findings.map(websiteFinding)));
+    } else {
+      body.push(el('p', { class: 'hint' }, 'Nothing to flag: everything it looked for is in order.'));
+    }
+
+    const changes = proposalChanges();
+    body.push(el('h3', { class: 'wv-h' }, 'What applying this changes'));
+    body.push(changes.length
+      ? el('div', { class: 'rs-change' }, ...changes.map((c) => el('div', { class: 'wv-change' }, [
+        el('span', { class: 'wv-what' }, c.label),
+        el('span', { class: 'wv-from' }, String(c.from)),
+        el('span', { class: 'wv-arrow' }, '→'),
+        el('span', { class: 'wv-to' }, String(c.to)),
+      ])))
+      : el('p', { class: 'hint' }, 'Nothing — this project already matches what the site suggests.'));
+
+    body.push(el('div', { class: 'wv-acts' }, [
+      el('button', {
+        class: 'btn primary block', disabled: changes.length === 0 ? 'true' : null,
+        onclick: applyProposal,
+      }, changes.length ? `Apply ${changes.length} change${changes.length === 1 ? '' : 's'}` : 'Already applied'),
+      el('button', { class: 'btn ghost block', onclick: forgetAnalysis }, 'Remove this analysis'),
+    ]));
+
+    body.push(el('p', { class: 'hint' },
+      'The site’s files themselves are added to the project when the app is built, so the pages travel inside the app instead of being downloaded.'));
+
+    if (w.tooBig && w.tooBig.length) {
+      body.push(el('p', { class: 'hint' }, `Left out for being larger than 12 MB: ${w.tooBig.join(', ')}.`));
+    }
+  }
+
+  return section('Start from a website', {
+    icon: I.eye,
+    id: 'website',
+    open: false,
+    summary: websiteSummary,
+    children: body,
+  });
+}
+
+
 /* ═══ studio/src/studio.js ═══ */
 /* ============================================================================
    App Mint Studio
@@ -4243,6 +5791,9 @@ function viewDesign() {
   const mode = spec.app.mode || 'webview';
 
   return [
+    // First, because "where does this app come from" is the first question, and
+    // because a website can answer most of the rest of this screen.
+    websiteSection(),
     section('How this app is built', {
       icon: I.spark,
       id: 'arch',
@@ -4464,7 +6015,7 @@ function viewPreview() {
   const spec = S.active.spec;
   const th = spec.theme;
   const isDark = S.preview.theme === 'dark'
-    || (S.preview.theme === 'auto' && luminance(th.background) < 0.5);
+    || (S.preview.theme === 'auto' && relLuminance(th.background) < 0.5);
   const bg = isDark ? th.background : lighten(th.background);
   const fg = isDark ? th.onSurface : darken(th.onSurface);
 
@@ -4784,7 +6335,7 @@ function detailsAdvanced(summary, kids) {
   return el('details', { class: 'adv' }, el('summary', {}, summary), ...kids);
 }
 
-function luminance(hex) {
+function relLuminance(hex) {
   const c = String(hex || '#ffffff').replace('#', '');
   const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
   const n = parseInt(full.slice(0, 6), 16);
