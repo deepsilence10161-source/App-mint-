@@ -322,3 +322,37 @@ test('an invalid spec is refused before generation, with the reason attached', (
   assert.equal(r.blocked, true);
   assert.equal(g.ok, true);
 });
+
+/* ── Found by running the app on a real device ───────────────────────────── */
+
+test('web content is not force-darkened by default', () => {
+  // Found by looking at a real screenshot: the page loaded, but Android had
+  // inverted the light background while leaving the text dark, so the app was
+  // unreadable. Algorithmic darkening must be OFF unless a project opts in.
+  const s = goodSpec();
+  const g = generateAndroidProject(s);
+  const activity = String(g.files.find((f) => f.path.endsWith('MainActivity.java')).data);
+
+  assert.ok(activity.includes('setAlgorithmicDarkeningAllowed(s, false)'),
+    'darkening must be explicitly disabled so light pages stay readable');
+});
+
+test('a project can opt in to darkening explicitly', () => {
+  const s = goodSpec();
+  s.app.webview.forceDark = true;
+  const g = generateAndroidProject(s);
+  const activity = String(g.files.find((f) => f.path.endsWith('MainActivity.java')).data);
+  assert.ok(activity.includes('setAlgorithmicDarkeningAllowed(s, true)'));
+});
+
+test('the offline notice is a sibling of the WebView, not added after setContentView', () => {
+  // The previous ordering called addContentView() before setContentView(),
+  // which silently did nothing.
+  const s = goodSpec();
+  const g = generateAndroidProject(s);
+  const activity = String(g.files.find((f) => f.path.endsWith('MainActivity.java')).data);
+  // Match the call, not the comment explaining why the call was removed.
+  assert.ok(!/^[^/]*\baddContentView\s*\(/m.test(activity.replace(/^\s*\/\/.*$/gm, '')),
+    'addContentView ordering is fragile; use a root FrameLayout');
+  assert.ok(activity.includes('root.addView(offlineView'), 'the offline view must be a sibling of the scroll view');
+});

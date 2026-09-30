@@ -191,7 +191,7 @@ export function mainActivityJava(cfg) {
   const {
     packageName, appName,
     startUrl, allowedHosts,
-    javascriptEnabled, domStorage, zoom, fileUploads,
+    javascriptEnabled, domStorage, zoom, fileUploads, forceDark,
     externalLinks, offlinePage, splashEnabled, splashColor,
     hasNotifications, hasBridge, bridgeMethods, orientation, cleartext, hasFiles,
   } = cfg;
@@ -296,19 +296,25 @@ ${hostCheck}
 ${screenSecurity}
         setRequestedOrientation(${orientationConstant(orientation)});
 
+        // Root FrameLayout holds the WebView and the offline notice as siblings.
+        // addContentView() is NOT used here because it requires the content view
+        // to exist first, and relying on that ordering is a silent no-op bug.
+        FrameLayout root = new FrameLayout(this);
+        final FrameLayout.LayoutParams fill = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+
         refresh = new SwipeRefreshLayout(this);
         refresh.setColorSchemeColors(Color.parseColor("${splashColor}"));
 
         webView = new WebView(this);
-        refresh.addView(webView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        refresh.addView(webView, fill);
+        root.addView(refresh, fill);
 
         offlineView = buildOfflineView();
         offlineView.setVisibility(View.GONE);
-        addContentView(offlineView, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(offlineView, fill);
 
-        setContentView(refresh);
+        setContentView(root);
 
         configureWebView();
         refresh.setOnRefreshListener(() -> {
@@ -356,6 +362,20 @@ ${hasNotifications ? '        requestNotificationPermissionIfNeeded();\n' : ''}$
         s.setMixedContentMode(${cleartext
           ? 'WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE'
           : 'WebSettings.MIXED_CONTENT_NEVER_ALLOW'});
+
+        // ── Algorithmic darkening ──────────────────────────────────────────
+        // Android will silently invert a light web page when the app theme is
+        // dark. On a page that does not declare colour-scheme support this
+        // produces DARK TEXT ON A DARK BACKGROUND — the page loads perfectly and
+        // is completely unreadable.
+        //
+        // ${forceDark ? 'This project opted in: the page is darkened when the app is in dark mode.' : 'Default is OFF: web content is shown exactly as its author designed it.'}
+        try {
+            androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, ${forceDark ? 'true' : 'false'});
+        } catch (Throwable ignored) {
+            // Older WebView providers may not implement this; the page is then
+            // simply shown as authored, which is the safe fallback.
+        }
 
         if (Build.VERSION.SDK_INT >= 26) {
             try { s.setSafeBrowsingEnabled(true); } catch (Throwable ignored) { }

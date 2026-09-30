@@ -88,6 +88,7 @@ export function generateAndroidProject(spec, opts = {}) {
     javascriptEnabled: app.webview?.javascriptEnabled !== false,
     domStorage: app.webview?.domStorage !== false,
     zoom: !!app.webview?.zoom,
+    forceDark: app.webview?.forceDark === true,
     fileUploads: !!app.webview?.fileUploads,
     externalLinks: app.webview?.externalLinks || 'custom-tab',
     offlinePage: app.webview?.offlinePage !== false,
@@ -147,6 +148,9 @@ android.nonTransitiveRClass=true
     "    implementation 'com.google.android.material:material:1.12.0'",
     "    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'",
     "    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'",
+    // androidx.webkit provides WebSettingsCompat, which handles the
+    // algorithmic-darkening API difference between Android versions for us.
+    "    implementation 'androidx.webkit:webkit:1.12.1'",
   ];
   if (hasBrowser) deps.push("    implementation 'androidx.browser:browser:1.8.0'");
   if (hasFiles) deps.push("    implementation 'androidx.core:core:1.13.1'");

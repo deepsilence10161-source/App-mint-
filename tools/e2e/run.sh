@@ -36,6 +36,36 @@ for i in $(seq 1 90); do
 done
 # A half-booted launcher throws ANRs over whatever is on screen, so let it settle.
 sleep 15
+
+# ── deterministic environment ───────────────────────────────────────────────
+# An emulator boots with an arbitrary locale. A website that localises would then
+# produce screenshots in a language nobody asked for, which makes the evidence
+# harder to read and impossible to compare between runs. Pin it to en-US.
+step "pinning locale to en-US"
+adb root > /dev/null 2>&1 || true
+adb shell "setprop persist.sys.locale en-US" || true
+adb shell "setprop persist.sys.language en" || true
+adb shell "setprop persist.sys.country US" || true
+adb shell "settings put system system_locales en-US" || true
+# The framework only re-reads the locale on restart, so restart it once here
+# rather than mid-test.
+adb shell stop > /dev/null 2>&1 || true
+sleep 2
+adb shell start > /dev/null 2>&1 || true
+for i in $(seq 1 60); do
+  [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+  sleep 2
+done
+sleep 10
+
+# Keep the screen on. An emulator idles its display during a long run, and a
+# sleeping screen makes every later screenshot black — which looks exactly like
+# a broken app.
+step "keeping the screen awake"
+adb shell svc power stayon true || true
+adb shell input keyevent KEYCODE_WAKEUP || true
+adb shell wm dismiss-keyguard || true
+
 adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put secure immersive_mode_confirmations confirmed || true
 adb shell settings put global window_animation_scale 0 || true
@@ -62,6 +92,11 @@ adb logcat -c || true
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 shot() {
+  # Wake the display first: a screenshot of a sleeping emulator is pure black,
+  # which is indistinguishable from an app that failed to render.
+  adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1 || true
+  adb shell svc power stayon true > /dev/null 2>&1 || true
+  sleep 1
   adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null
   step "  screenshot $1 ($(stat -c%s "$OUT/$1.png" 2>/dev/null || echo 0) bytes)"
 }
