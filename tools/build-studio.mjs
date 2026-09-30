@@ -34,6 +34,13 @@ const ENGINE_MODULES = [
   'engine/spec/fix-policy.mjs',
   'engine/spec/spec.mjs',
   'engine/capability/permissions.mjs',
+  // The website analyser: pure by construction — no filesystem, no network — so
+  // it runs in a browser unchanged. It is inlined rather than copied, because a
+  // second implementation of "what does this site become" would drift from the
+  // one the build pipeline uses, and the person holding the phone would have no
+  // way to know which to believe.
+  'engine/analyse/html.mjs',
+  'engine/analyse/site.mjs',
 ];
 
 /* Application sources, in the order they must be evaluated. The designer is
@@ -42,6 +49,7 @@ const ENGINE_MODULES = [
    has tapped something. */
 const APP_MODULES = [
   'studio/src/designer.js',
+  'studio/src/website.js',
   'studio/src/studio.js',
   'studio/src/repairs.js',
 ];

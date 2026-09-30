@@ -999,3 +999,43 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .repair-declined .rs-change { color: var(--warn); }
 
 .repair-decision .row, .repair-done .row { margin-top: 10px; }
+
+/* ── start from a website ─────────────────────────────────────────────────
+   Sized for a thumb: the two routes are full-width rows, and the things that
+   matter (what it found, what it would change) are readable without opening
+   anything else. */
+.wv-row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; margin: var(--s2) 0; }
+.wv-row input[type="url"] {
+  flex: 1 1 12rem; min-width: 0; font: inherit; padding: 12px var(--s3);
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+}
+.wv-row .btn { flex: 0 0 auto; }
+.wv-summary { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--s2) 0; }
+.wv-h { margin: var(--s3) 0 var(--s1); font-size: .95rem; }
+.wv-acts { display: grid; gap: var(--s2); margin-top: var(--s2); }
+/* One change per block: the field on its own line, then what it becomes. A
+   four-column row put long values — an address, a package name — off the side of
+   a phone screen, where they were invisible rather than merely tight. */
+.wv-change { display: block; padding: 8px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.wv-change:first-child { border-top: 0; }
+.wv-what { display: block; color: var(--fg-3); font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; }
+.wv-from { text-decoration: line-through; color: var(--fg-3); word-break: break-word; }
+.wv-arrow { color: var(--fg-3); margin: 0 6px; }
+.wv-to { font-weight: 600; word-break: break-word; }
+.wv-finding { border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--s2); margin: var(--s2) 0; }
+.wv-finding.lvl-blocking { border-left: 3px solid var(--bad); }
+.wv-finding.lvl-warning { border-left: 3px solid var(--fg-2); }
+.wv-finding.lvl-info { border-left: 3px solid var(--line); }
+.wv-finding-head { display: flex; gap: var(--s2); align-items: flex-start; flex-wrap: wrap; }
+.wv-finding-head .chip { flex: 0 0 auto; }
+.wv-finding-msg { font-weight: 600; }
+.wv-finding .why { margin: 6px 0 0; font-size: .92rem; color: var(--fg); line-height: 1.5; }
+.wv-finding .hint { margin: 6px 0 0; line-height: 1.5; }
+.wv-finding details.ev { margin-top: 8px; font-size: .85rem; color: var(--fg-3); }
+.wv-finding details.ev summary { cursor: pointer; padding: 4px 0; }
+.wv-finding details.ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
+.wv-finding details.ev li { word-break: break-word; line-height: 1.5; }
+.wv-finding .ev { margin-top: 6px; font-size: .85rem; color: var(--fg-3); }
+.wv-finding .ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
+.wv-finding .ev li { word-break: break-all; }

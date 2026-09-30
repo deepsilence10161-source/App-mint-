@@ -14,6 +14,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
@@ -179,7 +180,15 @@ async function main() {
   await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
   await page.waitForTimeout(150);
   await page.locator('input[aria-label="Package name"]').fill('com.example.phonetest');
-  await page.waitForTimeout(350);
+  // Wait for the value to reach storage before reloading. Reloading on a fixed
+  // delay raced the save and failed about one run in three with "New project" —
+  // a flaky test that blames the product for the test's own timing.
+  await page.waitForFunction(() => {
+    try {
+      return JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]')
+        .some((p) => p.spec && p.spec.identity.packageName === 'com.example.phonetest');
+    } catch (e) { return false; }
+  }, null, { timeout: 5000 });
 
   /* ── persistence ────────────────────────────────────────────────────── */
   await page.reload({ waitUntil: 'load' });
@@ -526,6 +535,164 @@ async function main() {
     decided.clear === false, `cleartextTraffic is ${decided.clear}`);
   check('The record marks which repairs were your decision',
     decided.entries.includes(true), `recorded: ${JSON.stringify(decided.entries)}`);
+
+  /* ── starting from a website (M8) ──────────────────────────────────────
+     The card is at the top of the Design screen, because "where does this app
+     come from" is the first question. These checks drive the two routes it
+     offers, and the one rule that matters: nothing is applied until the person
+     presses the button that says what will happen. */
+
+  /*
+   * On a fresh project, deliberately.
+   *
+   * The checks above leave the project they use in a state that is blocked on
+   * purpose — that is what the repair screen is tested with — and the first
+   * version of this block ran on it and then complained that the result was
+   * blocked. The claim being tested is "a site can be turned into a valid app",
+   * so it starts from a project that is valid.
+   */
+  await page.locator('#newproj').click();
+  await page.waitForTimeout(500);
+  await page.locator('button.tpl').first().click();
+  await page.waitForTimeout(900);
+  await page.locator('.tab:has-text("Design")').click();
+  await page.waitForTimeout(500);
+
+  /* The project the Studio has open, not merely the first one in storage: a new
+     project is appended to the list, so reading list[0] reads someone else's. */
+  const readActive = () => {
+    const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+    const id = localStorage.getItem('appmint.active.v1');
+    return list.find((x) => x.id === id) || list[list.length - 1] || null;
+  };
+
+  const siteSectionCount = await page.locator('.sec-name:has-text("Start from a website")').count();
+  check('The Design screen offers starting from a website', siteSectionCount >= 1,
+    `found ${siteSectionCount} matching section headings`);
+
+  await page.locator('.sec-head:has-text("Start from a website")').click();
+  await page.waitForTimeout(350);
+
+  const urlField = page.locator('.wv-row input[type="url"]');
+  check('It asks for a website address', await urlField.count() === 1);
+
+  await urlField.fill('greenfieldbakery.in');
+  await page.locator('.wv-row button:has-text("Use this address")').click();
+  await page.waitForTimeout(500);
+
+  const afterAddress = await page.evaluate(readActive).then((p) => ({
+    startUrl: p.spec.app.webview.startUrl,
+    hosts: p.spec.app.webview.allowedHosts,
+    localAsset: p.spec.app.webview.localAsset,
+  }));
+  check('An address becomes the app\'s start address',
+    afterAddress.startUrl === 'https://greenfieldbakery.in/',
+    `startUrl is ${afterAddress.startUrl}`);
+  check('The address is the only host allowed to stay inside the app',
+    JSON.stringify(afterAddress.hosts) === '["greenfieldbakery.in"]',
+    `allowedHosts is ${JSON.stringify(afterAddress.hosts)}`);
+
+  // typing a bare address must not be taken as a scheme
+  await urlField.fill('javascript:alert(1)');
+  await page.locator('.wv-row button:has-text("Use this address")').click();
+  await page.waitForTimeout(400);
+  const rejected = await page.evaluate(readActive).then((p) => p.spec.app.webview.startUrl);
+  check('An address that is not http or https is refused',
+    rejected === 'https://greenfieldbakery.in/',
+    `startUrl changed to ${rejected}`);
+
+  /* The file route, driven the way a person drives it: hand the page some files
+     and see what it does with them. The analysis is the engine's own code — the
+     deep checks on it live in tools/tests/analyse.test.mjs, which runs it
+     directly — so what is asserted here is the part only a browser can show: the
+     screen, and the rule that nothing is applied until it is asked for. */
+  const siteRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'appmint-studio-site-'));
+  const siteDir = path.join(siteRoot, 'beanleaf');
+  fs.mkdirSync(siteDir);
+  fs.writeFileSync(path.join(siteDir, 'index.html'), `<!doctype html>
+<html><head><title>Bean &amp; Leaf</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { background: #F7F3EE; color: rgb(36, 26, 18); } h1 { background: #6B3A1F; color: #FFFFFF; }
+a { color: #6B3A1F; }</style></head>
+<body><h1>Coffee, slowly</h1>
+<p>Open from seven, every morning except Monday.</p>
+<p><a href="tel:+911234567890">Call 12345 67890</a></p>
+<form action="https://forms.example.org/orders" method="post">
+  <input name="name" type="text" required><button type="submit">Send</button></form>
+</body></html>`);
+
+  const nameBefore = await page.evaluate(readActive).then((p) => (p ? p.spec.identity.appName : null));
+
+  // A directory, because that is what this input asks for: the browser then
+  // hands over each file's path inside the folder, which is what makes
+  // "assets/style.css" resolvable from "index.html".
+  await page.locator('#sec-website input[type="file"]').setInputFiles(siteDir);
+  await page.waitForTimeout(1200);
+
+  const readBack = await page.evaluate(readActive).then((p) => ({
+    name: p.spec.identity.appName, website: p.website ? p.website.status : null,
+  }));
+  check('Choosing the site\'s files reads them without changing the project',
+    readBack.name === nameBefore && readBack.website === 'ready',
+    `name ${nameBefore} → ${readBack.name}, analysis ${readBack.website}`);
+
+  const screen = await page.evaluate(() => {
+    const box = document.querySelector('#sec-website');
+    const text = box ? box.textContent : '';
+    return {
+      pages: /\b1 page\b/.test(text),
+      entry: /would open index\.html/.test(text),
+      findings: document.querySelectorAll('#sec-website .wv-finding').length,
+      changes: /What applying this changes/.test(text),
+      applyLabel: (box.querySelector('.wv-acts .btn.primary') || {}).textContent || '',
+      saysServer: /needs the site('|\u2019)s own server/.test(text) || /needs its server|submit/i.test(text),
+    };
+  });
+  check('The screen says how many pages it read', screen.pages, 'no page count on screen');
+  check('It says which page the app would open', screen.entry, 'no entry page on screen');
+  check('It shows what it found, as findings', screen.findings >= 1, `${screen.findings} findings rendered`);
+  check('It lists the changes before making them', screen.changes, 'no change list on screen');
+  check('The button says what it will apply',
+    /Apply \d+ change/.test(screen.applyLabel), `button reads "${screen.applyLabel.trim()}"`);
+
+  await page.locator('#sec-website .wv-acts .btn.primary').click();
+  await page.waitForTimeout(700);
+
+  const applied = await page.evaluate(() => {
+    const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+    const id = localStorage.getItem('appmint.active.v1');
+    const project = list.find((x) => x.id === id) || list[list.length - 1];
+    const spec = project.spec;
+    return {
+      name: spec.identity.appName, pkg: spec.identity.packageName,
+      localAsset: spec.app.webview.localAsset, mode: spec.app.mode,
+      primary: spec.theme.primary, caps: spec.capabilities,
+      appliedAt: project.website && project.website.appliedAt,
+      button: (document.querySelector('#sec-website .wv-acts .btn.primary') || {}).textContent || '',
+    };
+  });
+  check('Applying names the app after the site', applied.name === 'Bean & Leaf', `name is "${applied.name}"`);
+  check('Applying sets the package name', applied.pkg === 'com.appmint.beanleaf', `package is ${applied.pkg}`);
+  check('Applying bundles the site\'s entry page', applied.localAsset === 'index.html', `localAsset ${applied.localAsset}`);
+  check('Applying takes the site\'s colour', applied.primary === '#6B3A1F', `primary ${applied.primary}`);
+  check('Applying only claims capabilities the site justifies',
+    !applied.caps.includes('barcode') && !applied.caps.includes('exactAlarms'), JSON.stringify(applied.caps));
+  check('The application is recorded on the project', !!applied.appliedAt, 'no timestamp recorded');
+  check('The button stops offering to apply what is already applied',
+    /Already applied/.test(applied.button), `button reads "${applied.button.trim()}"`);
+
+  // The Studio bundle is a module, so the validation function is not on window.
+  // What the page says about the result is what a person reads, and that is what
+  // gets checked here; the same validation is asserted directly, on the same
+  // analyser output, in tools/tests/analyse.test.mjs.
+  const healthFromSite = await page.evaluate(() => {
+    const pill = document.querySelector('#health .pill');
+    return pill ? pill.textContent.trim() : '(no health strip)';
+  });
+  check('The screen still says the project is buildable after applying',
+    /Ready/.test(healthFromSite), `the health strip reads "${healthFromSite}"`);
+
+  fs.rmSync(siteRoot, { recursive: true, force: true });
 
   if (!process.argv.includes('--keep')) await browser.close();
 

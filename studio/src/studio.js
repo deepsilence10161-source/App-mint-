@@ -193,6 +193,9 @@ function viewDesign() {
   const mode = spec.app.mode || 'webview';
 
   return [
+    // First, because "where does this app come from" is the first question, and
+    // because a website can answer most of the rest of this screen.
+    websiteSection(),
     section('How this app is built', {
       icon: I.spark,
       id: 'arch',
@@ -414,7 +417,7 @@ function viewPreview() {
   const spec = S.active.spec;
   const th = spec.theme;
   const isDark = S.preview.theme === 'dark'
-    || (S.preview.theme === 'auto' && luminance(th.background) < 0.5);
+    || (S.preview.theme === 'auto' && relLuminance(th.background) < 0.5);
   const bg = isDark ? th.background : lighten(th.background);
   const fg = isDark ? th.onSurface : darken(th.onSurface);
 
@@ -734,7 +737,7 @@ function detailsAdvanced(summary, kids) {
   return el('details', { class: 'adv' }, el('summary', {}, summary), ...kids);
 }
 
-function luminance(hex) {
+function relLuminance(hex) {
   const c = String(hex || '#ffffff').replace('#', '');
   const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
   const n = parseInt(full.slice(0, 6), 16);
