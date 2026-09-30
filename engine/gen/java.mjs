@@ -275,6 +275,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebViewAssetLoader;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 /**
@@ -284,6 +285,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
+    private WebViewAssetLoader assetLoader;
     private SwipeRefreshLayout refresh;
     private View offlineView;
     private boolean pageFailed = false;
@@ -315,6 +317,16 @@ ${screenSecurity}
         root.addView(offlineView, fill);
 
         setContentView(root);
+
+        // Bundled pages are served through the asset loader over a real https
+        // origin (https://appassets.androidplatform.net/...) rather than file://.
+        // file:// would need file access enabled, which lets page content read
+        // local storage — the exact hole we keep shut.
+        if (START_URL.startsWith("https://appassets.androidplatform.net/")) {
+            assetLoader = new WebViewAssetLoader.Builder()
+                    .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                    .build();
+        }
 
         configureWebView();
         refresh.setOnRefreshListener(() -> {
@@ -411,6 +423,13 @@ ${bridgeAttach}
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
                 return handleUrl(req.getUrl().toString());
+            }
+
+            @Override
+            public android.webkit.WebResourceResponse shouldInterceptRequest(
+                    WebView v, WebResourceRequest req) {
+                if (assetLoader == null) return null;
+                return assetLoader.shouldInterceptRequest(req.getUrl());
             }
 
             @Override

@@ -127,15 +127,32 @@ try:
             continue
         pixels = list(im.getdata())
         total = len(pixels) or 1
-        bright = sum(1 for r, g, b in pixels if max(r, g, b) > 60) / total * 100
-        distinct = len(set(pixels)) / total * 100
-        brightness[name] = round(bright, 2)
-        single_colour[name] = round(100 - distinct, 2)
+
+        # ── Why these two metrics and not "distinct colours as a percentage" ──
+        # The first version of this check measured distinct colours divided by
+        # total pixels. A real, clearly rendered page (black text on white) then
+        # scored 0.62% — the same as a blank screen — because a page is mostly
+        # one background colour. That is a false failure, which is just as
+        # dishonest as a false pass.
+        #
+        # What actually distinguishes rendered from blank:
+        #   - a blank screen has a handful of distinct colours
+        #   - real content has many, because of text antialiasing
+        #   - real content has luminance variation; a blank screen has almost none
+        distinct_count = len(set(pixels))
+        lum = [0.299 * r + 0.587 * g + 0.114 * b for r, g, b in pixels]
+        mean = sum(lum) / total
+        variance = sum((v - mean) ** 2 for v in lum) / total
+        stddev = variance ** 0.5
+
+        brightness[name] = round(mean / 255 * 100, 2)
+        single_colour[name] = distinct_count
         shot_info[name] = {
             "present": True,
             "bytes": read_bytes(name + ".png"),
-            "bright_pct": round(bright, 2),
-            "distinct_pct": round(distinct, 2),
+            "mean_luminance_pct": round(mean / 255 * 100, 2),
+            "luminance_stddev": round(stddev, 2),
+            "distinct_colours": distinct_count,
             "_im": im,
         }
 
@@ -160,14 +177,31 @@ for name, label in EXPECTED:
 # WebView never painted, which is exactly the failure a byte-count check misses.
 loaded = shot_info.get("02-loaded", {})
 if loaded.get("present"):
-    dpct = loaded.get("distinct_pct", 0)
+    colours = loaded.get("distinct_colours", 0)
+    stddev = loaded.get("luminance_stddev", 0.0)
+    rendered = colours >= 24 and stddev >= 4.0
     check("content_rendered",
-          "Loaded screen contains real rendered content (not a blank view)",
-          dpct > 4.0,
-          f"{dpct}% distinct colour values (a blank screen sits near 0%)")
+          "Loaded screen shows real rendered content (not a blank view)",
+          rendered,
+          f"{colours} distinct colours, luminance spread {stddev} "
+          f"(a blank screen has a handful of colours and almost no spread)")
 else:
-    check("content_rendered", "Loaded screen contains real rendered content", False,
+    check("content_rendered", "Loaded screen shows real rendered content", False,
           "no loaded screenshot to inspect")
+
+# ── JavaScript actually ran inside the WebView ──────────────────────────────
+# Proof that the page's script executed, not merely that pixels changed.
+ready_hits = re.findall(r"APPMINT_READY[^\r\n]*", logcat)
+check("js_executed",
+      "JavaScript ran inside the WebView",
+      len(ready_hits) > 0,
+      (ready_hits[0][:120] if ready_hits else
+       "no APPMINT_READY marker in logcat — the page may have loaded but its script did not run"))
+
+bridge_hits = re.findall(r"APPMINT_BRIDGE \S+", logcat)
+if bridge_hits:
+    check("bridge_state", "JavaScript bridge state reported",
+          True, bridge_hits[0])
 
 if diff_launch_loaded is not None:
     check("render_changed",

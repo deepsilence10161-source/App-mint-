@@ -114,7 +114,12 @@ function cmdGenerate(args) {
     return 1;
   }
 
-  const gen = generateAndroidProject(spec, { profile: args.profile });
+  // A project may ship its own bundled pages in a web/ directory beside its spec.
+  const webDir = path.join(path.dirname(file), 'web');
+  const gen = generateAndroidProject(spec, {
+    profile: args.profile,
+    webDir: fs.existsSync(webDir) ? webDir : null,
+  });
   if (!gen.ok) { console.log(paint(C.red, `\n  Generation failed:`)); gen.errors.forEach((e) => console.log(`    ${e}`)); return 1; }
 
   // Clean the destination so output is genuinely deterministic.

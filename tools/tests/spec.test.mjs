@@ -368,3 +368,36 @@ test('the WebView canvas is white by default so unstyled pages stay readable', (
   assert.ok(activity.includes('webView.setBackgroundColor(Color.parseColor("#FFFFFF"))'),
     'the web canvas must default to white, not to the dark app background');
 });
+
+/* ── Bundled page mode ───────────────────────────────────────────────────── */
+
+test('a bundled page is served over https, never over file://', () => {
+  // file:// would require enabling file access, which lets page content read
+  // local storage. The asset loader gives a real https origin instead.
+  const s = goodSpec();
+  s.app.webview.localAsset = 'index.html';
+  const g = generateAndroidProject(s, { webDir: 'apps/demo/web' });
+  assert.equal(g.ok, true, JSON.stringify(g.errors));
+
+  const activity = String(g.files.find((f) => f.path.endsWith('MainActivity.java')).data);
+  assert.ok(activity.includes('appassets.androidplatform.net'));
+  assert.ok(activity.includes('WebViewAssetLoader'));
+  assert.ok(!activity.includes('setAllowFileAccess(true)'), 'file access must stay off');
+});
+
+test('bundled web files are copied into the APK', () => {
+  const s = goodSpec();
+  s.app.webview.localAsset = 'index.html';
+  const g = generateAndroidProject(s, { webDir: 'apps/demo/web' });
+  const copied = g.files.filter((f) => f.path.includes('assets/www/'));
+  assert.ok(copied.length >= 1, 'the bundled page must be included in the APK');
+  assert.ok(copied.every((f) => Buffer.isBuffer(f.data)));
+});
+
+test('a missing bundled page fails loudly instead of shipping a broken app', () => {
+  const s = goodSpec();
+  s.app.webview.localAsset = 'does-not-exist.html';
+  const g = generateAndroidProject(s, { webDir: '/tmp/definitely-not-here' });
+  assert.equal(g.ok, false);
+  assert.ok(g.errors.join(' ').includes('localAsset'));
+});

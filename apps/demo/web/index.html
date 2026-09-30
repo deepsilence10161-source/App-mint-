@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Mint Demo</title>
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --bg: #ffffff;
+    --fg: #0f172a;
+    --muted: #5b6b84;
+    --line: #e2e8f0;
+    --primary: #2563eb;
+    --accent: #22d3ee;
+    --ok: #16a34a;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body {
+    color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+    padding: max(18px, env(safe-area-inset-top)) 18px max(28px, env(safe-area-inset-bottom));
+    max-width: 640px; margin-inline: auto;
+  }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .mark {
+    width: 44px; height: 44px; border-radius: 13px; flex: 0 0 auto;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+  h1 { font-size: 1.375rem; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 0.8125rem; margin: 2px 0 0; }
+  .card {
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  h2 { font-size: 0.9375rem; margin: 0 0 10px; }
+  ul { margin: 0; padding-left: 20px; }
+  li { font-size: 0.875rem; margin-bottom: 5px; }
+  button {
+    font: inherit; font-weight: 600; font-size: 0.9375rem;
+    background: var(--primary); color: #fff; border: 0;
+    border-radius: 11px; padding: 13px 18px; width: 100%;
+    margin-bottom: 10px; cursor: pointer;
+  }
+  button.secondary { background: #f1f5f9; color: var(--fg); border: 1px solid var(--line); }
+  button:active { transform: scale(0.99); }
+  .status {
+    font-size: 0.875rem; padding: 11px 13px; border-radius: 10px;
+    background: #f0fdf4; color: var(--ok); border: 1px solid #bbf7d0;
+    margin-top: 4px; min-height: 42px; display: flex; align-items: center;
+  }
+  .callout {
+    font-size: 0.8125rem; color: var(--muted);
+    border-left: 3px solid var(--accent); padding-left: 12px; margin: 0;
+  }
+  code {
+    background: #f1f5f9; padding: 1px 5px; border-radius: 5px;
+    font-size: 0.85em; word-break: break-all;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark" aria-hidden="true"></div>
+  <div>
+    <h1>Mint Demo</h1>
+    <p class="sub">Running inside a generated Android app · bundled page, no network</p>
+  </div>
+</header>
+
+<section class="card">
+  <h2>This page did not come from the internet</h2>
+  <p class="callout">
+    It is served from inside the APK through a real https origin, so the app works with
+    no connection and the device test checks our own rendering rather than a third
+    party's website.
+  </p>
+</section>
+
+<section class="card">
+  <h2>Native bridge check</h2>
+  <p class="sub" style="margin:0 0 12px">
+    These buttons call into Android. A failure here means the JavaScript bridge is
+    missing, which is exactly the kind of thing a screenshot alone cannot prove.
+  </p>
+  <button id="copy">Copy a value to the clipboard</button>
+  <button id="share" class="secondary">Open the system share sheet</button>
+  <button id="vibrate" class="secondary">Vibrate briefly</button>
+  <div class="status" id="status" role="status" aria-live="polite">Waiting for input…</div>
+</section>
+
+<section class="card">
+  <h2>What this app can do</h2>
+  <ul>
+    <li>Clipboard</li>
+    <li>Share to other apps</li>
+    <li>Vibration</li>
+    <li>Notifications</li>
+  </ul>
+  <p class="sub" style="margin:12px 0 0">
+    This list is generated from the project specification. Turn a capability off and
+    both the feature and its Android permission disappear.
+  </p>
+</section>
+
+<script>
+  (function () {
+    var status = document.getElementById('status');
+    var stamp = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    function set(msg) {
+      status.textContent = msg;
+      // A data attribute makes the state readable from a device screenshot and
+      // from a UI dump, so the test can assert on it rather than guess.
+      status.setAttribute('data-state', msg);
+    }
+
+    function bridge() {
+      return (typeof AppMint !== 'undefined') ? AppMint : null;
+    }
+
+    document.getElementById('copy').addEventListener('click', function () {
+      var b = bridge();
+      var value = 'AppMint demo ' + stamp;
+      if (b && b.copy) { b.copy(value); set('Copied: ' + value); }
+      else { set('No clipboard bridge in this build'); }
+    });
+
+    document.getElementById('share').addEventListener('click', function () {
+      var b = bridge();
+      if (b && b.share) { b.share('Sent from the Mint Demo app. ' + stamp); set('Share sheet opened'); }
+      else { set('No share bridge in this build'); }
+    });
+
+    document.getElementById('vibrate').addEventListener('click', function () {
+      var b = bridge();
+      if (b && b.vibrate) { b.vibrate(60); set('Vibrated'); }
+      else { set('No vibration bridge in this build'); }
+    });
+
+    // Mark the page as genuinely interactive. The device test waits for this
+    // marker, so a page that loads but whose JavaScript never ran is a failure.
+    set('Ready · ' + stamp);
+    document.body.setAttribute('data-app-ready', 'true');
+
+    // A console marker is the only reliable proof that JavaScript actually
+    // executed inside the WebView. A screenshot can show a painted page whose
+    // script threw on line one, so the device test asserts on this instead.
+    console.log('APPMINT_READY ' + stamp);
+    console.log('APPMINT_BRIDGE ' + (bridge() ? 'present' : 'absent'));
+  })();
+</script>
+</body>
+</html>

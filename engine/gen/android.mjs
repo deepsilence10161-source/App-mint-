@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 /**
  * ANDROID PROJECT GENERATOR
  * =========================
@@ -27,6 +29,16 @@ export { TOOLCHAIN_PROFILES } from '../spec/toolchain.mjs';
 
 import { TOOLCHAIN_PROFILES as TC } from '../spec/toolchain.mjs';
 
+function walkDir(root, base = '') {
+  const out = [];
+  for (const entry of fs.readdirSync(path.join(root, base), { withFileTypes: true })) {
+    const rel = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out.push(...walkDir(root, rel));
+    else out.push(rel);
+  }
+  return out.sort();
+}
+
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'app';
 
 function esc(s) {
@@ -49,6 +61,7 @@ function bridgeMethodsFor(caps) {
  *            report:object, meta:object}}
  */
 export function generateAndroidProject(spec, opts = {}) {
+  const webDir = opts.webDir || null;
   const errors = [];
   const id = spec.identity || {};
   const a = spec.android || {};
@@ -83,7 +96,9 @@ export function generateAndroidProject(spec, opts = {}) {
 
   const javaCfg = {
     packageName, appName,
-    startUrl: app.webview?.startUrl || 'about:blank',
+    startUrl: app.webview?.localAsset
+      ? `https://appassets.androidplatform.net/assets/www/${app.webview.localAsset.replace(/^\/+/, '')}`
+      : (app.webview?.startUrl || 'about:blank'),
     allowedHosts,
     javascriptEnabled: app.webview?.javascriptEnabled !== false,
     domStorage: app.webview?.domStorage !== false,
@@ -415,6 +430,23 @@ public class App extends Application {
   const icons = generateIcons(spec);
   for (const f of icons.files) files.push({ path: `android/app/src/main/res/${f.path}`, data: f.data });
 
+  /* ---------------- bundled web assets ---------------- */
+  const bundled = [];
+  if (app.webview?.localAsset && webDir && fs.existsSync(webDir)) {
+    for (const rel of walkDir(webDir)) {
+      files.push({
+        path: `android/app/src/main/assets/www/${rel}`,
+        data: fs.readFileSync(path.join(webDir, rel)),
+      });
+      bundled.push(rel);
+    }
+  }
+  if (app.webview?.localAsset && bundled.length === 0) {
+    errors.push(`app.webview.localAsset is "${app.webview.localAsset}" but no web assets were found` +
+                (webDir ? ` in ${webDir}` : ' (no web directory was supplied)'));
+    return { ok: false, errors, files: [], report: {}, meta: {} };
+  }
+
   /* ---------------- determinism: fixed order ---------------- */
   files.sort((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
 
@@ -430,6 +462,7 @@ public class App extends Application {
     bridgeEnabled: hasBridge,
     bridgeMethods,
     iconMark: icons.mark,
+    bundledAssets: bundled,
     fileCount: files.length,
   };
 
@@ -440,6 +473,7 @@ public class App extends Application {
     toolchain: tc,
     bridgeEnabled: hasBridge,
     permissionCount: permissions.length,
+    bundledAssetCount: bundled.length,
   };
 
   return { ok: true, errors: [], files, report, meta };

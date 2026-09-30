@@ -103,6 +103,7 @@ export const SCHEMA = {
             forceDark:    { type: 'boolean', label: 'Force dark web content' },
             canvasBackground: { type: 'string', pattern: HEX_RE, label: 'Web canvas colour' },
             acceptLanguage: { type: 'string', maxLength: 40, label: 'Accept-Language header' },
+            localAsset:   { type: 'string', maxLength: 200, label: 'Bundled start page' },
             userAgentSuffix: { type: 'string', maxLength: 60 },
             javascriptEnabled: { type: 'boolean' },
             domStorage:   { type: 'boolean' },
