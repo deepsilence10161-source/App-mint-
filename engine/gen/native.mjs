@@ -1772,9 +1772,21 @@ ${hasDrawer ? '        if (drawer != null) drawer.openDrawer(GravityCompat.START
         recreate();
     }
 
+    /** The screen the app opens on, which the first tab leads back to. */
+    private String firstTabId() {
+        for (Screens.Screen s : Screens.all(this)) if (s.showInTabs) return s.id;
+        return null;
+    }
+
     @Override
     public void onBackPressed() {
-${hasDrawer ? `        if (drawer != null && drawer.isDrawerOpen(GravityCompat.START)) { drawer.closeDrawers(); return; }\n` : ''}        if (goBack()) return;
+${hasDrawer ? `        if (drawer != null && drawer.isDrawerOpen(GravityCompat.START)) { drawer.closeDrawers(); return; }\n` : ''}${hasBottomNav ? `        // Back from any tab returns to the first one, which is what every
+        // Android app with a tab bar does. Only from the first tab does back
+        // leave the app. Without this, one tap on a tab and back closes the
+        // app, which reads as a crash even though it is not one.
+        String first = firstTabId();
+        if (first != null && !first.equals(currentId)) { goTo(first); return; }
+` : ''}        if (goBack()) return;
         super.onBackPressed();
     }
 

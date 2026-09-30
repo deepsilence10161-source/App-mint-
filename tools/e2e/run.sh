@@ -22,7 +22,7 @@ mkdir -p "$OUT"
 
 step() { echo "[$(date +%T)] $*" | tee -a "$OUT/steps.txt"; }
 
-step "package=$PKG activity=$ACT"
+step "package=$PKG activity=$ACT kind=${APP_KIND:-webview} tabs=${APP_TABS:-0}"
 echo "unknown" > "$OUT/emulator-version.txt"
 grep -h '^Pkg.Revision' "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/emulator/source.properties" \
   > "$OUT/emulator-version.txt" 2>/dev/null || true
@@ -78,17 +78,27 @@ echo "${W}x${H}" > "$OUT/screen.txt"
 step "screen ${W}x${H}"
 
 # ── install ─────────────────────────────────────────────────────────────────
-APK=$(ls build/apk/*.apk 2>/dev/null | head -1)
-if [ -z "$APK" ]; then
-  echo "no apk found in build/apk/" > "$OUT/install.log"
-  echo "1" > "$OUT/install-rc.txt"
-  exit 0
+# SKIP_INSTALL is set when the caller has already put this exact APK on the
+# device. Without it, this step would helpfully install whichever APK happens to
+# sort first in build/apk/ — which is how a driver silently tests the wrong app.
+if [ "${SKIP_INSTALL:-0}" = "1" ]; then
+  step "install skipped (the caller installed $PKG)"
+  echo "skipped by the caller" > "$OUT/install.log"
+  echo "0" > "$OUT/install-rc.txt"
+  adb logcat -c || true
+else
+  APK=$(ls build/apk/*.apk 2>/dev/null | head -1)
+  if [ -z "$APK" ]; then
+    echo "no apk found in build/apk/" > "$OUT/install.log"
+    echo "1" > "$OUT/install-rc.txt"
+    exit 0
+  fi
+  step "install $(basename "$APK") ($(stat -c%s "$APK") bytes)"
+  adb install -r -g "$APK" > "$OUT/install.log" 2>&1
+  echo $? > "$OUT/install-rc.txt"
+  cat "$OUT/install.log"
+  adb logcat -c || true
 fi
-step "install $(basename "$APK") ($(stat -c%s "$APK") bytes)"
-adb install -r -g "$APK" > "$OUT/install.log" 2>&1
-echo $? > "$OUT/install-rc.txt"
-cat "$OUT/install.log"
-adb logcat -c || true
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 shot() {
@@ -144,29 +154,83 @@ sleep 2
 ensure_front
 shot 01-launch
 
-# ── give the WebView time to fetch and paint ────────────────────────────────
-step "waiting for the page to render"
-for i in $(seq 1 30); do
-  if adb logcat -d 2>/dev/null | grep -qiE "chromium|WebView|onPageFinished|Console"; then break; fi
-  sleep 2
-done
-sleep 12
-ensure_front
-shot 02-loaded
+# ── the interaction has to match what the app actually is ───────────────────
+#
+# A website app has a page to fetch, and its proof of life is that the page
+# painted and its script ran. A designed-screens app has nothing to fetch: it
+# draws its views immediately, and its proof of life is that each screen it was
+# designed with can be reached and looks different from the others.
+#
+# Driving both the same way would test neither properly: the website app would
+# never be asked whether its page loaded, and the designed app would be asked
+# for a JavaScript marker it cannot produce.
+if [ "${APP_KIND:-webview}" = "native" ]; then
+  step "waiting for the app to draw its first screen"
+  sleep 6
+  ensure_front
+  shot 02-loaded
 
-# ── pull to refresh (real touch gesture) ────────────────────────────────────
-step "pull to refresh"
-adb shell input swipe $((W/2)) $((H*35/100)) $((W/2)) $((H*75/100)) 400 || true
-sleep 6
-ensure_front
-shot 03-refreshed
+  TABS="${APP_TABS:-0}"
+  NAMES="${APP_TAB_NAMES:-}"
+  step "tapping the $TABS screen${TABS:+s} in the bottom bar"
+  i=1
+  while [ "$i" -le "$TABS" ]; do
+    LABEL=$(echo "$NAMES" | cut -d'|' -f"$i")
+    # Ask the device where the tab is rather than assuming. The system
+    # navigation bar takes space below the app, so a fixed offset from the
+    # bottom of the display lands on the system buttons, not on the app.
+    XY=""
+    if [ -n "$LABEL" ]; then
+      adb shell uiautomator dump /sdcard/ui.xml > /dev/null 2>&1 || true
+      XY=$(adb shell cat /sdcard/ui.xml 2>/dev/null | python3 tools/e2e/find_tab.py "$LABEL")
+    fi
+    if [ -z "$XY" ]; then
+      # Fall back to arithmetic and record it. A silent fallback would hide a
+      # change in the app's layout; a recorded one is evidence.
+      X=$(( W * (2*i - 1) / (2*TABS) ))
+      Y=$(( H - 56 ))
+      XY="$X $Y"
+      echo "tab-fallback#$i label=[$LABEL] ($(date +%T))" >> "$OUT/recoveries.txt"
+    fi
+    step "  tap $i [$LABEL] at $XY"
+    adb shell input tap $XY || true
+    sleep 3
+    ensure_front
+    shot "tab-$i"
+    i=$((i + 1))
+  done
 
-# ── back navigation must not crash the app ──────────────────────────────────
-step "back press"
-adb shell input keyevent KEYCODE_BACK || true
-sleep 3
-ensure_front
-shot 04-after-back
+  # The back key must not close the app on the first press when there is
+  # somewhere to go back to, and the app must still be there afterwards.
+  step "back press"
+  adb shell input keyevent KEYCODE_BACK || true
+  sleep 3
+  ensure_front
+  shot 04-after-back
+else
+  step "waiting for the page to render"
+  for i in $(seq 1 30); do
+    if adb logcat -d 2>/dev/null | grep -qiE "chromium|WebView|onPageFinished|Console"; then break; fi
+    sleep 2
+  done
+  sleep 12
+  ensure_front
+  shot 02-loaded
+
+  # ── pull to refresh (real touch gesture) ──────────────────────────────────
+  step "pull to refresh"
+  adb shell input swipe $((W/2)) $((H*35/100)) $((W/2)) $((H*75/100)) 400 || true
+  sleep 6
+  ensure_front
+  shot 03-refreshed
+
+  # ── back navigation must not crash the app ────────────────────────────────
+  step "back press"
+  adb shell input keyevent KEYCODE_BACK || true
+  sleep 3
+  ensure_front
+  shot 04-after-back
+fi
 
 # ── rotation ────────────────────────────────────────────────────────────────
 step "rotate to landscape"

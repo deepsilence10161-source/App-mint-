@@ -512,6 +512,9 @@ public class App extends Application {
       count: (spec.screens || []).length,
       components: countScreenComponents(spec),
       actions: countScreenActions(spec),
+      // The labels on the tab bar, in order. Anything that needs to press a tab
+      // can look for the label instead of guessing at coordinates.
+      tabs: (spec.screens || []).filter((x) => x.showInTabs !== false).slice(0, 5).map((x) => x.name || x.id),
     } : null,
     fileCount: files.length,
   };

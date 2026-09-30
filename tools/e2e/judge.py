@@ -41,6 +41,21 @@ def read_bytes(name):
 
 logcat = read("logcat.txt")
 steps = read("steps.txt")
+
+# What kind of app is being judged. A website app and an app that draws its own
+# screens do not share a single line of UI code, so the same checks cannot apply
+# to both: asking a designed app for a JavaScript marker would fail it for being
+# what it is. The answer comes from the generator's own build info, never from a
+# guess.
+build_info = {}
+try:
+    build_info = json.loads(read("BUILD-INFO.json", "{}")) or {}
+except ValueError:
+    build_info = {}
+architecture = build_info.get("architecture") or ("native-screens" if "kind=native" in steps else "webview")
+is_native = architecture == "native-screens"
+screens_info = build_info.get("screens") or {}
+screen_count = int(screens_info.get("count") or 0)
 pkg = ""
 m = re.search(r"package=(\S+)", steps)
 if m:
@@ -100,6 +115,14 @@ EXPECTED = [
     ("05-landscape", "landscape rotation"),
     ("06-portrait", "back to portrait"),
 ]
+
+# A designed app is driven through its screens rather than through a page, so it
+# produces a screenshot of each screen instead of a refresh and a back press.
+if is_native:
+    EXPECTED = [e for e in EXPECTED if e[0] not in ("03-refreshed",)]
+    EXPECTED = [e for e in EXPECTED if e[0] != "02-loaded"] + [("02-loaded", "first screen drawn")]
+    for n in range(1, max(screen_count, 1) + 1):
+        EXPECTED.append((f"tab-{n}", f"designed screen {n}"))
 
 shot_info = {}
 brightness = {}
@@ -189,21 +212,90 @@ else:
     check("content_rendered", "Loaded screen shows real rendered content", False,
           "no loaded screenshot to inspect")
 
-# ── JavaScript actually ran inside the WebView ──────────────────────────────
-# Proof that the page's script executed, not merely that pixels changed.
-ready_hits = re.findall(r"APPMINT_READY[^\r\n]*", logcat)
-check("js_executed",
-      "JavaScript ran inside the WebView",
-      len(ready_hits) > 0,
-      (ready_hits[0][:120] if ready_hits else
-       "no APPMINT_READY marker in logcat — the page may have loaded but its script did not run"))
+# ── proof that the app is genuinely running its own interface ───────────────
+if is_native:
+    # A designed app has no WebView, so there is no page script and no marker to
+    # look for. Saying that plainly is the honest thing: a check that cannot
+    # apply is reported as not applicable, never quietly dropped.
+    check("no_webview_needed",
+          "This app draws its own screens, so no page script is expected",
+          True,
+          f"architecture={architecture}: the interface comes from {screen_count} designed "
+          f"screen(s) compiled into the app, not from a web page")
 
-bridge_hits = re.findall(r"APPMINT_BRIDGE \S+", logcat)
-if bridge_hits:
-    check("bridge_state", "JavaScript bridge state reported",
-          True, bridge_hits[0])
+    # Instead, the first screenshot must already show a drawn screen. A designed
+    # app has nothing to fetch, so a blank first frame means the renderer never
+    # ran — which is the failure this check exists to catch.
+    first = shot_info.get("01-launch", {})
+    colours = first.get("distinct_colours", 0)
+    stddev = first.get("luminance_stddev", 0.0)
+    check("native_first_frame",
+          "The app drew its first screen immediately",
+          colours >= 24 and stddev >= 4.0,
+          f"{colours} distinct colours, luminance spread {stddev} in the launch frame "
+          f"(a designed app has nothing to download, so this is already the finished screen)")
 
-if diff_launch_loaded is not None:
+    # Every designed screen must be reachable, and each must look like itself.
+    #
+    # Two different things are being proven here, and they need two different
+    # comparisons. Tapping the first tab SHOULD show the screen the app opened
+    # on — that is what makes it the first tab — so comparing it with the launch
+    # frame proves the tab bar leads where it says. Every tab after that must
+    # look different from the one before it, which is what proves the renderer
+    # draws each screen from the design rather than repeating the last one.
+    stepped = []
+    for n in range(2, max(screen_count, 1) + 1):
+        stepped.append((n, diff(f"tab-{n - 1}", f"tab-{n}")))
+
+    unreadable = [n for n, d in stepped if d is None]
+    repeats = [(n, d) for n, d in stepped if d is not None and d <= 0.5]
+    check("screens_reachable",
+          "Each designed screen can be reached and draws its own content",
+          not unreadable and not repeats,
+          (f"no screenshot to compare for screen(s) {unreadable}" if unreadable else
+           f"screen(s) {[n for n, _ in repeats]} look identical to the previous one ({repeats})"
+           if repeats else
+           "every screen differs from the one before it: " +
+           ", ".join(f"screen {n} changed by {d}" for n, d in stepped)))
+
+    back_home = diff("01-launch", "tab-1")
+    check("first_tab_is_home",
+          "The first tab leads back to the screen the app opens on",
+          back_home is not None and back_home <= 2.0,
+          (f"difference {back_home} between the launch screen and the first tab"
+           if back_home is not None else "no screenshots to compare"))
+
+    # Back from a tab must return to the first tab rather than closing the app,
+    # which is the convention for a tab bar and stops a single tap followed by
+    # back looking like a crash.
+    after_back = diff("01-launch", "04-after-back")
+    check("back_returns_home",
+          "Pressing back from another tab returns to the first screen",
+          after_back is not None and after_back <= 2.0,
+          (f"difference {after_back} between the launch screen and the screen after back"
+           if after_back is not None else "no screenshot after the back press"))
+
+else:
+    # Proof that the page's script executed, not merely that pixels changed.
+    ready_hits = re.findall(r"APPMINT_READY[^\r\n]*", logcat)
+    check("js_executed",
+          "JavaScript ran inside the WebView",
+          len(ready_hits) > 0,
+          (ready_hits[0][:120] if ready_hits else
+           "no APPMINT_READY marker in logcat — the page may have loaded but its script did not run"))
+
+    bridge_hits = re.findall(r"APPMINT_BRIDGE \S+", logcat)
+    if bridge_hits:
+        check("bridge_state", "JavaScript bridge state reported",
+              True, bridge_hits[0])
+
+if is_native:
+    # A designed app paints before the first screenshot is taken, so comparing
+    # "launch" with "loaded" compares a screen with itself. The check above —
+    # that the first frame already shows the finished screen — is the check that
+    # matters here.
+    pass
+elif diff_launch_loaded is not None:
     # This check exists to catch a WebView that never painted: the app launches,
     # the page is still fetching, and the screen stays on the splash.
     #

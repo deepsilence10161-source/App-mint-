@@ -18,6 +18,7 @@ stage="${STAGE_DIR:-build/apk}"
 
 run_one() {
   local label="$1" apk="$2" pkg="$3" act="$4" out="out/$1"
+  local kind="" tabs=0 info=""
   echo "══════════════════════════════════════════════════════════════════"
   echo "  $label — $pkg"
   echo "══════════════════════════════════════════════════════════════════"
@@ -35,7 +36,24 @@ run_one() {
     cp "$out/install.log" "$out/install-failed.txt" 2>/dev/null || true
     return 1
   fi
-  APP_PACKAGE="$pkg" APP_ACTIVITY="$act" OUT_DIR="$out" bash "$here/run.sh"
+  # What the app IS decides how it is driven, and the answer comes from the
+  # generated project rather than from a guess in the workflow.
+  info="build/$([ "$label" = "native" ] && echo native || echo out)/BUILD-INFO.json"
+  kind=$(facts "$info" architecture)
+  tabs=0
+  tab_names=""
+  if [ "$kind" = "native-screens" ]; then
+    kind=native
+    tabs=$(node -e "const b=require('./' + process.argv[1]); console.log((b.screens && b.screens.tabs && b.screens.tabs.length) || 0)" "$info" 2>/dev/null)
+    tabs=${tabs:-0}
+    tab_names=$(node -e "const b=require('./' + process.argv[1]); console.log(((b.screens && b.screens.tabs) || []).join('|'))" "$info" 2>/dev/null)
+  fi
+  # The report needs the same facts the driver used.
+  cp "$info" "$out/BUILD-INFO.json" 2>/dev/null || true
+  echo "  kind=$kind tabs=$tabs labels=[$tab_names]"
+
+  SKIP_INSTALL=1 APP_KIND="$kind" APP_TABS="$tabs" APP_TAB_NAMES="$tab_names" \
+    APP_PACKAGE="$pkg" APP_ACTIVITY="$act" OUT_DIR="$out" bash "$here/run.sh"
   adb uninstall "$pkg" >/dev/null 2>&1 || true
   return 0
 }
