@@ -39,7 +39,16 @@ import crypto from 'node:crypto';
 
 import { buildKey, buildKeyParts, diffKeyParts, sha256 } from './key.mjs';
 
-export const CACHE_VERSION = 1;
+/*
+ * Bumped when the set of files an entry holds changes. The version is checked
+ * when an entry is read, so an entry written by an older version reads as "not
+ * stored" rather than as a hit that is missing something the build now needs.
+ *
+ *   1  the APK alone
+ *   2  the APK and BUILD-INFO.json — a build is the app and the description of
+ *      what it was, and a later step reads that description
+ */
+export const CACHE_VERSION = 2;
 
 /** The hash of a file on disk, or null if it is not there. */
 export function hashFile(file) {

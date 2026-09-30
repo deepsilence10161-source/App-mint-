@@ -408,6 +408,46 @@ test('the cache can report how much room it is taking', () => {
   } finally { w.cleanup(); }
 });
 
+test('a stored build carries the description of itself, not only the app', () => {
+  /*
+   * The first version cached the APK alone. A cached run then failed in a later
+   * step with "Cannot find module ./build/out/BUILD-INFO.json" — the cache had
+   * handed back the app without the record of what it was. Anything the build
+   * produces belongs in the entry.
+   */
+  const w = workspace();
+  try {
+    const key = buildKey(specFor());
+    const apk = w.fakeApk('app-debug.apk', 'the app');
+    const info = w.fakeApk('BUILD-INFO.json', JSON.stringify({ architecture: 'native-screens', packageName: 'com.mysite.cachetest' }));
+
+    w.cache.put(key, [apk, info], { spec: { appName: 'Cache Test' } });
+    const hit = w.cache.get(key);
+
+    assert.equal(hit.hit, true);
+    assert.equal(hit.artefacts.length, 2, 'both the app and its description must be stored');
+    const names = hit.artefacts.map((a) => a.name).sort();
+    assert.deepEqual(names, ['BUILD-INFO.json', 'app-debug.apk']);
+    // and both verify, so a corrupted description is caught like a corrupted app
+    for (const a of hit.artefacts) assert.ok(a.sha256 && a.bytes > 0);
+  } finally { w.cleanup(); }
+});
+
+test('a description that has gone bad is refused along with the app', () => {
+  const w = workspace();
+  try {
+    const key = buildKey(specFor());
+    const apk = w.fakeApk('app-debug.apk', 'the app');
+    const info = w.fakeApk('BUILD-INFO.json', '{"architecture":"native-screens"}');
+    w.cache.put(key, [apk, info]);
+
+    fs.writeFileSync(path.join(w.cache.entryDir(key.short), 'BUILD-INFO.json'), '{"architecture":"webview"}');
+    const got = w.cache.get(key);
+    assert.equal(got.hit, false, 'a build whose description changed is not the build that was stored');
+    assert.match(got.detail, /BUILD-INFO\.json has changed/);
+  } finally { w.cleanup(); }
+});
+
 /* ── the receipt ────────────────────────────────────────────────────────── */
 
 test('a receipt records which build produced the file, not merely that one did', () => {

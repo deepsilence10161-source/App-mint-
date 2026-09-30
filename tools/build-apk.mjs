@@ -93,16 +93,39 @@ let source = 'built';
 if (useCache) {
   const hit = cache.get(key, { verify: true });
   if (hit.hit) {
+    // Everything the build produced is restored, not only the APK. A build
+    // leaves behind the description of what it was — BUILD-INFO.json — and the
+    // steps after this one read it. Restoring the APK alone left that file
+    // missing, so a cached run failed in a later step with "Cannot find module
+    // ./build/out/BUILD-INFO.json": the cache had returned the app without the
+    // paperwork that describes it.
     fs.mkdirSync(path.dirname(outApk), { recursive: true });
-    const art = hit.artefacts.find((a) => a.name.endsWith('.apk')) || hit.artefacts[0];
-    fs.copyFileSync(path.join(cache.entryDir(hit.key16), art.name), outApk);
+    fs.mkdirSync(projectDir, { recursive: true });
 
-    // Check the copy that was actually written, not the one that was read.
-    const written = fs.statSync(outApk).size;
-    if (written !== art.bytes) {
-      console.error(`\n  FAILED: the copied file is ${written} bytes, expected ${art.bytes}. The cache entry is not usable.\n`);
-      cache.quarantine(hit.key16, `copy mismatch: expected ${art.bytes} bytes, wrote ${written}`);
-      process.exit(1);
+    const art = hit.artefacts.find((a) => a.name.endsWith('.apk')) || hit.artefacts[0];
+    for (const a of hit.artefacts) {
+      const from = path.join(cache.entryDir(hit.key16), a.name);
+      if (a.name.endsWith('.apk')) {
+        fs.copyFileSync(from, outApk);
+        // Check the copy that was actually written, not the one that was read.
+        const written = fs.statSync(outApk).size;
+        if (written !== a.bytes) {
+          console.error(`\n  FAILED: the copied file is ${written} bytes, expected ${a.bytes}. The cache entry is not usable.\n`);
+          cache.quarantine(hit.key16, `copy mismatch: expected ${a.bytes} bytes, wrote ${written}`);
+          process.exit(1);
+        }
+      } else if (a.name === 'BUILD-INFO.json') {
+        fs.copyFileSync(from, path.join(projectDir, a.name));
+      }
+    }
+
+    // An entry stored before the description was cached alongside the app holds
+    // only the APK. Generation is deterministic and takes about a second, and
+    // doing it does not risk disagreeing with the cached APK: the entry was
+    // filed under a key that covers the generators, so the same specification
+    // and the same generators produce the same project.
+    if (!fs.existsSync(path.join(projectDir, 'BUILD-INFO.json'))) {
+      regenerate();
     }
 
     const receipt = cachedReceipt({ key, hit, startedAt, source: cacheDir });
@@ -125,6 +148,24 @@ if (useCache) {
 }
 
 /* ── 2. generate ────────────────────────────────────────────────────────── */
+
+/** Write the generated project to disk. Used by the build, and by a cached
+    run that has to fill in a description an older entry did not carry. */
+function regenerate() {
+  const webDir = path.join(path.dirname(specFile), 'web');
+  const gen = generateAndroidProject(spec, { webDir: fs.existsSync(webDir) ? webDir : null });
+  if (!gen.ok) return null;
+  fs.rmSync(projectDir, { recursive: true, force: true });
+  for (const f of gen.files) {
+    const full = path.join(projectDir, f.path);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, f.data);
+  }
+  fs.writeFileSync(path.join(projectDir, 'spec.json'), JSON.stringify(spec, null, 2) + '\n');
+  fs.writeFileSync(path.join(projectDir, 'BUILD-INFO.json'),
+    JSON.stringify({ ...gen.report, contentHash: contentHashOf(gen.files) }, null, 2) + '\n');
+  return gen;
+}
 
 step(1, 3, 'Generating the Android project');
 
@@ -222,7 +263,13 @@ log(`compiled   ${((compileEnd - compileStart) / 1000).toFixed(0)}s`);
 
 if (useCache) {
   try {
-    const manifest = cache.put(key, [outApk], {
+    // BUILD-INFO.json is stored with the APK because it is part of the same
+    // result: a build is the app and the description of what it was.
+    const toStore = [outApk];
+    const buildInfo = path.join(projectDir, 'BUILD-INFO.json');
+    if (fs.existsSync(buildInfo)) toStore.push(buildInfo);
+
+    const manifest = cache.put(key, toStore, {
       spec: { appName: name, packageName: spec?.identity?.packageName, mode: spec?.app?.mode },
       compileMs: compileEnd - compileStart,
     });
