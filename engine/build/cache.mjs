@@ -118,15 +118,32 @@ export class BuildCache {
   }
 
   readManifest(key16) {
+    return this.inspectManifest(key16).manifest;
+  }
+
+  /**
+   * The manifest, and why it could not be used.
+   *
+   * Kept separate from readManifest so a miss can say "stored by an older
+   * version of the cache" instead of the misleading "none of these entries
+   * records what it was built from" — a sentence that reads as corruption when
+   * the truth is a format change, and would send someone hunting for a broken
+   * file that does not exist.
+   */
+  inspectManifest(key16) {
+    const file = this.manifestPath(key16);
+    let raw;
     try {
-      const m = JSON.parse(fs.readFileSync(this.manifestPath(key16), 'utf8'));
-      if (!m || typeof m !== 'object') return null;
-      if (!Array.isArray(m.artefacts)) return null;
-      if (m.cacheVersion !== CACHE_VERSION) return null;
-      return m;
+      raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch {
-      return null;
+      return { manifest: null, reason: fs.existsSync(file) ? 'unreadable' : 'absent' };
     }
+    if (!raw || typeof raw !== 'object') return { manifest: null, reason: 'unreadable' };
+    if (!Array.isArray(raw.artefacts)) return { manifest: null, reason: 'unreadable' };
+    if (raw.cacheVersion !== CACHE_VERSION) {
+      return { manifest: null, reason: 'old-format', foundVersion: raw.cacheVersion };
+    }
+    return { manifest: raw, reason: null };
   }
 
   failNote(key16) {
@@ -221,9 +238,19 @@ export class BuildCache {
       return { reason: 'empty', message: 'Nothing has been built in this workspace yet.' };
     }
 
-    const withParts = index.entries
-      .map((e) => ({ entry: e, manifest: this.readManifest(e.key16) }))
-      .filter((x) => x.manifest && x.manifest.parts);
+    const inspected = index.entries.map((e) => ({ entry: e, ...this.inspectManifest(e.key16) }));
+    const withParts = inspected.filter((x) => x.manifest && x.manifest.parts);
+    const oldFormat = inspected.filter((x) => x.reason === 'old-format');
+
+    if (!withParts.length && oldFormat.length) {
+      // A format change, stated as one. The rebuild that follows is expected
+      // rather than a fault, and saying so keeps the message honest.
+      const versions = [...new Set(oldFormat.map((x) => `v${x.foundVersion}`))].join(', ');
+      return {
+        reason: 'old-format',
+        message: `${oldFormat.length === 1 ? 'The one entry was' : `All ${oldFormat.length} entries were`} stored by an older version of the cache (${versions}), which cannot be reused. The next build compiles and stores a current one.`,
+      };
+    }
     if (!withParts.length) {
       return { reason: 'no-comparable', message: `There ${index.entries.length === 1 ? 'is 1 entry' : `are ${index.entries.length} entries`}, but none records what it was built from.` };
     }
@@ -348,7 +375,7 @@ export function builtReceipt({ key, artefacts, startedAt, finishedAt, toolchain,
 }
 
 /** The receipt for a build that was taken from the cache. */
-export function cachedReceipt({ key, hit, startedAt, source }) {
+export function cachedReceipt({ key, hit, startedAt, source, descriptionRegenerated = false }) {
   return {
     outcome: 'built',
     source: 'cache',
@@ -362,7 +389,12 @@ export function cachedReceipt({ key, hit, startedAt, source }) {
     durationMs: 0,
     originalBuildAt: hit.manifest?.builtAt || null,
     artefacts: (hit.artefacts || []).map((a) => ({ name: a.name, sha256: a.sha256, bytes: a.bytes })),
-    note: `Restored from the cache (${hit.reason}). Originally built ${hit.manifest?.builtAt || 'at an unrecorded time'}.`,
+    // Recorded because it explains a cache hit that took longer than a copy:
+    // the app came from the cache and the description was produced again.
+    descriptionRegenerated,
+    note: descriptionRegenerated
+      ? `Restored from the cache (${hit.reason}). Originally built ${hit.manifest?.builtAt || 'at an unrecorded time'}. The entry held no description of the build, so one was generated again.`
+      : `Restored from the cache (${hit.reason}). Originally built ${hit.manifest?.builtAt || 'at an unrecorded time'}.`,
     restoredFrom: source || null,
   };
 }

@@ -103,12 +103,14 @@ if (useCache) {
     fs.mkdirSync(projectDir, { recursive: true });
 
     const art = hit.artefacts.find((a) => a.name.endsWith('.apk')) || hit.artefacts[0];
+    // Declared out here because the copy size is reported after the loop.
+    let written = 0;
     for (const a of hit.artefacts) {
       const from = path.join(cache.entryDir(hit.key16), a.name);
       if (a.name.endsWith('.apk')) {
         fs.copyFileSync(from, outApk);
         // Check the copy that was actually written, not the one that was read.
-        const written = fs.statSync(outApk).size;
+        written = fs.statSync(outApk).size;
         if (written !== a.bytes) {
           console.error(`\n  FAILED: the copied file is ${written} bytes, expected ${a.bytes}. The cache entry is not usable.\n`);
           cache.quarantine(hit.key16, `copy mismatch: expected ${a.bytes} bytes, wrote ${written}`);
@@ -124,11 +126,23 @@ if (useCache) {
     // doing it does not risk disagreeing with the cached APK: the entry was
     // filed under a key that covers the generators, so the same specification
     // and the same generators produce the same project.
+    let descriptionRegenerated = false;
     if (!fs.existsSync(path.join(projectDir, 'BUILD-INFO.json'))) {
-      regenerate();
+      // Nothing to restore, so produce it. If it cannot be produced, stop: every
+      // step after this one expects the app and its description to arrive
+      // together, and the CI run that taught us this died in a later step with
+      // "Cannot find module ./build/out/BUILD-INFO.json" — a confusing place to
+      // learn it. Failing here says what is missing and why.
+      if (!regenerate()) {
+        console.error(`\n  FAILED: this build was restored from the cache, but the project could not be generated, so there is no description of what was built.`);
+        console.error(`  The app itself is intact at ${outApk}, but a build without its description breaks the steps that follow.`);
+        console.error(`  Build key ${key.full}. Re-run after checking that the specification still validates.\n`);
+        process.exit(1);
+      }
+      descriptionRegenerated = true;
     }
 
-    const receipt = cachedReceipt({ key, hit, startedAt, source: cacheDir });
+    const receipt = cachedReceipt({ key, hit, startedAt, source: cacheDir, descriptionRegenerated });
     writeReceipts(projectDir, outApk, receipt);
 
     console.log(`\n  From the cache — verified.`);
@@ -136,6 +150,7 @@ if (useCache) {
     log(`file       ${outApk}  ${(written / 1024 / 1024).toFixed(1)} MB`);
     log(`sha256     ${art.sha256.slice(0, 16)}…`);
     log(`compiler   not run (nothing changed)`);
+    if (descriptionRegenerated) log(`description generated again (the cached entry predates storing it)`);
     console.log('');
     process.exit(0);
   }
