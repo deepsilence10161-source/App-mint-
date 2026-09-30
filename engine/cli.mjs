@@ -379,6 +379,98 @@ const argv = process.argv.slice(2);
 const args = parseArgs(argv);
 const cmd = args._[0];
 
+/* ---------------------------------------------------------------- *
+ * analyse
+ *
+ * Read a website and propose an app from it. Works on a directory of
+ * files or on a live address; writes nothing unless --out is given.
+ * ---------------------------------------------------------------- */
+async function cmdAnalyse(args) {
+  const target = args._[1];
+  if (!target) return fail('Usage: analyse <directory|https://address> [--out <dir>] [--name "App name"] [--package com.example.app]');
+  const { analyse } = await import('./analyse/website.mjs');
+
+  const started = Date.now();
+  let result;
+  try {
+    result = await analyse(target, {
+      out: args.out || null,
+      name: args.name || null,
+      packageName: args.package || null,
+    });
+  } catch (err) {
+    return fail(`Could not read ${target}: ${err.message}`);
+  }
+  const { analysis, findings } = result;
+
+  if (args.json) {
+    console.log(JSON.stringify(analysis, null, 2));
+    return 0;
+  }
+
+  const levelColour = { blocking: C.red, warning: C.yellow, info: C.cyan };
+  console.log('');
+  console.log(`  ${paint(C.bold, analysis.proposal.appName)}  ${paint(C.dim, `(${analysis.proposal.packageName})`)}`);
+  console.log(`  ${target}`);
+  console.log(`  ${analysis.pages.length} page(s) · ${analysis.assets.length} file(s) · read in ${((Date.now() - started) / 1000).toFixed(2)}s`);
+  if (analysis.proposal.nameTruncated) {
+    console.log(`  ${paint(C.yellow, 'note')}  the title was longer than Google Play allows; the app is named from its first words`);
+  }
+  console.log('');
+  console.log(`  ${paint(C.bold, 'What it would become')}`);
+  console.log(`    name            ${analysis.proposal.appName}`);
+  console.log(`    package         ${analysis.proposal.packageName}`);
+  console.log(`    opens           ${analysis.entry}  (bundled, works offline)`);
+  if (analysis.kind === 'url') console.log(`    address         ${result.proposal.spec.app.webview.startUrl}`);
+  // A directory of files has no address, and the first version printed the
+  // startUrl field regardless — which for a local site is the bundled asset URL,
+  // and read as if the app opened a website.
+  else console.log(`    address         ${paint(C.dim, 'none — this was a directory of files, so the app opens the bundled copy')}`);
+  console.log(`    capabilities    ${analysis.proposal.capabilities.join(', ') || 'none'}`);
+  for (const c of analysis.proposal.capabilitiesReason || []) {
+    console.log(`      ${paint(C.dim, c.cap.padEnd(12))} ${paint(C.dim, c.why)}`);
+  }
+  console.log(`    colours         primary ${analysis.theme.theme.primary}, background ${analysis.theme.theme.background}`);
+  if (analysis.theme.evidence.contrastAdjusted) {
+    console.log(`                    ${paint(C.yellow, `adjusted from ${analysis.theme.evidence.adjustedFrom} so text reads on it`)}`);
+  }
+
+  console.log('');
+  const counts = analysis.summary;
+  console.log(`  ${paint(C.bold, 'What to know before building')}  ${paint(C.dim, `${counts.blocking} blocking · ${counts.warning} warning · ${counts.info} notes`)}`);
+  for (const f of findings) {
+    console.log('');
+    console.log(`    ${paint(levelColour[f.level] || C.reset, f.level.padEnd(8))} ${paint(C.bold, f.title)}`);
+    console.log(`             ${f.detail}`);
+    if (f.action && f.action !== 'Nothing to do.') console.log(`             ${paint(C.dim, f.action)}`);
+    for (const e of f.evidence.slice(0, 3)) console.log(`             ${paint(C.dim, `· ${e}`)}`);
+    if (f.evidence.length > 3) console.log(`             ${paint(C.dim, `· and ${f.evidence.length - 3} more`)}`);
+  }
+
+  if (analysis.skipped?.length) {
+    console.log('');
+    console.log(`  ${paint(C.bold, 'Not included')}`);
+    for (const s of analysis.skipped.slice(0, 8)) console.log(`    ${s.rel}  ${paint(C.dim, s.why)}`);
+    if (analysis.skipped.length > 8) console.log(`    ${paint(C.dim, `and ${analysis.skipped.length - 8} more`)}`);
+  }
+
+  if (result.written) {
+    console.log('');
+    console.log(`  ${paint(C.green, 'Written')}`);
+    console.log(`    app            ${args.out}`);
+    console.log(`    specification  ${path.join(args.out, 'spec.json')}`);
+    console.log(`    analysis       ${path.join(args.out, 'analysis.json')}`);
+    console.log(`    rewrites       ${result.written.rewrites.length} URL(s) made relative, so the bundled pages resolve`);
+    console.log('');
+    console.log(`  ${paint(C.dim, `Next: node tools/build-apk.mjs ${path.join(args.out, 'spec.json')} --out build/apk/app.apk`)}`);
+  } else if (counts.blocking === 0) {
+    console.log('');
+    console.log(`  ${paint(C.dim, 'Nothing was written. Add --out <dir> to write the app, or --json to read the whole analysis.')}`);
+  }
+  console.log('');
+  return counts.blocking ? 1 : 0;
+}
+
 const ROUTES = {
   validate: cmdValidate,
   generate: cmdGenerate,
@@ -386,9 +478,20 @@ const ROUTES = {
   explain: cmdExplain,
   'build-key': cmdBuildKey,
   cache: cmdCache,
+  analyse: cmdAnalyse,
 };
 
 if (!cmd) { cmdExplain(); process.exit(0); }
 const fn = ROUTES[cmd];
 if (!fn) { fail(`Unknown command "${cmd}". Run without arguments for help.`); process.exit(2); }
-process.exit(fn(args) || 0);
+
+// A command may be asynchronous — fetching a live site is — and passing a
+// promise to process.exit throws a type error that looks like a crash in the
+// runtime rather than a mistake here.
+const result = fn(args);
+if (result && typeof result.then === 'function') {
+  result.then((code) => process.exit(code || 0))
+    .catch((err) => { fail(`Command "${cmd}" failed: ${err && err.stack ? err.stack.split('\n')[0] : err}`); process.exit(1); });
+} else {
+  process.exit(result || 0);
+}

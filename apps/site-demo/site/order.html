@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Order — Greenfield Bakery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <header class="site">
+    <p class="brand">Greenfield Bakery</p>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="menu.html">Menu</a>
+      <a href="order.html" class="active">Order</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Place an order</h1>
+    <form action="https://forms.example.org/bakery" method="post">
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" required>
+      <label for="phone">Phone</label>
+      <input id="phone" name="phone" type="tel" required>
+      <label for="notes">What would you like?</label>
+      <textarea id="notes" name="notes"></textarea>
+      <button type="submit">Send the order</button>
+    </form>
+    <p>Or call <a href="tel:+911234567890">12345 67890</a>.</p>
+  </main>
+  <footer><p>&copy; 2026 Greenfield Bakery</p></footer>
+  <script src="assets/site.js"></script>
+</body>
+</html>

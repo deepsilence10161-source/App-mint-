@@ -1,0 +1,23 @@
+:root {
+  --ink: #241a12;
+  --paper: #fffaf3;
+  --crust: #7C3F00;
+  --wheat: #c98f3c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: Georgia, 'Times New Roman', serif; line-height: 1.6;
+}
+header.site { background: var(--crust); color: #ffffff; padding: 16px; }
+.brand { font-weight: 700; font-size: 20px; margin: 0 0 8px; }
+nav a { color: #ffe9c9; text-decoration: none; margin-right: 14px; font-size: 16px; }
+nav a.active { color: #ffffff; border-bottom: 2px solid var(--wheat); }
+main { padding: 16px; max-width: 720px; margin: 0 auto; }
+h1 { font-size: 28px; margin: 8px 0 12px; }
+img { max-width: 100%; height: auto; border-radius: 8px; }
+form { display: grid; gap: 10px; max-width: 420px; }
+input, textarea { font: inherit; padding: 10px; border: 1px solid #cbbba6; border-radius: 6px; }
+button { font: inherit; padding: 12px; background: var(--crust); color: #ffffff; border: 0; border-radius: 6px; }
+footer { padding: 16px; color: #6b5b4a; font-size: 14px; }
+@media (min-width: 900px) { main { padding: 32px; } }

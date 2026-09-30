@@ -78,6 +78,35 @@ jobs:
       - name: Build the Studio bundle
         run: node tools/build-studio.mjs
 
+      # ---- The website analyser, on a real site --------------------------
+      # The analyser writes specifications, and a specification that does not
+      # validate or does not generate is worse than no analyser: it fails long
+      # after the person who ran it has moved on. So its output is put through
+      # the validator and the generator here, on every commit, against the
+      # fixture site in apps/site-demo/.
+      - name: Analyse a website and check what it proposes
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          node engine/cli.mjs analyse apps/site-demo/site --out build/analysed --json > build/analysis.json
+          node -e "
+            const a = require('./build/analysis.json');
+            const blocking = a.findings.filter(f => f.level === 'blocking');
+            if (blocking.length) { console.error('blocking findings:', blocking.map(f => f.code).join(', ')); process.exit(1); }
+            console.log('analysed', a.pages.length, 'pages ·', a.summary.warning, 'warnings ·', a.summary.info, 'notes');
+          "
+          node engine/cli.mjs validate build/analysed/spec.json
+          node engine/cli.mjs generate build/analysed/spec.json --out build/analysed-project > /dev/null
+          echo "the analyser's own specification validated and generated a project"
+          echo "### Website analyser" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          node -e "
+            const a = require('./build/analysis.json');
+            console.log(JSON.stringify({ appName: a.proposal.appName, packageName: a.proposal.packageName,
+              capabilities: a.proposal.capabilities, findings: a.summary, theme: a.theme.theme }, null, 2));
+          " >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       # ---- Generate ------------------------------------------------------
       - name: Generate Android project
         id: gen

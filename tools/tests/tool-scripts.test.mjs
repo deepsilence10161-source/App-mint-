@@ -197,6 +197,9 @@ const BUILTINS = new Set([
 
   // Browser globals. They are not defined in these files because the code that
   // uses them does not run in Node: it is handed to page.evaluate() and
+  // Dynamic import is a syntax form, not a function anyone has to define. The
+  // names it binds are picked up separately, by dynamicImportNames() below.
+  'import',
   // executed inside the browser the Studio tests drive.
   'document', 'window', 'navigator', 'location', 'localStorage', 'sessionStorage',
   'getComputedStyle', 'MutationObserver', 'requestAnimationFrame', 'cancelAnimationFrame',
@@ -237,6 +240,11 @@ function calledButUndeclared(file) {
     if (m[2]) imported.add(m[2]);
   }
 
+  // A name taken from a dynamic import is imported just as surely as one taken
+  // from a static import — `const { analyse } = await import('./x.mjs')` — and
+  // the first version of this scanner reported it as undefined.
+  for (const name of dynamicImportNames(code)) imported.add(name);
+
   const called = new Set();
   const callRe = /(?:^|[^.\w$])([a-z][\w$]*)\s*\(/gm;
   while ((m = callRe.exec(code))) called.add(m[1]);
@@ -247,6 +255,29 @@ function calledButUndeclared(file) {
     suspects.push(name);
   }
   return suspects;
+}
+
+/**
+ * The names a dynamic import binds.
+ *
+ * Handles the two forms that appear in this project:
+ *   const { a, b: c } = await import('./x.mjs')
+ *   const mod = await import('./x.mjs')        → binds `mod`
+ */
+export function dynamicImportNames(code) {
+  const names = [];
+  for (const m of code.matchAll(/(?:const|let|var)\s*(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?import\s*\(/g)) {
+    const target = m[1];
+    if (target.startsWith('{')) {
+      for (const part of target.slice(1, -1).split(',')) {
+        const name = part.split(':').pop().split(/\s+as\s+/).pop().trim();
+        if (name) names.push(name);
+      }
+    } else {
+      names.push(target);
+    }
+  }
+  return names;
 }
 
 test('every script under tools/ parses', () => {
