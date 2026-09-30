@@ -1,0 +1,576 @@
+{
+  "specVersion": "1.0",
+  "identity": {
+    "appName": "Mint Native",
+    "packageName": "com.appmint.nativedemo",
+    "versionName": "1.0.0",
+    "versionCode": 1,
+    "versionStrategy": "manual",
+    "description": "Proves the native screen designer: real Android views generated from the component tree, with no WebView involved."
+  },
+  "android": {
+    "minSdk": 24,
+    "targetSdk": 36,
+    "compileSdk": 36,
+    "orientation": "portrait",
+    "theme": "dark",
+    "allowBackup": false,
+    "cleartextTraffic": false
+  },
+  "app": {
+    "mode": "native-screens",
+    "splash": {
+      "enabled": true,
+      "backgroundColor": "#0B1020",
+      "durationMs": 400
+    }
+  },
+  "capabilities": [
+    "share",
+    "clipboard",
+    "telephone",
+    "email"
+  ],
+  "theme": {
+    "primary": "#6366F1",
+    "onPrimary": "#FFFFFF",
+    "background": "#0B1020",
+    "surface": "#171E33",
+    "onSurface": "#E8ECF8",
+    "accent": "#22D3EE",
+    "statusBarStyle": "dark"
+  },
+  "deepLinks": {
+    "customScheme": "mintnative",
+    "allowedSchemes": [
+      "https",
+      "tel",
+      "mailto"
+    ]
+  },
+  "build": {
+    "engine": "github-actions",
+    "outputs": [
+      "debug-apk"
+    ],
+    "minify": false,
+    "cache": true,
+    "toolchain": {
+      "agp": "8.13.2",
+      "gradle": "8.13",
+      "buildTools": "36.0.0",
+      "jdk": "17"
+    }
+  },
+  "signing": {
+    "mode": "debug",
+    "failClosed": true
+  },
+  "backend": {
+    "kind": "none"
+  },
+  "navigation": {
+    "type": "bottom-tabs"
+  },
+  "screens": [
+    {
+      "id": "home",
+      "name": "Home",
+      "title": "Mint Native",
+      "showInTabs": true,
+      "components": [
+        {
+          "id": "bar-home",
+          "type": "AppBar",
+          "props": {
+            "title": "Mint Native",
+            "showMenu": true
+          }
+        },
+        {
+          "id": "head",
+          "type": "Heading",
+          "props": {
+            "text": "Everything here is a real Android view",
+            "size": "xl"
+          },
+          "a11yLabel": "Everything here is a real Android view"
+        },
+        {
+          "id": "sub",
+          "type": "Text",
+          "props": {
+            "text": "No WebView is involved. Each element below was generated from the screen description.",
+            "size": "md"
+          }
+        },
+        {
+          "id": "gap1",
+          "type": "Spacer",
+          "props": {
+            "height": "sm"
+          }
+        },
+        {
+          "id": "status-row",
+          "type": "Container",
+          "props": {
+            "direction": "row",
+            "gap": "sm"
+          },
+          "children": [
+            {
+              "id": "badge-new",
+              "type": "Badge",
+              "props": {
+                "text": "NATIVE",
+                "tone": "success"
+              }
+            },
+            {
+              "id": "badge-v",
+              "type": "Badge",
+              "props": {
+                "text": "v1.0.0",
+                "tone": "info"
+              }
+            }
+          ]
+        },
+        {
+          "id": "gap2",
+          "type": "Spacer",
+          "props": {
+            "height": "md"
+          }
+        },
+        {
+          "id": "card-actions",
+          "type": "Card",
+          "props": {
+            "elevated": true,
+            "radius": "lg",
+            "padding": "md"
+          },
+          "children": [
+            {
+              "id": "card-title",
+              "type": "Heading",
+              "props": {
+                "text": "Native actions",
+                "size": "lg"
+              }
+            },
+            {
+              "id": "card-body",
+              "type": "Text",
+              "props": {
+                "text": "These buttons call into Android directly. Share and clipboard use the system, and the phone link opens the dialler.",
+                "size": "md"
+              }
+            },
+            {
+              "id": "gap3",
+              "type": "Spacer",
+              "props": {
+                "height": "sm"
+              }
+            },
+            {
+              "id": "btn-share",
+              "type": "Button",
+              "props": {
+                "text": "Share this app",
+                "style": "primary",
+                "fullWidth": true,
+                "icon": "share"
+              },
+              "events": {
+                "onClick": {
+                  "kind": "share",
+                  "props": {
+                    "text": "I built this with App Mint.",
+                    "title": "Share via"
+                  }
+                }
+              }
+            },
+            {
+              "id": "btn-copy",
+              "type": "Button",
+              "props": {
+                "text": "Copy the package name",
+                "style": "ghost",
+                "fullWidth": true
+              },
+              "events": {
+                "onClick": {
+                  "kind": "copy",
+                  "props": {
+                    "text": "com.appmint.native"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "gap4",
+          "type": "Spacer",
+          "props": {
+            "height": "sm"
+          }
+        },
+        {
+          "id": "div1",
+          "type": "Divider",
+          "props": {
+            "thickness": "hairline",
+            "margin": "sm"
+          }
+        },
+        {
+          "id": "inputs-title",
+          "type": "Heading",
+          "props": {
+            "text": "Inputs",
+            "size": "lg"
+          }
+        },
+        {
+          "id": "field-name",
+          "type": "Input",
+          "props": {
+            "label": "Your name",
+            "placeholder": "Type here",
+            "inputType": "text",
+            "required": true,
+            "maxLength": 60,
+            "helper": "We only use this on your device."
+          }
+        },
+        {
+          "id": "field-pass",
+          "type": "PasswordInput",
+          "props": {
+            "label": "A password",
+            "placeholder": "At least 8 characters",
+            "minLength": 8,
+            "required": true
+          }
+        },
+        {
+          "id": "field-area",
+          "type": "Dropdown",
+          "props": {
+            "label": "Where do you live?",
+            "options": "Haryana\nDelhi\nPunjab\nUttar Pradesh"
+          }
+        },
+        {
+          "id": "sw-notify",
+          "type": "Switch",
+          "props": {
+            "text": "Send me reminders",
+            "subtitle": "You can turn this off at any time",
+            "checked": false
+          }
+        },
+        {
+          "id": "slider-scale",
+          "type": "Slider",
+          "props": {
+            "label": "How useful is this?",
+            "min": 0,
+            "max": 10,
+            "value": 8
+          }
+        },
+        {
+          "id": "gap5",
+          "type": "Spacer",
+          "props": {
+            "height": "sm"
+          }
+        },
+        {
+          "id": "prog",
+          "type": "Progress",
+          "props": {
+            "value": 70,
+            "showLabel": true
+          },
+          "a11yLabel": "Setup is 70 percent complete"
+        },
+        {
+          "id": "spinner",
+          "type": "Loading",
+          "props": {
+            "size": "md",
+            "label": "Checking for updates…"
+          }
+        }
+      ]
+    },
+    {
+      "id": "list",
+      "name": "List",
+      "title": "A list",
+      "showInTabs": true,
+      "components": [
+        {
+          "id": "bar-list",
+          "type": "AppBar",
+          "props": {
+            "title": "A list",
+            "showMenu": true
+          }
+        },
+        {
+          "id": "list-head",
+          "type": "Heading",
+          "props": {
+            "text": "Static list",
+            "size": "lg"
+          }
+        },
+        {
+          "id": "the-list",
+          "type": "List",
+          "props": {
+            "source": "static",
+            "items": "Golden Temple | Amritsar, Punjab\nIndia Gate | New Delhi\nSultanpur Bird Sanctuary | Gurugram, Haryana\nKurukshetra | Haryana\nRock Garden | Chandigarh",
+            "itemTemplate": "titleSubtitle",
+            "dividers": true
+          },
+          "events": {
+            "onClick": {
+              "kind": "toast",
+              "props": {
+                "message": "You tapped an item."
+              }
+            }
+          }
+        },
+        {
+          "id": "grid-head",
+          "type": "Heading",
+          "props": {
+            "text": "A grid",
+            "size": "lg"
+          }
+        },
+        {
+          "id": "the-grid",
+          "type": "Grid",
+          "props": {
+            "columns": "2",
+            "items": "Photos\nVideos\nNotes\nFiles"
+          },
+          "events": {
+            "onClick": {
+              "kind": "toast",
+              "props": {
+                "message": "Grid cell tapped."
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "form",
+      "name": "Form",
+      "title": "A form",
+      "showInTabs": true,
+      "components": [
+        {
+          "id": "bar-form",
+          "type": "AppBar",
+          "props": {
+            "title": "A form",
+            "showMenu": true
+          }
+        },
+        {
+          "id": "form-head",
+          "type": "Heading",
+          "props": {
+            "text": "Contact us",
+            "size": "xl"
+          }
+        },
+        {
+          "id": "form-sub",
+          "type": "Text",
+          "props": {
+            "text": "Every field is checked before anything is sent, and the message names the field rather than saying an error occurred."
+          }
+        },
+        {
+          "id": "contact-form",
+          "type": "Form",
+          "props": {
+            "submitLabel": "Send message",
+            "validate": true,
+            "padding": "none"
+          },
+          "events": {
+            "onSubmit": {
+              "kind": "email",
+              "props": {
+                "to": "hello@example.com",
+                "subject": "Message from the app"
+              }
+            }
+          },
+          "children": [
+            {
+              "id": "cf-name",
+              "type": "Input",
+              "props": {
+                "label": "Name",
+                "placeholder": "Your name",
+                "required": true
+              }
+            },
+            {
+              "id": "cf-email",
+              "type": "Input",
+              "props": {
+                "label": "Email",
+                "placeholder": "you@example.com",
+                "inputType": "email",
+                "required": true
+              }
+            },
+            {
+              "id": "cf-note",
+              "type": "Input",
+              "props": {
+                "label": "Message",
+                "placeholder": "How can we help?",
+                "inputType": "multiline",
+                "required": true,
+                "maxLength": 800
+              }
+            },
+            {
+              "id": "cf-agree",
+              "type": "Checkbox",
+              "props": {
+                "text": "I agree to be contacted",
+                "checked": false
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "about",
+      "name": "About",
+      "title": "About",
+      "showInTabs": true,
+      "components": [
+        {
+          "id": "bar-about",
+          "type": "AppBar",
+          "props": {
+            "title": "About",
+            "showMenu": true
+          }
+        },
+        {
+          "id": "about-tabs",
+          "type": "Tabs",
+          "props": {
+            "tabs": "Overview\nPermissions\nCredits"
+          },
+          "events": {
+            "onClick": {
+              "kind": "toast",
+              "props": {
+                "message": "Tab changed."
+              }
+            }
+          }
+        },
+        {
+          "id": "about-head",
+          "type": "Heading",
+          "props": {
+            "text": "Built with App Mint",
+            "size": "xl"
+          }
+        },
+        {
+          "id": "about-body",
+          "type": "Text",
+          "props": {
+            "text": "This screen was described, not coded. Add or remove a component and the app changes; nothing here was written by hand."
+          }
+        },
+        {
+          "id": "chip-row",
+          "type": "Container",
+          "props": {
+            "direction": "row",
+            "gap": "sm"
+          },
+          "children": [
+            {
+              "id": "c1",
+              "type": "Chip",
+              "props": {
+                "text": "Native",
+                "selected": true
+              }
+            },
+            {
+              "id": "c2",
+              "type": "Chip",
+              "props": {
+                "text": "Offline",
+                "selected": false
+              }
+            }
+          ]
+        },
+        {
+          "id": "sp-about",
+          "type": "Spacer",
+          "props": {
+            "height": "lg"
+          }
+        },
+        {
+          "id": "avatar-1",
+          "type": "Avatar",
+          "props": {
+            "fallback": "AM",
+            "size": "lg"
+          },
+          "a11yLabel": "App Mint"
+        },
+        {
+          "id": "btn-call",
+          "type": "Button",
+          "props": {
+            "text": "Call support",
+            "style": "ghost",
+            "fullWidth": true
+          },
+          "events": {
+            "onClick": {
+              "kind": "call",
+              "props": {
+                "number": "+911234567890"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -44,6 +44,7 @@ function el(tag, attrs = {}, ...kids) {
 
 /* ── icons (inline SVG, so nothing loads from the network) ─────────────── */
 const I = {
+  layers: '<rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/>',
   design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
@@ -153,7 +154,49 @@ function viewDesign() {
   const a = spec.android;
   const wv = spec.app.webview || (spec.app.webview = {});
 
+  const mode = spec.app.mode || 'webview';
+
   return [
+    card('How this app is built', [
+      field('Architecture', kvSelect(
+        mode,
+        [
+          ['native-screens', 'Screens I design here — no website needed'],
+          ['webview', 'A website shown inside the app'],
+          ['pwa', 'A website that also works offline'],
+          ['hybrid', 'A website plus some native features'],
+        ],
+        (v) => {
+          spec.app.mode = v;
+          // A designed app needs screens; a website app needs an address. Rather
+          // than refusing the build later, put the right fields in front of the
+          // person now.
+          // Screens with no navigation are unreachable, so the navigation is
+          // set at the same time rather than left for the user to discover from
+          // a warning. One screen gets a back stack; more get tabs.
+          const nav = spec.navigation || (spec.navigation = {});
+          if (v === 'native-screens' && (!nav.type || nav.type === 'none')) {
+            nav.type = (spec.screens || []).length > 1 ? 'bottom-tabs' : 'stack';
+          }
+          if (v === 'native-screens' && !(spec.screens || []).length) {
+            spec.screens = [{
+              id: 'home', name: 'Home', title: spec.identity.appName || 'Home', showInTabs: true,
+              components: [
+                { id: 'heading', type: 'Heading', props: { text: spec.identity.appName || 'Home' } },
+                { id: 'intro', type: 'Text', props: { text: 'This screen is drawn by the app itself. Add to it in the Screens section.' } },
+              ],
+            }];
+            toast('A first screen was created in the Screens section.');
+          }
+          touch();
+          hardUpdate();
+        },
+        'Architecture',
+      ), mode === 'native-screens'
+        ? 'The app draws its own screens. Nothing is downloaded, so it opens instantly and works with no internet at all. Build the screens in the Screens section.'
+        : 'The app shows a web page. Its screens come from the address below.'),
+    ]),
+
     card('Application', [
       field('Application name', el('input', {
         type: 'text', value: id.appName, maxlength: 60, 'aria-label': 'Application name',
@@ -174,6 +217,9 @@ function viewDesign() {
       colourField('Surface', 'surface', th),
       colourField('Text on surface', 'onSurface', th),
     ], 'Colours are applied to the generated Android theme and to the preview.'),
+
+    mode === 'native-screens' ? el('p', { class: 'hint' },
+      'This app draws its own screens, so the web content settings below are not used. Build the screens in the Screens section.') : null,
 
     card('Web content', [
       field('Content source', el('div', { class: 'selectwrap' }, el('select', {
@@ -512,9 +558,23 @@ function colourField(label, key, theme) {
   return field(label, el('div', { class: 'swatch' }, [picker, text]));
 }
 
+/**
+ * A dropdown for a fixed set of choices, used all over the Studio.
+ *
+ * A browser only ever carries strings out of a <select>, so the value is looked
+ * back up in the list it came from and returned as it was written. The earlier
+ * version ran every value through Number(), which turned "portrait" into NaN:
+ * choosing a screen orientation silently wrote NaN into the specification and
+ * the app became "Blocked" for no reason the user could see.
+ */
 function kvSelect(current, pairs, onchange, ariaLabel) {
-  const sel = el('select', { 'aria-label': ariaLabel, onchange: (e) => onchange(Number(e.target.value)) },
-    pairs.map(([v, l]) => el('option', { value: v, selected: String(current) === String(v) }, l)));
+  const sel = el('select', {
+    'aria-label': ariaLabel,
+    onchange: (e) => {
+      const i = pairs.findIndex(([v]) => String(v) === e.target.value);
+      onchange(i >= 0 ? pairs[i][0] : e.target.value);
+    },
+  }, pairs.map(([v, l]) => el('option', { value: String(v), selected: String(current) === String(v) }, l)));
   return el('div', { class: 'selectwrap' }, sel);
 }
 
@@ -553,6 +613,7 @@ const darken = (hex) => {
 function renderTabs() {
   const defs = [
     ['design', 'Design', I.design],
+    ['screens', 'Screens', I.layers],
     ['caps', 'Features', I.caps],
     ['preview', 'Preview', I.eye],
     ['build', 'Build', I.build],
@@ -580,7 +641,7 @@ function renderHealth() {
 
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
-  const pages = { design: viewDesign, caps: viewCaps, preview: viewPreview, build: viewBuild };
+  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
   renderTabs();

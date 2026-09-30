@@ -21,6 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -28,8 +29,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Dependency order matters: a module must appear after everything it imports.
 const ENGINE_MODULES = [
   'engine/spec/toolchain.mjs',
+  'engine/components/scales.mjs',
+  'engine/components/library.mjs',
   'engine/spec/spec.mjs',
   'engine/capability/permissions.mjs',
+];
+
+/* Application sources, in the order they must be evaluated. The designer is
+   listed first because it declares state at load time that the shell's boot
+   reads; everything it borrows from the shell it only touches once a person
+   has tapped something. */
+const APP_MODULES = [
+  'studio/src/designer.js',
+  'studio/src/studio.js',
 ];
 
 /**
@@ -70,6 +82,54 @@ function stripModuleSyntax(source, file) {
   return out;
 }
 
+/**
+ * Everything is inlined into ONE scope, so two modules declaring the same
+ * top-level name would silently overwrite each other — the kind of fault that
+ * looks like a working app until one screen behaves oddly. Checked rather than
+ * trusted, with the module names in the message so it is quick to fix.
+ */
+function checkForCollisions(parts) {
+  const owner = new Map();
+  const clashes = [];
+  for (const part of parts) {
+    const label = (/^\/\* ═══ (.+?) ═══ \*\//.exec(part) || [, 'inline'])[1];
+    const names = new Set();
+    // column zero only: a name declared inside a function is local to it and
+    // cannot collide with another module
+    const re = /^(?:const|let|var|function|class|async function)\s+([A-Za-z_$][\w$]*)/gm;
+    let m;
+    while ((m = re.exec(part))) names.add(m[1]);
+    for (const name of names) {
+      if (owner.has(name) && owner.get(name) !== label) clashes.push(`${name} (${owner.get(name)} and ${label})`);
+      else owner.set(name, label);
+    }
+  }
+  if (clashes.length) {
+    throw new Error(`the bundle would define the same name more than once:\n  ${clashes.join('\n  ')}`);
+  }
+  return owner.size;
+}
+
+/**
+ * Turn a parse error's offset into a file and line, so a broken bundle says
+ * where to look instead of only naming a byte.
+ */
+function locateSyntaxError(err, script, parts) {
+  const m = /bundle\.js:(\d+)/.exec(err.stack || '');
+  if (!m) return '';
+  const target = Number(m[1]);
+  let consumed = 0;
+  for (const part of parts) {
+    const lines = part.split('\n').length;
+    if (target <= consumed + lines) {
+      const label = (/^\/\* ═══ (.+?) ═══ \*\//.exec(part) || [, 'inline'])[1];
+      return `\n  in ${label}, around line ${target - consumed}`;
+    }
+    consumed += lines + 2; // parts are joined with a blank line
+  }
+  return `\n  at bundle line ${target}`;
+}
+
 function read(rel) {
   const p = path.join(ROOT, rel);
   if (!fs.existsSync(p)) throw new Error(`Missing file: ${rel}`);
@@ -86,16 +146,30 @@ function build({ out = 'studio/app.html' } = {}) {
     parts.push(`/* ═══ ${rel} ═══ */\n${stripModuleSyntax(src, rel)}`);
   }
 
-  const appSrc = read('studio/src/studio.js');
-  hashes.push(`studio/src/studio.js:${crypto.createHash('sha256').update(appSrc).digest('hex').slice(0, 12)}`);
+  for (const rel of APP_MODULES) {
+    const appSrc = read(rel);
+    hashes.push(`${rel}:${crypto.createHash('sha256').update(appSrc).digest('hex').slice(0, 12)}`);
+    // the modules import from each other; those imports are already satisfied
+    const appFlattened = appSrc
+      .replace(/^\s*import\s+[\s\S]*?\s+from\s+['"][^'"]+['"]\s*;?\s*$/gm, '')
+      .replace(/^(\s*)export\s+(?=(const|let|var|function|class|async)\b)/gm, '$1')
+      .replace(/^\s*export\s*\{[^}]*\}\s*;?\s*$/gm, '');
+    parts.push(`/* ═══ ${rel} ═══ */\n${appFlattened}`);
+  }
 
-  // studio.js imports the engine; those imports are already satisfied above.
-  let appFlattened = appSrc
-    .replace(/^\s*import\s+[\s\S]*?\s+from\s+['"][^'"]+['"]\s*;?\s*$/gm, '')
-    .replace(/^(\s*)export\s+(?=(const|let|var|function|class|async)\b)/gm, '$1')
-    .replace(/^\s*export\s*\{[^}]*\}\s*;?\s*$/gm, '');
+  checkForCollisions(parts);
 
-  parts.push(`/* ═══ studio/src/studio.js ═══ */\n${appFlattened}`);
+  // Parse the assembled script before it is written. Flattening several modules
+  // into one scope can produce a file that builds fine and then dies in the
+  // browser with "Unexpected token", leaving the user on a loading screen and
+  // nothing to look at. A syntax error must never leave this file.
+  const script = parts.join('\n\n');
+  try {
+    new vm.Script(script, { filename: 'bundle.js' });
+  } catch (err) {
+    const where = locateSyntaxError(err, script, parts);
+    throw new Error(`the bundle would not parse: ${err.message}${where}`);
+  }
 
   const templatesSrc = read('studio/src/templates.json');
   hashes.push(`templates:${crypto.createHash('sha256').update(templatesSrc).digest('hex').slice(0, 12)}`);

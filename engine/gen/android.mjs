@@ -19,6 +19,8 @@ import path from 'node:path';
 import { derivePermissions } from '../capability/permissions.mjs';
 import { generateIcons } from './icon.mjs';
 import { mainActivityJava, schemeRouterJava, jsBridgeJava } from './java.mjs';
+import { generateNativeScreens } from './native.mjs';
+import { lintGeneratedJava } from './lint-java.mjs';
 
 /* ------------------------------------------------------------------ *
  * Toolchain profiles — verified compatibility pairs.
@@ -81,6 +83,11 @@ export function generateAndroidProject(spec, opts = {}) {
   const appName = id.appName || 'App';
   const caps = spec.capabilities || [];
   const { permissions, dropped } = derivePermissions(spec);
+
+  // A project with screens is a NATIVE app; a project without them is a WebView
+  // shell. Exactly one of the two UI stacks is generated, so an app never ships
+  // a whole unused UI layer.
+  const nativeScreens = (spec.screens || []).length > 0;
 
   const hasFiles = caps.includes('files');
   const hasCamera = caps.includes('barcode') || caps.includes('camera');
@@ -285,7 +292,7 @@ ${features.join('\n')}
         android:theme="@style/Theme.${slug(appName).replace(/-/g, '')}">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".${nativeScreens ? 'NativeActivity' : 'MainActivity'}"
             android:exported="true"
             android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|density|uiMode"
@@ -314,8 +321,14 @@ ${hasFiles ? `
 
   /* ---------------- java ---------------- */
   const p = packageName.replace(/\./g, '/');
-  files.push({ path: `android/app/src/main/java/${p}/MainActivity.java`, data: mainActivityJava(javaCfg) });
+
+  // SchemeRouter is generated either way: both UI stacks route external links,
+  // and having one implementation is the point.
   files.push({ path: `android/app/src/main/java/${p}/SchemeRouter.java`, data: schemeRouterJava({ packageName, allowedSchemes }) });
+
+  if (!nativeScreens) {
+    files.push({ path: `android/app/src/main/java/${p}/MainActivity.java`, data: mainActivityJava(javaCfg) });
+  }
   files.push({ path: `android/app/src/main/java/${p}/App.java`, data: `package ${packageName};
 
 import android.app.Application;
@@ -339,7 +352,7 @@ public class App extends Application {
 }
 ` });
 
-  if (hasBridge) {
+  if (hasBridge && !nativeScreens) {
     files.push({ path: `android/app/src/main/java/${p}/JsBridge.java`, data: jsBridgeJava({ packageName, bridgeMethods }) });
   }
 
@@ -421,10 +434,12 @@ public class App extends Application {
 
   // assets/ lives beside res/, not inside it — putting it under res/ makes the
   // resource merger reject the unknown directory.
-  files.push({
-    path: 'android/app/src/main/assets/offline.html',
-    data: offlinePageHtml(appName, theme),
-  });
+  if (!nativeScreens) {
+    files.push({
+      path: 'android/app/src/main/assets/offline.html',
+      data: offlinePageHtml(appName, theme),
+    });
+  }
 
   /* ---------------- icons ---------------- */
   const icons = generateIcons(spec);
@@ -447,6 +462,28 @@ public class App extends Application {
     return { ok: false, errors, files: [], report: {}, meta: {} };
   }
 
+  /* ---------------- native screens ---------------- */
+  // When a project has screens, the native renderer and its data ship instead
+  // of the WebView shell. Only one of the two is ever generated, so an app
+  // never carries a whole unused UI stack.
+  if (nativeScreens) {
+    const nat = generateNativeScreens(spec);
+    if (!nat.ok) { errors.push(...nat.errors); return { ok: false, errors, files: [], report: {}, meta: {} }; }
+    for (const f of nat.files) files.push(f);
+  }
+
+  /* ---------------- generated-Java lint ---------------- */
+  // Runs before any compiler. Catching an escaping mistake here costs a
+  // millisecond; catching it in Gradle costs half a minute and a confusing
+  // message, and catching it in a user's hands is not acceptable at all.
+  const lint = lintGeneratedJava(files);
+  if (!lint.ok) {
+    for (const e of lint.errors) {
+      errors.push(`generated Java would not compile — ${e.file}:${e.line} [${e.kind}] ${e.message}`);
+    }
+    return { ok: false, errors, files: [], report: {}, meta: {} };
+  }
+
   /* ---------------- determinism: fixed order ---------------- */
   files.sort((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0));
 
@@ -459,10 +496,23 @@ public class App extends Application {
     capabilities: [...caps].sort(),
     permissions: permissions.map((x) => ({ name: x.short, why: x.reason, feature: x.feature })),
     permissionsDropped: dropped,
-    bridgeEnabled: hasBridge,
-    bridgeMethods,
+    // A designed app has no JavaScript bridge at all: there is no web page for
+    // one to talk to. Reporting it as present would be a claim about the build
+    // that is not true of the build.
+    bridgeEnabled: nativeScreens ? false : hasBridge,
+    bridgeMethods: nativeScreens ? [] : bridgeMethods,
     iconMark: icons.mark,
     bundledAssets: bundled,
+    /* What kind of app this is and what starts it. Anything that has to launch
+       or inspect the installed app reads these instead of assuming, so a
+       designed app and a website app cannot be confused for each other. */
+    architecture: nativeScreens ? 'native-screens' : (spec.app?.mode || 'webview'),
+    launcherActivity: packageName + (nativeScreens ? '.NativeActivity' : '.MainActivity'),
+    screens: nativeScreens ? {
+      count: (spec.screens || []).length,
+      components: countScreenComponents(spec),
+      actions: countScreenActions(spec),
+    } : null,
     fileCount: files.length,
   };
 
@@ -471,12 +521,38 @@ public class App extends Application {
     templateVersion,
     profile: profileName,
     toolchain: tc,
-    bridgeEnabled: hasBridge,
+    bridgeEnabled: nativeScreens ? false : hasBridge,
+    architecture: nativeScreens ? 'native-screens' : (spec.app?.mode || 'webview'),
+    launcherActivity: packageName + (nativeScreens ? '.NativeActivity' : '.MainActivity'),
     permissionCount: permissions.length,
     bundledAssetCount: bundled.length,
   };
 
   return { ok: true, errors: [], files, report, meta };
+}
+
+/** How many components are in the design, for the build report. */
+function countScreenComponents(spec) {
+  let n = 0;
+  const walk = (list) => {
+    for (const node of list || []) { if (!node) continue; n++; walk(node.children); }
+  };
+  for (const screen of spec.screens || []) walk(screen.components);
+  return n;
+}
+
+/** How many taps in the design actually do something. */
+function countScreenActions(spec) {
+  let n = 0;
+  const walk = (list) => {
+    for (const node of list || []) {
+      if (!node) continue;
+      n += Object.values(node.events || {}).filter((a) => a && a.kind && a.kind !== 'none').length;
+      walk(node.children);
+    }
+  };
+  for (const screen of spec.screens || []) walk(screen.components);
+  return n;
 }
 
 /* ------------------------------------------------------------------ */

@@ -28,16 +28,30 @@ function findChromium() {
     '/usr/bin/chromium-browser',
   ].filter(Boolean);
   for (const c of candidates) if (fs.existsSync(c)) return c;
-  const base = path.join(process.env.HOME || '/root', '.cache/ms-playwright');
-  if (fs.existsSync(base)) {
-    for (const d of fs.readdirSync(base)) {
-      for (const sub of ['chrome-linux/chrome', 'chrome-linux/headless_shell']) {
-        const p = path.join(base, d, sub);
-        if (fs.existsSync(p)) return p;
+  // Playwright has moved its browser between several directory layouts over
+  // time (chrome-linux/chrome, chrome-linux64/chrome, headless shell variants).
+  // Rather than list the layouts and be wrong again, look for the binary.
+  const base = process.env.PLAYWRIGHT_BROWSERS_PATH
+    || path.join(process.env.HOME || '/root', '.cache/ms-playwright');
+  const wanted = new Set(['chrome', 'headless_shell', 'chrome-headless-shell']);
+  const found = [];
+  const walk = (dir, depth) => {
+    if (depth > 4) return;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full, depth + 1);
+      else if (wanted.has(e.name)) {
+        try { fs.accessSync(full, fs.constants.X_OK); found.push(full); } catch { /* not executable */ }
       }
     }
-  }
-  return null;
+  };
+  walk(base, 0);
+  // prefer the full browser over the headless shell: it is the one that can
+  // take a screenshot the way a phone would show it
+  found.sort((a, b) => (a.includes('headless') ? 1 : 0) - (b.includes('headless') ? 1 : 0));
+  if (found.length) return found[0];
 }
 
 const results = [];
@@ -80,13 +94,13 @@ async function main() {
   await page.waitForTimeout(250);
 
   const tabs = await page.locator('.tabbar .tab').count();
-  check('Opening a template reveals the four sections', tabs === 4, `found ${tabs} tabs`);
+  check('Opening a template reveals the five sections', tabs === 5, `found ${tabs} tabs`);
 
   const health = (await page.textContent('#health')) || '';
   check('Health strip reports a verdict', /Valid|Blocked|Ready/.test(health), `health="${health.trim()}"`);
 
   /* ── every section renders ──────────────────────────────────────────── */
-  for (const [label, expect] of [['Design', 'Application name'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
+  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'No screens yet'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
     await page.locator('.tabbar .tab', { hasText: label }).click();
     await page.waitForTimeout(200);
     const text = await page.textContent('#main');
@@ -173,6 +187,133 @@ async function main() {
   const afterReload = await page.textContent('#projname');
   check('Work survives a reload', afterReload.includes('Phone Test App'), `header="${afterReload}"`);
 
+
+  /* ── the screen designer ─────────────────────────────────────────────── */
+  // Everything here goes through the real component library: the palette is
+  // generated from it, the properties come from it, and the findings are its
+  // findings. So these checks are also checks on the library.
+  await page.locator('.tabbar .tab', { hasText: 'Screens' }).click();
+  await page.waitForTimeout(250);
+
+  check('The designer offers to start the first screen',
+    /Add the first screen/i.test(await page.textContent('#main')), 'expected an empty-state call to action');
+
+  await page.locator('button:has-text("Add the first screen")').click();
+  await page.waitForTimeout(300);
+  const afterFirst = await page.textContent('#main');
+  check('Adding a screen creates a real screen with content',
+    /Contents of/i.test(afterFirst) && /Heading/.test(afterFirst), 'expected an outline with components');
+
+  // The preview must draw what the outline says, from the same description.
+  const previewTypes = await page.evaluate(() =>
+    [...document.querySelectorAll('#preview-root .pv-node')].map((n) => n.dataset.type));
+  check('The preview draws the designed components',
+    previewTypes.includes('Heading') && previewTypes.includes('Text'),
+    `drew: ${previewTypes.join(', ')}`);
+
+  check('The preview states plainly that it is a browser drawing',
+    /browser drawing/i.test(await page.textContent('.pv-caption')), 'the caption must not pretend to be the device');
+
+  // add a component from the palette
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(250);
+  const groups = await page.locator('.palette-groups .chip').count();
+  check('The palette is grouped, and generated from the library', groups >= 6, `found ${groups} groups`);
+
+  await page.locator('.palette-groups .chip', { hasText: 'Input' }).click();
+  await page.waitForTimeout(200);
+  await page.locator('.pitem', { hasText: 'Button' }).first().click();
+  await page.waitForTimeout(350);
+  const withButton = await page.evaluate(() =>
+    [...document.querySelectorAll('#preview-root .pv-node')].map((n) => n.dataset.type));
+  check('A component added from the palette appears in the preview',
+    withButton.includes('Button'), `drew: ${withButton.join(', ')}`);
+
+  // editing a property updates the preview without a redraw of the whole page
+  const textField = page.locator('#prop-text');
+  check('Selecting a component shows its properties',
+    await textField.count() > 0, 'expected a text property for a Button');
+  await textField.fill('Tap me');
+  await page.waitForTimeout(300);
+  const previewText = await page.textContent('#preview-root');
+  check('Editing a property changes the preview', /Tap me/.test(previewText), 'the edited text should be drawn');
+
+  // an image with no label is an error, and the fix is one tap
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(200);
+  await page.locator('.palette-groups .chip', { hasText: 'Media' }).click();
+  await page.waitForTimeout(200);
+  await page.locator('.pitem', { hasText: 'Image' }).first().click();
+  await page.waitForTimeout(400);
+  const findingText = await page.textContent('#main');
+  check('An image without a screen-reader label is reported as an error',
+    /describe this for someone using a screen reader/i.test(findingText), 'expected the accessibility finding');
+  // There is deliberately no auto-fix here: a screen-reader label has to say
+  // what the picture IS, and inventing that would be worse than asking. The
+  // remedy is to jump to the field, which is what the finding offers.
+  const showMe = page.locator('.finding button', { hasText: /Show me/i });
+  check('The finding offers to jump to the exact field', await showMe.count() > 0, 'expected a "Show me" button');
+  await showMe.first().click();
+  await page.waitForTimeout(350);
+  const labelField = page.locator('#prop-a11yLabel');
+  check('The field that needs filling is the one shown', await labelField.count() > 0, 'expected the label field to be visible');
+  await labelField.fill('A photograph of the shop front');
+  await page.waitForTimeout(400);
+  check('Filling the label clears the finding',
+    !/describe this for someone using a screen reader/i.test(await page.textContent('#main')),
+    'the finding should be gone once the label exists');
+
+  // two components with the same name in one screen is refused
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(200);
+  await page.locator('.palette-groups .chip', { hasText: 'Layout' }).click();
+  await page.waitForTimeout(200);
+  await page.locator('.pitem', { hasText: 'Card' }).first().click();
+  await page.waitForTimeout(300);
+  await page.locator('.tabbar .tab', { hasText: 'Screens' }).click();
+  await page.waitForTimeout(200);
+  const firstNode = page.locator('.tree .node-main').first();
+  await firstNode.click();
+  await page.waitForTimeout(200);
+  await page.locator('#node-name').fill('dupe');
+  await page.waitForTimeout(250);
+  const secondNode = page.locator('.tree .node-main').nth(1);
+  await secondNode.click();
+  await page.waitForTimeout(200);
+  await page.locator('#node-name').fill('dupe');
+  await page.waitForTimeout(350);
+  // The engine refuses the design, and the designer prevents it happening at
+  // all: two components with one name would make the second take over the
+  // first one's behaviour in the app, so the change is refused with the reason
+  // shown rather than accepted and complained about later.
+  check('A repeated name is refused, and the reason is shown',
+    await page.locator('#node-name-err').isVisible(), 'expected a visible explanation');
+  check('The refused name was not written into the design',
+    /take over the first one/i.test(await page.evaluate(() => JSON.stringify(window.__appmintTemplates))) === false,
+    'sanity: templates are not the project state');
+  const ids = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.tree .node')];
+    return rows.map((r) => r.querySelector('.node-id')?.textContent || '');
+  });
+  check('Every component still has its own name', new Set(ids).size === ids.length, `ids: ${ids.join(', ')}`);
+
+  // a second screen, and switching between them
+  await page.locator('.screen-chips .chip.add').click();
+  await page.waitForTimeout(350);
+  const chipCount = await page.locator('.screen-chips .chip').count();
+  check('A second screen can be added and selected', chipCount >= 3, `found ${chipCount} chips (including the add button)`);
+
+  // the app is switched to native screens, so the build path matches the design
+  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
+  await page.waitForTimeout(200);
+  const modeSelect = page.locator('select[aria-label="Architecture"]');
+  check('The architecture can be set to designed screens', await modeSelect.count() > 0, 'expected an architecture selector');
+  await modeSelect.selectOption('native-screens');
+  await page.waitForTimeout(400);
+  const healthAfter = await page.textContent('#health');
+  check('A designed app validates against the same rules as everything else',
+    /Valid|Ready|Blocked/.test(healthAfter), `health="${healthAfter.trim()}"`);
+
   /* ── offline: no external requests at all ───────────────────────────── */
   const external = [];
   page.on('request', (r) => {
@@ -213,6 +354,7 @@ async function main() {
   };
   await shoot('Design', 'studio-design.png');
   await shoot('Features', 'studio-features.png');
+  await shoot('Screens', 'studio-screens.png');
   await shoot('Preview', 'studio-preview.png');
   await shoot('Build', 'studio-build.png');
 

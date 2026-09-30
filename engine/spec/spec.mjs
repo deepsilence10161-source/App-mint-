@@ -21,7 +21,11 @@
 
 export const SPEC_VERSION = '1.0';
 
+// Re-exported so callers have one import for the whole specification model.
+export { COMPONENTS, ACTIONS, EVENTS };
+
 import { TOOLCHAIN_PROFILES, resolveToolchain, profileForCompileSdk } from './toolchain.mjs';
+import { validateScreens, COMPONENTS, ACTIONS, EVENTS } from '../components/library.mjs';
 
 /* ------------------------------------------------------------------ *
  * CAPABILITY REGISTRY
@@ -57,6 +61,17 @@ export const CAPABILITIES = {
  * ------------------------------------------------------------------ */
 const PACKAGE_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
 const RESERVED_PACKAGE_WORDS = ['android', 'com.android', 'java', 'javax', 'kotlin', 'kotlinx'];
+/* Java reserved words. A package name becomes a Java package, so a segment that
+   is a reserved word fails at compile time — with a message that does not
+   mention the specification at all. Case-sensitive, because Java is. */
+const JAVA_KEYWORDS = new Set([
+  'abstract','assert','boolean','break','byte','case','catch','char','class','const','continue',
+  'default','do','double','else','enum','extends','final','finally','float','for','goto','if',
+  'implements','import','instanceof','int','interface','long','native','new','package','private',
+  'protected','public','return','short','static','strictfp','super','switch','synchronized',
+  'this','throw','throws','transient','try','void','volatile','while','true','false','null',
+  'var','record','sealed','permits','yield','_',
+]);
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*$/;
 const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 const URL_RE = /^https?:\/\/[^\s]+$/;
@@ -294,6 +309,15 @@ export function layer1Schema(spec, out) {
 export function layer2Semantic(spec, out) {
   const id = spec.identity || {}, a = spec.android || {}, app = spec.app || {}, b = spec.build || {};
 
+  if (id.packageName) {
+    const badKeyword = String(id.packageName).split('.').find((seg) => JAVA_KEYWORDS.has(seg));
+    if (badKeyword)
+      out.push(issue('E_JAVA_KEYWORD_PKG', 'error', 'identity.packageName',
+        `The package name contains "${badKeyword}", which is a Java reserved word. Android would compile the generated code into a package that Java cannot name, and the build would fail.`,
+        { fix: { kind: 'set', path: 'identity.packageName',
+            value: String(id.packageName).split('.').map((seg) => (JAVA_KEYWORDS.has(seg) ? seg + 'app' : seg)).join('.') } }));
+  }
+
   if (id.packageName && RESERVED_PACKAGE_WORDS.some((w) => id.packageName === w || id.packageName.startsWith(w + '.')))
     out.push(issue('E_RESERVED_PKG', 'error', 'identity.packageName',
       `The package name starts with a reserved namespace ("${id.packageName.split('.').slice(0, 2).join('.')}"). Google Play rejects these.`,
@@ -397,6 +421,11 @@ export function layer3Dependency(spec, out) {
   const nav = spec.navigation || {};
   if (nav.type === 'bottom-tabs' && (spec.screens || []).length < 2)
     out.push(issue('W_NAV_THIN', 'warning', 'navigation.type', 'Bottom tabs with fewer than two screens leaves empty tabs.'));
+
+  // Screens are structures: every reference inside them must resolve, and every
+  // action must be able to run. This is where a half-built screen gets caught,
+  // rather than at runtime on a user's phone.
+  validateScreens(spec, out);
 }
 
 /** L4 — SECURITY: the gate. Critical findings block the build unless overridden. */

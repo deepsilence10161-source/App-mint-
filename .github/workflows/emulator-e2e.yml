@@ -89,34 +89,48 @@ jobs:
           echo "$(dirname "$SM")" >> "$GITHUB_PATH"
           echo "SDK ready at $SDK"
 
-      - name: Pick specification
-        id: pick
+      - name: Validate both specifications
         run: |
-          SPEC="${{ github.event.inputs.spec || 'apps/demo/spec.json' }}"
-          echo "spec=$SPEC" >> "$GITHUB_OUTPUT"
-          echo "pkg=$(node -e "console.log(require('./'+process.env.S).identity.packageName)" S="$SPEC")" >> "$GITHUB_OUTPUT"
-          echo "slug=$(node -e "console.log(require('./'+process.env.S).identity.appName.toLowerCase().replace(/[^a-z0-9]+/g,'-'))" S="$SPEC")" >> "$GITHUB_OUTPUT"
+          node engine/cli.mjs validate apps/demo/spec.json
+          node engine/cli.mjs validate apps/native-demo/spec.json
 
-      - name: Validate specification
-        run: node engine/cli.mjs validate "${{ steps.pick.outputs.spec }}"
+      # Two apps, because they share no UI code. One is a WebView showing a
+      # page; the other draws every view itself from the screen description.
+      # A change that breaks one of them would otherwise slip through.
+      - name: Generate both Android projects
+        run: |
+          node engine/cli.mjs generate apps/demo/spec.json --out build/out
+          node engine/cli.mjs generate apps/native-demo/spec.json --out build/native
 
-      - name: Generate Android project
-        run: node engine/cli.mjs generate "${{ steps.pick.outputs.spec }}" --out build/out
-
-      - name: Build APK for the device
+      - name: Build the website app
         working-directory: build/out/android
         env:
           GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m'
         run: gradle assembleDebug --console=plain --stacktrace
 
-      - name: Stage the APK
+      - name: Build the designed-screens app
+        working-directory: build/native/android
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m'
+        run: gradle assembleDebug --console=plain --stacktrace
+
+      - name: Stage both APKs
         run: |
           set -euo pipefail
-          APK=$(find build/out/android -name '*.apk' | head -1)
-          [ -n "$APK" ] || { echo "::error::No APK was produced"; exit 1; }
           mkdir -p build/apk
-          cp "$APK" build/apk/app-debug.apk
+          DEMO=$(find build/out/android -name '*.apk' | head -1)
+          NATIVE=$(find build/native/android -name '*.apk' | head -1)
+          [ -n "$DEMO" ] || { echo "::error::No APK was produced for the website app"; exit 1; }
+          [ -n "$NATIVE" ] || { echo "::error::No APK was produced for the designed-screens app"; exit 1; }
+          cp "$DEMO" build/apk/demo.apk
+          cp "$NATIVE" build/apk/native.apk
           ls -lh build/apk/
+          # what the generator says these builds are — the driver does not guess
+          node -e "for (const f of ['build/out/BUILD-INFO.json','build/native/BUILD-INFO.json']) {
+            const b = require('./' + f);
+            console.log(f, '->', b.architecture, b.packageName, b.launcherActivity, 'screens:', b.screens ? b.screens.count : 0);
+          }"
+          echo "--- what the two workflows are told to launch ---" 
 
       # KVM must be granted BEFORE the emulator starts. Without this the
       # emulator silently falls back to software acceleration and takes 15+
@@ -132,9 +146,7 @@ jobs:
       - name: Run the app on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          APP_PACKAGE: ${{ steps.pick.outputs.pkg }}
-          APP_ACTIVITY: ${{ steps.pick.outputs.pkg }}.MainActivity
-          OUT_DIR: out
+          STAGE_DIR: build/apk
         with:
           api-level: ${{ env.ANDROID_API_LEVEL }}
           target: default
@@ -147,20 +159,26 @@ jobs:
             -no-snapshot -no-window -gpu lavapipe -noaudio -no-boot-anim
             -camera-back none -camera-front none
           disable-animations: true
-          script: bash tools/e2e/run.sh
+          script: bash tools/e2e/run-both.sh
 
       - name: Judge the evidence
         if: always()
         run: |
-          mkdir -p out
           python3 -m pip install -q pillow
-          python3 tools/e2e/judge.py out
+          mkdir -p out/demo out/native
+          # Each app is judged on its own evidence. A missing result is a
+          # failure, never a silent pass.
+          python3 tools/e2e/judge.py out/demo
+          python3 tools/e2e/judge.py out/native
 
-      - name: Build the report
+      - name: Build a report for each app, and a page covering both
         if: always()
         run: |
-          python3 tools/e2e/report.py out site "${{ github.run_number }}" "${{ github.sha }}" \
+          python3 tools/e2e/report.py out/demo site/demo "${{ github.run_number }}" "${{ github.sha }}" \
             "${{ github.repository }}"
+          python3 tools/e2e/report.py out/native site/native "${{ github.run_number }}" "${{ github.sha }}" \
+            "${{ github.repository }}"
+          python3 tools/e2e/summary.py out site "${{ github.run_number }}" "${{ github.sha }}"
 
       - name: Upload evidence
         if: always()
@@ -188,4 +206,8 @@ jobs:
       # The honest gate. The job is red unless every blocking check passed.
       - name: Verdict
         if: always()
-        run: python3 tools/e2e/verdict.py out
+        run: |
+          # Both apps must pass. There is no "partly working" here: the point of
+          # this test is that what was generated runs on a real device.
+          python3 tools/e2e/verdict.py out/demo
+          python3 tools/e2e/verdict.py out/native
