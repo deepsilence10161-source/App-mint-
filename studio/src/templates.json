@@ -1,0 +1,110 @@
+{
+  "note": "Template library. Each entry is a partial Project Specification merged over the defaults — so a template can never introduce a field the schema does not know about, and every template stays valid as the schema evolves.",
+  "templates": [
+    {
+      "id": "blank",
+      "name": "Blank",
+      "tagline": "A clean start with nothing assumed.",
+      "mark": "square",
+      "spec": {}
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "tagline": "Company site wrapped as an app, with tap-to-call and email.",
+      "mark": "briefcase",
+      "spec": {
+        "capabilities": ["telephone", "email", "share"],
+        "theme": { "primary": "#1D4ED8", "accent": "#0EA5E9", "background": "#0B1220", "surface": "#151E33", "onSurface": "#E8ECF8", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "offlinePage": true, "fileUploads": false } },
+        "deepLinks": { "allowedSchemes": ["https", "tel", "mailto"] }
+      }
+    },
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "tagline": "Show work, share links, keep it visual.",
+      "mark": "image",
+      "spec": {
+        "capabilities": ["share", "clipboard"],
+        "theme": { "primary": "#7C3AED", "accent": "#F472B6", "background": "#0C0A15", "surface": "#1A1526", "onSurface": "#F1EAFE", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true } },
+        "deepLinks": { "allowedSchemes": ["https", "mailto"] }
+      }
+    },
+    {
+      "id": "commerce",
+      "name": "Shop",
+      "tagline": "Storefront with UPI checkout handed to the payment app.",
+      "mark": "cart",
+      "spec": {
+        "capabilities": ["upi", "share", "notifications"],
+        "theme": { "primary": "#059669", "accent": "#FBBF24", "background": "#06140F", "surface": "#11241C", "onSurface": "#E6F5EE", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "fileUploads": false, "domStorage": true } },
+        "deepLinks": { "allowedSchemes": ["https", "upi", "tel"] }
+      }
+    },
+    {
+      "id": "education",
+      "name": "Learning",
+      "tagline": "Lessons and reminders, readable offline.",
+      "mark": "book",
+      "spec": {
+        "capabilities": ["notifications", "exactAlarms", "bootStart"],
+        "theme": { "primary": "#D97706", "accent": "#22D3EE", "background": "#14100A", "surface": "#241C12", "onSurface": "#F7EFE4", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true, "offlinePage": true } },
+        "deepLinks": { "allowedSchemes": ["https", "mailto"] }
+      }
+    },
+    {
+      "id": "news",
+      "name": "News",
+      "tagline": "Fast reading, shareable links, no clutter.",
+      "mark": "rss",
+      "spec": {
+        "capabilities": ["notifications", "share", "clipboard"],
+        "theme": { "primary": "#DC2626", "accent": "#F59E0B", "background": "#120B0B", "surface": "#221414", "onSurface": "#F6EAEA", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    },
+    {
+      "id": "tournament",
+      "name": "Tournament",
+      "tagline": "Fixtures, results and signups for a competition.",
+      "mark": "trophy",
+      "spec": {
+        "capabilities": ["notifications", "share", "upi", "googleAuth"],
+        "theme": { "primary": "#EA580C", "accent": "#22D3EE", "background": "#100C08", "surface": "#211610", "onSurface": "#F8EEE6", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "fileUploads": true, "domStorage": true } },
+        "deepLinks": { "customScheme": "tournament", "allowedSchemes": ["https", "upi", "whatsapp"] },
+        "backend": { "kind": "supabase", "requiresAuth": true, "tablesRequiringRls": [] }
+      }
+    },
+    {
+      "id": "utility",
+      "name": "Utility",
+      "tagline": "A small tool with scanning and haptics.",
+      "mark": "wrench",
+      "spec": {
+        "capabilities": ["barcode", "vibration", "clipboard", "share"],
+        "theme": { "primary": "#0891B2", "accent": "#A3E635", "background": "#06151A", "surface": "#0F2530", "onSurface": "#E6F6FA", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "external-browser", "fileUploads": false } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "tagline": "Numbers and status at a glance, light by default.",
+      "mark": "chart",
+      "spec": {
+        "capabilities": ["notifications", "share"],
+        "theme": { "primary": "#4F46E5", "accent": "#06B6D4", "background": "#F7F8FC", "surface": "#FFFFFF", "onSurface": "#101426", "statusBarStyle": "light" },
+        "android": { "theme": "light" },
+        "app": { "webview": { "externalLinks": "custom-tab", "canvasBackground": "#FFFFFF", "domStorage": true } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    }
+  ]
+}

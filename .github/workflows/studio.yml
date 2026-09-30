@@ -1,0 +1,98 @@
+name: Studio
+
+# Builds the Studio into one self-contained HTML file, verifies it in a real
+# browser, and publishes it to GitHub Pages.
+#
+# Publishing matters: this is how the Studio gets used from a phone. One link,
+# no install, no server, no account.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'studio/**'
+      - 'engine/**'
+      - 'tools/build-studio.mjs'
+      - 'tools/test-studio.mjs'
+      - '.github/workflows/studio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: studio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  studio:
+    name: Build and verify the Studio
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No `npm install` for the app itself. The Studio and the engine have zero
+      # dependencies, so there is no lockfile to drift and no registry that can
+      # take the build down.
+      - name: Build the single-file Studio
+        run: node tools/build-studio.mjs
+
+      - name: Check the committed bundle matches its sources
+        run: |
+          # app.html is generated, but it is the shipped artifact, so it is
+          # committed. This makes sure it can never silently drift from the
+          # engine it claims to contain.
+          if ! git diff --quiet -- studio/app.html; then
+            echo "::error::studio/app.html is out of date. Run 'node tools/build-studio.mjs' and commit the result."
+            git diff --stat -- studio/app.html
+            exit 1
+          fi
+          echo "bundle matches its sources"
+
+      - name: Install a browser for verification
+        run: |
+          npm install --no-save playwright-core@1.49.1
+          npx --yes playwright@1.49.1 install --with-deps chromium
+
+      - name: Verify the Studio in a real browser
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw
+        run: |
+          # Point the test at the browser that was just installed rather than
+          # assuming a system chromium exists.
+          CHROMIUM_PATH=$(find "$PLAYWRIGHT_BROWSERS_PATH" -name chrome -type f | head -1)
+          export CHROMIUM_PATH
+          echo "using chromium at $CHROMIUM_PATH"
+          node tools/test-studio.mjs
+
+      - name: Upload verification screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-screenshots
+          path: studio/screenshots/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Stage the published site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          mkdir -p site
+          cp studio/app.html site/index.html
+
+      # keep_files: true means the device-test report at /report/ is left alone.
+      # Without it this publish would delete the other workflow's output.
+      - name: Publish to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          publish_branch: gh-pages
+          keep_files: true

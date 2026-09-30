@@ -66,45 +66,43 @@ export function derivePermissions(spec) {
 
   // Internet already answered by a richer reason above? keep the specific one.
 
-  // ---- drop what is genuinely unnecessary ------------------------------
-  const dropped = [];
-  for (const [name, meta] of Object.entries(PERMISSION_META)) {
-    if (meta.maxSdk != null && targetSdk > meta.maxSdk && wanted.has(name)) {
-      // Still emit, but capped with android:maxSdkVersion — the generator does that.
-      // We only fully DROP when the app never touches the disk at all.
+  // ---- what a careless implementation would have requested ----------------
+  //
+  // The first version of this tried to drop permissions *after* collecting
+  // them, which could never fire: only an enabled capability can contribute a
+  // permission, so the condition "the capability is off" was unreachable. The
+  // feature that was supposed to prove permission minimisation never produced
+  // any output at all. Found by the browser test that asserted on it.
+  //
+  // The honest version compares against everything ANY capability could ask
+  // for, and reports the difference. That is a real, checkable claim: this app
+  // is not requesting these, and here is why.
+  const couldAsk = new Map(); // permission -> Set of capability labels
+  for (const cap of Object.values(CAPABILITIES)) {
+    for (const p of cap.permissions) {
+      if (!couldAsk.has(p)) couldAsk.set(p, new Set());
+      couldAsk.get(p).add(cap.label);
     }
   }
 
-  // If the app has no file-upload capability, storage permissions are dead weight.
-  if (!active.has('files')) {
-    for (const s of ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE']) {
-      if (wanted.has(s)) { wanted.delete(s); dropped.push({ name: s, reason: 'No file capability is enabled' }); }
-    }
+  const dropped = [];
+  for (const [name, features] of couldAsk) {
+    if (wanted.has(name)) continue;
+    const names = [...features];
+    dropped.push({
+      name,
+      reason: `capability "${names.join(' / ')}" is turned off`,
+    });
   }
-  // Camera without barcode or camera capability is dead weight.
-  if (!active.has('barcode') && !active.has('camera') && wanted.has('CAMERA')) {
-    wanted.delete('CAMERA'); dropped.push({ name: 'CAMERA', reason: 'Neither barcode scanning nor camera capture is enabled' });
-  }
-  // Boot-completed is only meaningful if something must survive a reboot.
-  if (!active.has('bootStart') && !active.has('exactAlarms') && wanted.has('RECEIVE_BOOT_COMPLETED')) {
-    wanted.delete('RECEIVE_BOOT_COMPLETED'); dropped.push({ name: 'RECEIVE_BOOT_COMPLETED', reason: 'Nothing is scheduled to survive a restart' });
-  }
-  // Location is never implied.
-  if (!active.has('location')) {
-    for (const s of ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION']) {
-      if (wanted.has(s)) { wanted.delete(s); dropped.push({ name: s, reason: 'Location capability is disabled' }); }
-    }
-  }
-  // Ads off => advertising ID must not be requested.
-  if (!active.has('ads') && wanted.has('AD_ID')) {
-    wanted.delete('AD_ID'); dropped.push({ name: 'AD_ID', reason: 'Advertisements are disabled' });
-  }
+  dropped.sort((a, b) => a.name.localeCompare(b.name));
 
   // ---- build the report ------------------------------------------------
   const permissions = [];
   for (const [name, info] of [...wanted.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const meta = PERMISSION_META[name] || {};
     const attrs = {};
+    // Some permissions are meaningless on newer Android; those are capped with
+    // android:maxSdkVersion rather than requested on every device.
     if (meta.maxSdk != null) attrs.maxSdkVersion = meta.maxSdk;
     permissions.push({
       name: `android.permission.${name}`,

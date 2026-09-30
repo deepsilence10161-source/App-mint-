@@ -22,6 +22,49 @@ Every build ends with a **real APK that was checked as a real file**: identity,
 target SDK, every permission, launcher icon, signature and alignment. A build is
 never reported as successful just because Gradle exited zero.
 
+## The Studio — use it from your phone
+
+**Open this link on your phone: https://deepsilence10161-source.github.io/App-mint-**
+
+That is the whole install. No app store, no account, no server. It is one
+self-contained HTML file (about 105 KB) with no external requests at all, so it
+works offline once loaded and nothing about it can break because a CDN went away.
+
+What you can do in it:
+
+| Section | What it does |
+|---|---|
+| **Design** | Name, package, colours, website address or bundled page |
+| **Features** | Turn native capabilities on and off; the permission table updates itself |
+| **Preview** | Portrait/landscape and light/dark, drawn from your theme |
+| **Build** | Run the five validation layers, see every finding with the exact field, fix what can be fixed safely, and start a build |
+
+There is only ever **one** project state. The Studio edits the Project
+Specification directly — the same object the CLI and CI read — so the editor and
+the build can never disagree about what your app is.
+
+### The Studio runs the real engine, not a copy
+
+`tools/build-studio.mjs` inlines `engine/spec/spec.mjs`,
+`engine/spec/toolchain.mjs` and `engine/capability/permissions.mjs` into the
+bundle. Those three modules import nothing but each other, so the code validating
+your project in the browser is byte-for-byte the code that validates it in CI.
+
+This was a deliberate choice. A second, simplified validator inside the editor
+would drift, and you would eventually be told "looks fine" by the Studio and
+"refused" by the build — the exact duplication this project is supposed to avoid.
+
+### Editing it
+
+```bash
+node tools/build-studio.mjs     # rebuild studio/app.html from studio/src/
+node tools/test-studio.mjs      # drive the real UI in a real browser (24 checks)
+```
+
+`studio/app.html` is committed even though it is generated, because it is the
+shipped artifact. CI fails if it is out of date with its sources, so it can never
+silently drift.
+
 ## Try it in one minute
 
 ```bash
@@ -126,8 +169,11 @@ compile SDK 36. So the toolchain is a compliance question, not a preference.
 
 ## Honest limitations
 
-- The interactive visual editor is not built yet. Today the specification is
-  edited as JSON, and everything downstream of it works.
+- The Studio edits the app as a whole (identity, theme, capabilities, content
+  source). It does **not** yet have a drag-and-drop screen designer or the
+  component library — `native-screens` mode is still schema-only.
+- The Studio can create a project and change it, but there is no screen-by-screen
+  builder yet, so a native-screens app cannot be assembled visually.
 - No emulator can run inside the development sandbox used to build this (no KVM),
   so device testing happens on GitHub Actions or on a real phone.
 - `native-screens` mode is defined in the schema but the component library behind
@@ -142,15 +188,21 @@ compile SDK 36. So the toolchain is a compliance question, not a preference.
 
 ```
 engine/
-  spec/spec.mjs            the specification: schema + 5 validation layers
-  spec/toolchain.mjs       verified AGP/Gradle pairs, shared by validator + generator
-  capability/permissions.mjs   capability → permission derivation
-  gen/android.mjs          specification → Android project
-  gen/java.mjs             Java sources (SchemeRouter, MainActivity, bridge)
-  gen/icon.mjs             launcher icons at every density
-  gen/png.mjs              dependency-free PNG encoder
-  cli.mjs                  command line entry point
-apps/demo/spec.json        reference project
-tools/e2e/                 on-device test driver, judge, report, verdict
-tools/tests/               engine self-tests
+  spec/spec.mjs                 the specification: schema + 5 validation layers
+  spec/toolchain.mjs            verified AGP/Gradle pairs, shared everywhere
+  capability/permissions.mjs    capability → permission derivation
+  gen/android.mjs               specification → Android project
+  gen/java.mjs                  Java sources (SchemeRouter, MainActivity, bridge)
+  gen/icon.mjs                  launcher icons at every density
+  gen/png.mjs                   dependency-free PNG encoder
+  cli.mjs                       command line entry point
+studio/
+  app.html                      the built Studio — one self-contained file
+  src/                          its sources
+apps/demo/                     reference project, with its own bundled page
+tools/
+  build-studio.mjs              bundles the Studio, inlining the real engine
+  test-studio.mjs               drives the Studio in a real browser
+  e2e/                          on-device driver, judge, report, verdict
+  tests/                        engine self-tests
 ```

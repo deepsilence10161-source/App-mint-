@@ -180,6 +180,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
           publish_branch: gh-pages
+          # Reports live under /report/ so they never overwrite the Studio that
+          # the other workflow publishes at the root.
+          destination_dir: report
           keep_files: true
 
       # The honest gate. The job is red unless every blocking check passed.

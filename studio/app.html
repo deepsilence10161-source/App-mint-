@@ -1,0 +1,2165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070B16">
+<meta name="description" content="App Mint Studio — design an Android app from your phone. Free, offline, no account, no AI.">
+<title>App Mint Studio</title>
+<style>/* ============================================================================
+   App Mint Studio — design system
+   Mobile-first, because the Studio is used from a phone.
+   No external fonts, no CDN, no images: everything is inline SVG or system
+   fonts, so the whole thing works offline.
+   ========================================================================= */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  /* ── colour tokens ─────────────────────────────────────────────────────── */
+  --bg:          #070B16;
+  --bg-raised:   #0E1424;
+  --card:        #141B2E;
+  --card-hi:     #1B2338;
+  --line:        #232D47;
+  --line-soft:   #1A2237;
+  --fg:          #E9EEFB;
+  --fg-dim:      #98A6C2;
+  --fg-faint:    #64748B;
+
+  --brand:       #38BDF8;
+  --brand-ink:   #04212E;
+  --brand-soft:  rgba(56, 189, 248, .12);
+
+  --pass:   #34D399;
+  --warn:   #FBBF24;
+  --fail:   #FB7185;
+  --info:   #93C5FD;
+
+  /* ── spacing scale (4pt) ───────────────────────────────────────────────── */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 20px; --s6: 24px; --s8: 32px; --s10: 40px;
+
+  /* ── radius scale ──────────────────────────────────────────────────────── */
+  --r1: 6px; --r2: 10px; --r3: 14px; --r4: 18px; --r5: 24px; --rpill: 999px;
+
+  /* ── type scale ────────────────────────────────────────────────────────── */
+  --t-xs: 11px; --t-sm: 12.5px; --t-md: 14px; --t-lg: 16px;
+  --t-xl: 20px; --t-2xl: 26px;
+
+  /* ── motion. Short, and only where it communicates state. ──────────────── */
+  --ease: cubic-bezier(.2, .8, .25, 1);
+  --fast: 120ms; --med: 200ms;
+
+  --tap: 44px; /* minimum touch target */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Anything scrolled into view must clear the fixed bottom navigation.
+     Without this, a control near the end of a page lands behind the tab bar and
+     cannot be tapped — found when a browser test could not click the advanced
+     section. */
+  scroll-padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: var(--t-md);
+  line-height: 1.5;
+  min-height: 100dvh;
+  overscroll-behavior-y: contain;
+}
+
+/* ── layout ──────────────────────────────────────────────────────────────── */
+.app { display: flex; flex-direction: column; min-height: 100dvh; max-width: 720px; margin-inline: auto; }
+
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: var(--s3);
+  padding: max(var(--s3), env(safe-area-inset-top)) var(--s4) var(--s3);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line-soft);
+}
+.topbar h1 { font-size: var(--t-lg); margin: 0; font-weight: 700; letter-spacing: -.01em; flex: 1; min-width: 0; }
+.topbar .proj { display: block; font-size: var(--t-xs); color: var(--fg-faint); font-weight: 500; letter-spacing: 0; }
+
+.mark {
+  width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--brand), #818CF8);
+}
+
+main { flex: 1; padding: var(--s4) var(--s4) calc(128px + env(safe-area-inset-bottom)); }
+
+.tabpage { display: none; animation: rise var(--med) var(--ease); }
+.tabpage.on { display: block; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── bottom navigation ───────────────────────────────────────────────────── */
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+  display: flex; justify-content: center; gap: 2px;
+  padding: var(--s2) var(--s2) max(var(--s2), env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--bg-raised) 94%, transparent);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+}
+.tabbar .inner { display: flex; width: 100%; max-width: 720px; }
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: none; border: 0; color: var(--fg-faint);
+  font-size: var(--t-xs); font-weight: 600; font-family: inherit;
+  padding: var(--s2) 0; min-height: var(--tap); cursor: pointer;
+  border-radius: var(--r2); transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.tab svg { width: 20px; height: 20px; stroke-width: 1.9; }
+.tab[aria-selected="true"] { color: var(--brand); background: var(--brand-soft); }
+.tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ── cards ───────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r4);
+  padding: var(--s4); margin-bottom: var(--s3);
+}
+.card > h2 {
+  font-size: var(--t-sm); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--fg-dim); margin: 0 0 var(--s3);
+}
+.card .hint { font-size: var(--t-sm); color: var(--fg-faint); margin: 0 0 var(--s3); }
+.card.flat { background: var(--bg-raised); }
+
+/* ── form controls ───────────────────────────────────────────────────────── */
+.field { margin-bottom: var(--s4); }
+.field:last-child { margin-bottom: 0; }
+.field > label {
+  display: block; font-size: var(--t-sm); font-weight: 600;
+  color: var(--fg-dim); margin-bottom: var(--s2);
+}
+.field .sub { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 5px; display: block; }
+
+input[type=text], input[type=url], input[type=number], input[type=password], select, textarea {
+  width: 100%; font-family: inherit; font-size: var(--t-md);
+  color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--r2);
+  padding: 12px 13px; min-height: var(--tap);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+input::placeholder { color: var(--fg-faint); }
+select { appearance: none; background-image: none; padding-right: 34px; }
+.selectwrap { position: relative; }
+.selectwrap::after {
+  content: ""; position: absolute; right: 13px; top: 50%;
+  width: 7px; height: 7px; margin-top: -5px; pointer-events: none;
+  border-right: 2px solid var(--fg-faint); border-bottom: 2px solid var(--fg-faint);
+  transform: rotate(45deg);
+}
+textarea { min-height: 96px; resize: vertical; font-size: var(--t-sm); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  font-family: inherit; font-size: var(--t-md); font-weight: 650;
+  border-radius: var(--r2); border: 1px solid transparent;
+  padding: 13px 18px; min-height: var(--tap); cursor: pointer;
+  transition: transform var(--fast) var(--ease), opacity var(--fast) var(--ease);
+  width: 100%;
+}
+.btn:active { transform: scale(.985); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--brand); color: var(--brand-ink); }
+.btn.ghost { background: var(--card-hi); color: var(--fg); border-color: var(--line); }
+.btn.danger { background: transparent; color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, transparent); }
+.btn.sm { padding: 9px 13px; font-size: var(--t-sm); min-height: 38px; width: auto; }
+.row { display: flex; gap: var(--s2); }
+.row > * { flex: 1; }
+
+/* ── switch ──────────────────────────────────────────────────────────────── */
+.opt {
+  display: flex; align-items: flex-start; gap: var(--s3);
+  padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft);
+}
+.opt:last-child { border-bottom: 0; }
+.opt .txt { flex: 1; min-width: 0; }
+.opt .name { font-size: var(--t-md); font-weight: 600; }
+.opt .why { font-size: var(--t-sm); color: var(--fg-faint); margin-top: 2px; }
+.opt .cost { font-size: var(--t-xs); color: var(--warn); margin-top: 4px; display: block; }
+
+.sw { flex: 0 0 auto; position: relative; width: 46px; height: 28px; margin-top: 2px; }
+.sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.sw .track {
+  position: absolute; inset: 0; border-radius: var(--rpill);
+  background: var(--line); transition: background var(--med) var(--ease); pointer-events: none;
+}
+.sw .knob {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--fg-dim); transition: transform var(--med) var(--ease), background var(--med) var(--ease);
+  pointer-events: none;
+}
+.sw input:checked ~ .track { background: var(--brand); }
+.sw input:checked ~ .knob { transform: translateX(18px); background: #fff; }
+.sw input:focus-visible ~ .track { box-shadow: 0 0 0 3px var(--brand-soft); }
+
+/* ── colour swatch ───────────────────────────────────────────────────────── */
+.swatch { display: flex; align-items: center; gap: var(--s3); }
+.swatch input[type=color] {
+  width: 46px; height: 46px; padding: 2px; border: 1px solid var(--line);
+  border-radius: var(--r2); background: var(--bg); cursor: pointer; flex: 0 0 auto;
+}
+.swatch input[type=text] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--t-sm); text-transform: uppercase; }
+
+/* ── chips ───────────────────────────────────────────────────────────────── */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.chip {
+  font-size: var(--t-xs); font-weight: 650; padding: 5px 10px; border-radius: var(--rpill);
+  background: var(--card-hi); color: var(--fg-dim); border: 1px solid var(--line);
+}
+.chip.pass { color: var(--pass); border-color: color-mix(in srgb, var(--pass) 35%, transparent); background: color-mix(in srgb, var(--pass) 12%, transparent); }
+.chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.chip.fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 35%, transparent); background: color-mix(in srgb, var(--fail) 12%, transparent); }
+
+/* ── findings ────────────────────────────────────────────────────────────── */
+.finding { display: flex; gap: var(--s3); padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); }
+.finding:last-child { border-bottom: 0; }
+.finding .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; flex: 0 0 auto; }
+.finding .dot.critical, .finding .dot.error { background: var(--fail); }
+.finding .dot.warning { background: var(--warn); }
+.finding .dot.info { background: var(--info); }
+.finding .msg { font-size: var(--t-md); }
+.finding .meta { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.finding .fixbtn { margin-top: var(--s2); }
+
+.layerline {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s2) 0; font-size: var(--t-sm);
+}
+.layerline .nm { flex: 1; color: var(--fg-dim); }
+.layerline .n { color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+
+/* ── permission table ────────────────────────────────────────────────────── */
+.perm { padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); }
+.perm:last-child { border-bottom: 0; }
+.perm .top { display: flex; align-items: baseline; gap: var(--s2); flex-wrap: wrap; }
+.perm .pname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--t-sm); font-weight: 600; }
+.perm .why { font-size: var(--t-sm); color: var(--fg-dim); margin-top: 3px; }
+.perm .feat { font-size: var(--t-xs); color: var(--fg-faint); margin-top: 2px; }
+.dropped { font-size: var(--t-sm); color: var(--fg-faint); padding: 4px 0; }
+.dropped code { color: var(--fg-dim); }
+
+/* ── device preview ──────────────────────────────────────────────────────── */
+.stage { display: flex; justify-content: center; padding: var(--s2) 0 var(--s4); }
+.device {
+  position: relative; width: 264px; height: 552px; flex: 0 0 auto;
+  border-radius: 38px; padding: 10px;
+  background: #05070d; border: 1px solid var(--line);
+  box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04);
+  transition: width var(--med) var(--ease), height var(--med) var(--ease);
+}
+.device.landscape { width: 480px; height: 250px; border-radius: 26px; }
+.device .notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 62px; height: 5px; border-radius: var(--rpill); background: #1c2333; z-index: 3;
+}
+.device.landscape .notch { width: 5px; height: 46px; top: 50%; left: 12px; transform: translateY(-50%); }
+.screen {
+  width: 100%; height: 100%; border-radius: 28px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column;
+  background: var(--pv-bg, #fff); color: var(--pv-fg, #111);
+}
+.device.landscape .screen { border-radius: 18px; }
+
+.sbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 14px 3px; font-size: 10px; font-weight: 700;
+  color: var(--pv-sb, #111); flex: 0 0 auto;
+}
+.sbar .icons { display: flex; gap: 4px; align-items: center; }
+.sbar .icons i { display: block; background: currentColor; border-radius: 1px; }
+.sbar .sig { width: 12px; height: 8px; clip-path: polygon(0 100%, 100% 0, 100% 100%); }
+.sbar .batt { width: 17px; height: 8px; border-radius: 2px; opacity: .9; }
+
+.pv-body { flex: 1; overflow-y: auto; padding: 10px 13px; }
+.pv-body::-webkit-scrollbar { width: 0; }
+.pv-h1 { font-size: 17px; font-weight: 700; margin: 4px 0 5px; letter-spacing: -.01em; }
+.pv-p { font-size: 11.5px; opacity: .68; margin: 0 0 11px; line-height: 1.45; }
+.pv-card {
+  border-radius: 11px; padding: 10px; margin-bottom: 8px;
+  border: 1px solid color-mix(in srgb, var(--pv-fg) 12%, transparent);
+  background: color-mix(in srgb, var(--pv-fg) 5%, transparent);
+}
+.pv-card .t { font-size: 12px; font-weight: 650; margin: 0 0 4px; }
+.pv-card .d { font-size: 10.5px; opacity: .6; margin: 0; line-height: 1.4; }
+.pv-btn {
+  display: block; width: 100%; text-align: center; font-size: 12px; font-weight: 650;
+  padding: 10px; border-radius: 9px; border: 0; margin-bottom: 7px;
+  background: var(--pv-primary, #2563eb); color: var(--pv-onprimary, #fff);
+}
+.pv-btn.ghost { background: color-mix(in srgb, var(--pv-fg) 9%, transparent); color: var(--pv-fg); }
+.pv-tabs {
+  display: flex; flex: 0 0 auto;
+  border-top: 1px solid color-mix(in srgb, var(--pv-fg) 12%, transparent);
+  background: color-mix(in srgb, var(--pv-fg) 4%, transparent);
+}
+.pv-tabs div { flex: 1; text-align: center; padding: 8px 0 9px; font-size: 9.5px; opacity: .55; }
+.pv-tabs div.on { opacity: 1; color: var(--pv-primary); font-weight: 700; }
+.pv-nav { height: 3.5px; flex: 0 0 auto; background: color-mix(in srgb, var(--pv-fg) 22%, transparent); margin: auto 34% 6px; border-radius: 3px; }
+
+.skel { border-radius: 7px; background: color-mix(in srgb, var(--pv-fg) 11%, transparent); margin-bottom: 7px; }
+
+.pv-note {
+  text-align: center; font-size: var(--t-xs); color: var(--fg-faint);
+  margin: 0 0 var(--s4); line-height: 1.5;
+}
+
+/* ── status strip ────────────────────────────────────────────────────────── */
+.health {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s4); font-size: var(--t-sm);
+  border-bottom: 1px solid var(--line-soft); font-weight: 600;
+}
+.health .spacer { flex: 1; }
+.health .val { font-variant-numeric: tabular-nums; }
+
+.empty { text-align: center; padding: var(--s8) var(--s4); color: var(--fg-faint); }
+.empty .big { font-size: var(--t-lg); color: var(--fg-dim); font-weight: 600; margin-bottom: var(--s2); }
+
+.tpl {
+  display: flex; align-items: center; gap: var(--s3); width: 100%;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r3);
+  padding: var(--s3) var(--s4); margin-bottom: var(--s2); cursor: pointer;
+  text-align: left; font-family: inherit; color: var(--fg); min-height: var(--tap);
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.tpl:hover { background: var(--card-hi); border-color: var(--brand); }
+.tpl .tmark { width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto; display: grid; place-items: center; background: var(--brand-soft); color: var(--brand); }
+.tpl .tmark svg { width: 18px; height: 18px; stroke-width: 1.8; }
+.tpl .tname { font-weight: 650; font-size: var(--t-md); }
+.tpl .ttag { font-size: var(--t-sm); color: var(--fg-faint); }
+
+.runrow {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) 0; border-bottom: 1px solid var(--line-soft); font-size: var(--t-sm);
+}
+.runrow:last-child { border-bottom: 0; }
+.runrow .rname { flex: 1; font-weight: 600; }
+.runrow .rstate { font-weight: 700; font-size: var(--t-xs); }
+.rstate.success { color: var(--pass); }
+.rstate.failure { color: var(--fail); }
+.rstate.in_progress { color: var(--warn); }
+.rstate.queued { color: var(--fg-faint); }
+
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.banner {
+  display: flex; gap: var(--s3); padding: var(--s3) var(--s4);
+  border-radius: var(--r3); font-size: var(--t-sm); margin-bottom: var(--s3);
+  border: 1px solid var(--line);
+}
+.banner.warn { background: color-mix(in srgb, var(--warn) 10%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+.banner.fail { background: color-mix(in srgb, var(--fail) 10%, transparent); border-color: color-mix(in srgb, var(--fail) 32%, transparent); }
+.banner.pass { background: color-mix(in srgb, var(--pass) 10%, transparent); border-color: color-mix(in srgb, var(--pass) 32%, transparent); }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 12px); z-index: 60;
+  background: var(--card-hi); color: var(--fg); border: 1px solid var(--line);
+  padding: 11px 17px; border-radius: var(--rpill); font-size: var(--t-sm); font-weight: 600;
+  box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  opacity: 0; pointer-events: none; transition: opacity var(--med) var(--ease), transform var(--med) var(--ease);
+  max-width: 88vw; text-align: center;
+}
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+details.adv { border-top: 1px solid var(--line-soft); margin-top: var(--s3); padding-top: var(--s3); }
+details.adv > summary {
+  cursor: pointer; font-size: var(--t-sm); font-weight: 650; color: var(--fg-dim);
+  list-style: none; min-height: 34px; display: flex; align-items: center; gap: var(--s2);
+}
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::before { content: "▸"; color: var(--fg-faint); transition: transform var(--fast) var(--ease); }
+details.adv[open] > summary::before { transform: rotate(90deg); }
+details.adv > *:not(summary) { margin-top: var(--s3); }
+
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+</style>
+<meta name="appmint-build" content="26c537d2d79a859f">
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>App Mint Studio<span class="proj" id="projname">Loading…</span></h1>
+    <button class="btn ghost sm" id="importproj" aria-label="Import a specification">Import</button>
+    <button class="btn ghost sm" id="newproj" aria-label="New project">New</button>
+  </header>
+
+  <div class="health" id="health" role="status" aria-live="polite"></div>
+
+  <main id="main">
+    <div class="empty">
+      <div class="big">Starting up…</div>
+      <p>If this message stays, the browser blocked the scripts.</p>
+    </div>
+  </main>
+</div>
+
+<nav class="tabbar" role="tablist" aria-label="Sections">
+  <div class="inner"></div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+/* ═══ engine/spec/toolchain.mjs ═══ */
+/**
+ * TOOLCHAIN PROFILES — single source of truth
+ * ==========================================
+ * Shared by the generator and the validator so the two can never disagree
+ * about what a given AGP/Gradle pair can actually compile.
+ *
+ * Every version below was checked against Google Maven and services.gradle.org
+ * on 2026-09-30. The `maxCompileSdk` values are the ones proven by a real build
+ * in .github/workflows/ — not copied from a table.
+ *
+ * Why this exists at all: Google Play has required API 36 (Android 16) for new
+ * apps and all updates since 31 Aug 2026, and AGP 8.4.x physically cannot
+ * compile SDK 36. So "which toolchain" is a compliance question, not a taste
+ * question.
+ */
+
+const TOOLCHAIN_PROFILES = {
+  modern: {
+    agp: '8.13.2',
+    gradle: '8.13',
+    buildTools: '36.0.0',
+    jdk: '17',
+    maxCompileSdk: 36,
+    label: 'Modern — Play-compliant (compileSdk 36)',
+  },
+  bleeding: {
+    agp: '9.4.1',
+    gradle: '9.6.0',
+    buildTools: '36.0.0',
+    jdk: '17',
+    maxCompileSdk: 37,
+    label: 'Newest — AGP 9.x (compileSdk 37)',
+  },
+  legacy: {
+    agp: '8.4.2',
+    gradle: '8.6',
+    buildTools: '34.0.0',
+    jdk: '17',
+    maxCompileSdk: 34,
+    label: 'Legacy — compileSdk 34, NOT Play-compliant',
+  },
+};
+
+const DEFAULT_PROFILE = 'modern';
+
+/** Which profile does this AGP version belong to? */
+function profileForAgp(agp) {
+  if (!agp) return DEFAULT_PROFILE;
+  for (const [name, p] of Object.entries(TOOLCHAIN_PROFILES)) {
+    if (p.agp === agp) return name;
+  }
+  const major = parseInt(String(agp).split('.')[0], 10);
+  if (major >= 9) return 'bleeding';
+  if (major >= 8 && parseInt(String(agp).split('.')[1] || '0', 10) >= 9) return 'modern';
+  return 'legacy';
+}
+
+/** Pick the lowest profile that can reach the requested compileSdk. */
+function profileForCompileSdk(sdk) {
+  const order = ['legacy', 'modern', 'bleeding'];
+  for (const name of order) {
+    if (TOOLCHAIN_PROFILES[name].maxCompileSdk >= sdk) return name;
+  }
+  return 'bleeding';
+}
+
+/** Resolve the effective toolchain for a spec: explicit toolchain wins. */
+function resolveToolchain(spec) {
+  const tc = (spec.build || {}).toolchain || {};
+  const name = tc.agp ? profileForAgp(tc.agp) : profileForCompileSdk((spec.android || {}).compileSdk ?? 36);
+  return { name, ...TOOLCHAIN_PROFILES[name], ...tc };
+}
+
+
+/* ═══ engine/spec/spec.mjs ═══ */
+/**
+ * PROJECT1 STUDIO — Project Specification: Schema + 5-Layer Validation
+ * =====================================================================
+ * The Project Specification is the SINGLE SOURCE OF TRUTH. The visual editor,
+ * the generator and the build pipeline all read and write this one object.
+ * There is deliberately no second "editor-only" state.
+ *
+ * Validation layers (spec §BUILD ACCURACY SYSTEM):
+ *   L1 SCHEMA     - types, required fields, formats
+ *   L2 SEMANTIC   - values that are individually valid but jointly wrong
+ *   L3 DEPENDENCY - capabilities/navigation/screens referencing things that
+ *                   do not exist; contradictory combinations
+ *   L4 SECURITY   - cleartext, exported components, unsafe schemes, secrets
+ *   L5 CAPABILITY - what the selected build engine can actually produce
+ *
+ * Zero dependencies. Deterministic. No AI. Runs offline.
+ *
+ * Every issue carries: severity, code, field path, message, and (where a
+ * deterministic repair exists) a `fix` object that can be applied and undone.
+ */
+
+const SPEC_VERSION = '1.0';
+
+/* ------------------------------------------------------------------ *
+ * CAPABILITY REGISTRY
+ * The single authority for what a capability is, which Android permission
+ * it needs, and why. Permissions are DERIVED, never hand-written.
+ * ------------------------------------------------------------------ */
+const CAPABILITIES = {
+  internet:        { label: 'Internet access',        permissions: ['INTERNET', 'ACCESS_NETWORK_STATE'], reason: 'Required by every network feature', implicit: true },
+  notifications:   { label: 'Notifications',          permissions: ['POST_NOTIFICATIONS'], reason: 'Lets the app show reminders and alerts', minSdk: 33 },
+  exactAlarms:     { label: 'Exact reminders',        permissions: ['SCHEDULE_EXACT_ALARM', 'RECEIVE_BOOT_COMPLETED'], reason: 'Fires reminders at the exact time, and restores them after reboot' },
+  share:           { label: 'Share to other apps',    permissions: [], reason: 'Uses the system share sheet; no permission required' },
+  clipboard:       { label: 'Clipboard',              permissions: [], reason: 'Copy/paste text; Android restricts background reads automatically' },
+  vibration:       { label: 'Vibration',              permissions: ['VIBRATE'], reason: 'Haptic feedback on interaction' },
+  files:           { label: 'File upload/download',   permissions: ['READ_EXTERNAL_STORAGE', 'WRITE_EXTERNAL_STORAGE'], reason: 'Reading and saving files the user picks', maxSdk: 32 },
+  barcode:         { label: 'Barcode / QR scanning',  permissions: ['CAMERA'], reason: 'Camera is required to scan a code' },
+  tts:             { label: 'Text to speech',         permissions: [], reason: 'Reads text aloud via the system TTS engine' },
+  mediaSession:    { label: 'Media playback control', permissions: [], reason: 'Lock-screen and notification media controls' },
+  deepLinks:       { label: 'Deep links',             permissions: [], reason: 'Opens the app from an https/tel/mailto/upi link' },
+  telephone:       { label: 'Tap to call',            permissions: [], reason: 'Opens the dialer; the user still presses call' },
+  email:           { label: 'Send email',             permissions: [], reason: 'Opens the mail composer; user still presses send' },
+  upi:             { label: 'UPI payments',           permissions: [], reason: 'Hands off to the installed UPI app; no payment data touches this app' },
+  screenSecurity:  { label: 'Block screenshots',      permissions: [], reason: 'FLAG_SECURE hides content in screenshots and recents' },
+  ads:             { label: 'Advertisements',         permissions: ['INTERNET', 'ACCESS_NETWORK_STATE', 'AD_ID'], reason: 'Ads require network and the advertising ID', disclosure: 'Adds tracking. Off by default.' },
+  payments:        { label: 'In-app purchases',       permissions: ['INTERNET', 'ACCESS_NETWORK_STATE', 'com.android.vending.BILLING'], reason: 'Play Billing requires the billing permission', requiresServer: true },
+  googleAuth:      { label: 'Google Sign-In',         permissions: ['INTERNET', 'ACCESS_NETWORK_STATE'], reason: 'Google identity requires network; signing SHA-1 must be registered', requiresSetup: 'Register your signing SHA-1 in the Google/Firebase console' },
+  camera:          { label: 'Camera capture',         permissions: ['CAMERA'], reason: 'Capturing a photo requires the camera' },
+  location:        { label: 'Location',               permissions: ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION'], reason: 'Fine and coarse location are requested together', highRisk: true },
+  bootStart:       { label: 'Restore after reboot',   permissions: ['RECEIVE_BOOT_COMPLETED'], reason: 'Re-registers scheduled work after the device restarts' },
+};
+
+/* ------------------------------------------------------------------ *
+ * SCHEMA (L1) — declarative, dependency-free
+ * ------------------------------------------------------------------ */
+const PACKAGE_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
+const RESERVED_PACKAGE_WORDS = ['android', 'com.android', 'java', 'javax', 'kotlin', 'kotlinx'];
+const SCHEME_RE = /^[a-z][a-z0-9+.-]*$/;
+const HEX_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const URL_RE = /^https?:\/\/[^\s]+$/;
+
+const SCHEMA = {
+  required: ['specVersion', 'identity', 'android', 'app'],
+  fields: {
+    specVersion: { type: 'string', oneOf: [SPEC_VERSION], label: 'Specification version' },
+    identity: {
+      type: 'object', required: ['appName', 'packageName'],
+      fields: {
+        appName:     { type: 'string', minLength: 1, maxLength: 60, label: 'Application name' },
+        packageName: { type: 'string', pattern: PACKAGE_RE, maxLength: 120, label: 'Package name' },
+        versionName: { type: 'string', pattern: /^\d+(\.\d+){0,3}$/, label: 'Version name' },
+        versionCode: { type: 'integer', min: 1, max: 2100000000, label: 'Version code' },
+        versionStrategy: { type: 'string', oneOf: ['manual', 'git-commit-count'], label: 'Version source' },
+        description: { type: 'string', maxLength: 4000 },
+      },
+    },
+    android: {
+      type: 'object', required: ['minSdk', 'targetSdk'],
+      fields: {
+        minSdk:   { type: 'integer', min: 21, max: 36, label: 'Minimum Android version' },
+        targetSdk: { type: 'integer', min: 21, max: 36, label: 'Target Android version' },
+        compileSdk: { type: 'integer', min: 21, max: 36 },
+        orientation: { type: 'string', oneOf: ['portrait', 'landscape', 'sensor', 'unspecified'] },
+        theme: { type: 'string', oneOf: ['light', 'dark', 'system'] },
+        allowBackup: { type: 'boolean' },
+        cleartextTraffic: { type: 'boolean' },
+      },
+    },
+    app: {
+      type: 'object', required: ['mode'],
+      fields: {
+        mode: { type: 'string', oneOf: ['webview', 'pwa', 'hybrid', 'native-screens'], label: 'Application architecture' },
+        webview: {
+          type: 'object',
+          fields: {
+            startUrl:     { type: 'string', pattern: URL_RE, label: 'Start URL' },
+            allowedHosts: { type: 'array', of: 'string', label: 'Allowed hosts' },
+            offlinePage:  { type: 'boolean', label: 'Offline fallback page' },
+            fileUploads:  { type: 'boolean' },
+            zoom:         { type: 'boolean' },
+            forceDark:    { type: 'boolean', label: 'Force dark web content' },
+            canvasBackground: { type: 'string', pattern: HEX_RE, label: 'Web canvas colour' },
+            acceptLanguage: { type: 'string', maxLength: 40, label: 'Accept-Language header' },
+            localAsset:   { type: 'string', maxLength: 200, label: 'Bundled start page' },
+            userAgentSuffix: { type: 'string', maxLength: 60 },
+            javascriptEnabled: { type: 'boolean' },
+            domStorage:   { type: 'boolean' },
+            externalLinks: { type: 'string', oneOf: ['in-app', 'custom-tab', 'external-browser'] },
+          },
+        },
+        splash: { type: 'object', fields: {
+          enabled: { type: 'boolean' },
+          backgroundColor: { type: 'string', pattern: HEX_RE },
+          durationMs: { type: 'integer', min: 0, max: 5000 },
+        } },
+      },
+    },
+    capabilities: { type: 'array', of: 'string', label: 'Native capabilities' },
+    theme: {
+      type: 'object',
+      fields: {
+        primary:   { type: 'string', pattern: HEX_RE, label: 'Primary colour' },
+        onPrimary: { type: 'string', pattern: HEX_RE },
+        background: { type: 'string', pattern: HEX_RE },
+        surface:   { type: 'string', pattern: HEX_RE },
+        onSurface: { type: 'string', pattern: HEX_RE },
+        accent:    { type: 'string', pattern: HEX_RE },
+        statusBarStyle: { type: 'string', oneOf: ['light', 'dark'] },
+      },
+    },
+    build: {
+      type: 'object',
+      fields: {
+        engine: { type: 'string', oneOf: ['github-actions', 'local-termux', 'local-desktop'], label: 'Build engine' },
+        outputs: { type: 'array', of: 'string', label: 'Requested outputs', members: ['debug-apk', 'release-apk', 'signed-apk', 'aab'] },
+        minify: { type: 'boolean' },
+        abiSplits: { type: 'boolean' },
+        cache: { type: 'boolean' },
+        r8: { type: 'boolean' },
+        toolchain: { type: 'object', fields: {
+          agp: { type: 'string' }, gradle: { type: 'string' }, buildTools: { type: 'string' }, jdk: { type: 'string' },
+        } },
+      },
+    },
+    signing: {
+      type: 'object',
+      fields: {
+        mode: { type: 'string', oneOf: ['none', 'debug', 'secret-store'], label: 'Signing' },
+        failClosed: { type: 'boolean', label: 'Refuse to build if the keystore is missing' },
+        storeFileSecretName: { type: 'string' },
+      },
+    },
+    backend: {
+      type: 'object',
+      fields: {
+        kind: { type: 'string', oneOf: ['none', 'supabase', 'firebase', 'custom-rest'], label: 'Backend' },
+        url: { type: 'string' },
+        requiresAuth: { type: 'boolean' },
+        tablesRequiringRls: { type: 'array', of: 'string' },
+      },
+    },
+    screens: { type: 'array', of: 'object', label: 'Screens' },
+    navigation: { type: 'object', fields: {
+      type: { type: 'string', oneOf: ['none', 'bottom-tabs', 'drawer', 'stack'] },
+    } },
+    deepLinks: {
+      type: 'object',
+      fields: {
+        customScheme: { type: 'string', pattern: SCHEME_RE },
+        hosts: { type: 'array', of: 'string' },
+        allowedSchemes: { type: 'array', of: 'string' },
+      },
+    },
+  },
+};
+
+/* ------------------------------------------------------------------ *
+ * DEFAULT SPEC — what "start from blank" means
+ * ------------------------------------------------------------------ */
+function defaultSpec() {
+  return {
+    specVersion: SPEC_VERSION,
+    identity: {
+      appName: 'My App',
+      packageName: 'com.example.myapp',
+      versionName: '1.0.0',
+      versionCode: 1,
+      versionStrategy: 'manual',
+    },
+    android: {
+      minSdk: 24,
+      targetSdk: 36,
+      compileSdk: 36,
+      orientation: 'portrait',
+      theme: 'system',
+      allowBackup: false,
+      cleartextTraffic: false,
+    },
+    app: {
+      mode: 'webview',
+      webview: {
+        startUrl: 'https://example.com',
+        allowedHosts: [],
+        offlinePage: true,
+        fileUploads: true,
+        zoom: false,
+        forceDark: false,
+        canvasBackground: '#FFFFFF',
+        javascriptEnabled: true,
+        domStorage: true,
+        externalLinks: 'custom-tab',
+      },
+      splash: { enabled: true, backgroundColor: '#0B1020', durationMs: 600 },
+    },
+    capabilities: [],
+    theme: {
+      primary: '#2563EB', onPrimary: '#FFFFFF',
+      background: '#0B1020', surface: '#151B2E', onSurface: '#E8ECF8',
+      accent: '#22D3EE', statusBarStyle: 'dark',
+    },
+    build: {
+      engine: 'github-actions',
+      outputs: ['debug-apk'],
+      minify: false,
+      abiSplits: false,
+      cache: true,
+      r8: false,
+    },
+    signing: { mode: 'debug', failClosed: true },
+    backend: { kind: 'none' },
+    screens: [],
+    navigation: { type: 'none' },
+    deepLinks: { allowedSchemes: ['https', 'tel', 'mailto', 'upi'] },
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * HELPERS
+ * ------------------------------------------------------------------ */
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+function checkType(val, def, path, out) {
+  switch (def.type) {
+    case 'string':
+      if (typeof val !== 'string') { out.push(issue('E_TYPE', 'error', path, `Expected text, got ${Array.isArray(val) ? 'list' : typeof val}.`)); return false; }
+      if (def.minLength != null && val.length < def.minLength) out.push(issue('E_MINLEN', 'error', path, `Must be at least ${def.minLength} character(s).`));
+      if (def.maxLength != null && val.length > def.maxLength) out.push(issue('E_MAXLEN', 'error', path, `Must be at most ${def.maxLength} characters (currently ${val.length}).`));
+      if (def.pattern && !def.pattern.test(val)) out.push(issue('E_FORMAT', 'error', path, `"${val}" is not in the expected format.`));
+      if (def.oneOf && !def.oneOf.includes(val)) out.push(issue('E_ENUM', 'error', path, `"${val}" is not one of: ${def.oneOf.join(', ')}.`, { options: def.oneOf }));
+      if (def.members && !def.members.includes(val)) out.push(issue('E_ENUM', 'error', path, `"${val}" is not one of: ${def.members.join(', ')}.`));
+      return true;
+    case 'integer':
+      if (!Number.isInteger(val)) { out.push(issue('E_TYPE', 'error', path, `Expected a whole number, got ${typeof val === 'number' ? val : typeof val}.`)); return false; }
+      if (def.min != null && val < def.min) out.push(issue('E_RANGE', 'error', path, `${val} is below the minimum of ${def.min}.`, { min: def.min }));
+      if (def.max != null && val > def.max) out.push(issue('E_RANGE', 'error', path, `${val} is above the maximum of ${def.max}.`, { max: def.max }));
+      return true;
+    case 'boolean':
+      if (typeof val !== 'boolean') { out.push(issue('E_TYPE', 'error', path, `Expected true or false, got ${typeof val}.`)); return false; }
+      return true;
+    case 'array': {
+      if (!Array.isArray(val)) { out.push(issue('E_TYPE', 'error', path, `Expected a list, got ${typeof val}.`)); return false; }
+      if (def.of && def.of !== 'object') val.forEach((v, i) => checkType(v, { type: def.of }, `${path}[${i}]`, out));
+      return true;
+    }
+    case 'object': {
+      if (!isObj(val)) { out.push(issue('E_TYPE', 'error', path, `Expected a group of settings, got ${Array.isArray(val) ? 'list' : typeof val}.`)); return false; }
+      if (def.required) for (const r of def.required) if (val[r] === undefined) out.push(issue('E_REQUIRED', 'error', `${path}.${r}`, `Missing required value.`));
+      if (def.fields) for (const [k, sub] of Object.entries(def.fields)) if (val[k] !== undefined) checkType(val[k], sub, `${path}.${k}`, out);
+      return true;
+    }
+    default: return true;
+  }
+}
+
+let CODES = 0;
+function issue(code, severity, path, message, extra = {}) {
+  return { id: `${code}-${++CODES}`, code, severity, path, message, ...extra };
+}
+
+/* ------------------------------------------------------------------ *
+ * THE FIVE LAYERS
+ * ------------------------------------------------------------------ */
+
+/** L1 — SCHEMA: shape, types, formats, required fields. */
+function layer1Schema(spec, out) {
+  if (!isObj(spec)) { out.push(issue('E_NOTOBJECT', 'error', '', 'The project specification must be a group of settings.')); return; }
+  for (const r of SCHEMA.required) if (spec[r] === undefined) out.push(issue('E_REQUIRED', 'error', r, `Missing required section "${r}".`));
+  for (const [k, def] of Object.entries(SCHEMA.fields)) if (spec[k] !== undefined) checkType(spec[k], def, k, out);
+}
+
+/** L2 — SEMANTIC: values valid alone but wrong together. */
+function layer2Semantic(spec, out) {
+  const id = spec.identity || {}, a = spec.android || {}, app = spec.app || {}, b = spec.build || {};
+
+  if (id.packageName && RESERVED_PACKAGE_WORDS.some((w) => id.packageName === w || id.packageName.startsWith(w + '.')))
+    out.push(issue('E_RESERVED_PKG', 'error', 'identity.packageName',
+      `The package name starts with a reserved namespace ("${id.packageName.split('.').slice(0, 2).join('.')}"). Google Play rejects these.`,
+      { fix: { kind: 'set', path: 'identity.packageName', value: 'com.example.' + (id.packageName.split('.').pop() || 'app') } }));
+
+  if (id.packageName && /(app|example)$/i.test(id.packageName.split('.').pop()) && id.packageName.startsWith('com.example'))
+    out.push(issue('W_DEFAULT_PKG', 'warning', 'identity.packageName',
+      'This is still the placeholder package name. It is permanent once published — change it before your first release.'));
+
+  if (a.minSdk && a.targetSdk && a.minSdk > a.targetSdk)
+    out.push(issue('E_SDK_ORDER', 'error', 'android.minSdk',
+      `Minimum SDK (${a.minSdk}) is higher than target SDK (${a.targetSdk}). No device could ever run this.`,
+      { fix: { kind: 'set', path: 'android.minSdk', value: a.targetSdk } }));
+
+  if (a.targetSdk && a.compileSdk && a.targetSdk > a.compileSdk)
+    out.push(issue('E_COMPILE_BELOW_TARGET', 'error', 'android.compileSdk',
+      `Target SDK (${a.targetSdk}) is higher than compile SDK (${a.compileSdk}). You cannot target what you do not compile against.`,
+      { fix: { kind: 'set', path: 'android.compileSdk', value: a.targetSdk } }));
+
+  // Play compliance — verified against the 2026 policy (API 36 for new apps/updates).
+  if (a.targetSdk && a.targetSdk < 35 && (b.outputs || []).some((o) => o !== 'debug-apk'))
+    out.push(issue('E_PLAY_TARGET', 'error', 'android.targetSdk',
+      `Target SDK ${a.targetSdk} cannot be published to Google Play. Since 31 Aug 2026 new apps and all updates must target 36 (Android 16); 35 is the minimum to stay visible to new users.`,
+      { fix: { kind: 'set', path: 'android.targetSdk', value: 36 } }));
+  else if (a.targetSdk && a.targetSdk < 36 && (b.outputs || []).some((o) => o !== 'debug-apk'))
+    out.push(issue('W_PLAY_TARGET', 'warning', 'android.targetSdk',
+      `Target SDK ${a.targetSdk} is below 36. Google Play has required API 36 for new apps and updates since 31 Aug 2026.`));
+
+  if (a.cleartextTraffic === true)
+    out.push(issue('W_CLEARTEXT', 'warning', 'android.cleartextTraffic',
+      'Plain HTTP traffic is allowed. Any network the user is on can read or change it. Only enable this for a legacy site with no HTTPS.',
+      { fix: { kind: 'set', path: 'android.cleartextTraffic', value: false } }));
+
+  if (a.allowBackup === true)
+    out.push(issue('W_BACKUP', 'warning', 'android.allowBackup',
+      'Android backup is on. If the app stores sign-in tokens, an unscoped backup can carry them off the device.',
+      { fix: { kind: 'set', path: 'android.allowBackup', value: false } }));
+
+  const insets = [];
+  if (app.mode === 'webview' || app.mode === 'pwa' || app.mode === 'hybrid') {
+    if (!app.webview || !app.webview.startUrl) insets.push(issue('E_NO_URL', 'error', 'app.webview.startUrl', `Mode "${app.mode}" needs a start URL.`));
+  }
+  if (app.mode === 'native-screens' && (!Array.isArray(spec.screens) || spec.screens.length === 0))
+    insets.push(issue('E_NO_SCREENS', 'error', 'screens', 'Native-screens mode needs at least one screen.'));
+  out.push(...insets);
+
+  if (id.versionName && id.versionCode) {
+    const patch = Number((id.versionName.split('.')[2] || id.versionName.split('.')[1] || '0'));
+    if (Number.isFinite(patch) && patch > id.versionCode && id.versionCode === 1)
+      out.push(issue('I_VERSION', 'info', 'identity.versionCode', 'Version code is still 1. Play requires a strictly increasing code on every upload.'));
+  }
+  if (id.versionStrategy === 'git-commit-count' && b.engine !== 'github-actions')
+    out.push(issue('W_VERSION_STRATEGY', 'warning', 'identity.versionStrategy',
+      'Version from git commit count needs the repository history. The GitHub Actions engine fetches it; other engines may not.'));
+}
+
+/** L3 — DEPENDENCY: things referencing things that do not exist. */
+function layer3Dependency(spec, out) {
+  const caps = spec.capabilities || [];
+  const seen = new Set();
+  for (const c of caps) {
+    if (seen.has(c)) out.push(issue('E_DUP_CAP', 'error', 'capabilities',
+      `Capability "${c}" is listed twice.`, { fix: { kind: 'removeArrayItem', path: 'capabilities', value: c } }));
+    seen.add(c);
+    if (!CAPABILITIES[c]) {
+      const near = Object.keys(CAPABILITIES).filter((k) => k.toLowerCase().startsWith(String(c).slice(0, 3).toLowerCase())).slice(0, 3);
+      out.push(issue('E_UNKNOWN_CAP', 'error', 'capabilities',
+        `"${c}" is not a known capability.`, { options: near.length ? near : Object.keys(CAPABILITIES) }));
+    }
+  }
+
+  const app = spec.app || {};
+  const wv = app.webview || {};
+  if (wv.fileUploads === true && !caps.includes('files'))
+    out.push(issue('W_UPLOAD_NO_CAP', 'warning', 'app.webview.fileUploads',
+      'File uploads need the "files" capability, otherwise the upload button will do nothing on the phone.',
+      { fix: { kind: 'addArrayItem', path: 'capabilities', value: 'files' } }));
+
+  if (app.mode === 'pwa' && !caps.includes('internet'))
+    out.push(issue('W_PWA_NET', 'warning', 'app.mode',
+      'PWA mode still loads its shell from the network on first run; the internet capability is recommended.',
+      { fix: { kind: 'addArrayItem', path: 'capabilities', value: 'internet' } }));
+
+  if (caps.includes('exactAlarms') && !caps.includes('notifications') && !caps.includes('bootStart'))
+    out.push(issue('W_ALARM_ORPHAN', 'warning', 'capabilities',
+      'Exact alarms are enabled but nothing uses them. This makes Android ask for a special "alarms and reminders" permission for no reason.',
+      { fix: { kind: 'removeArrayItem', path: 'capabilities', value: 'exactAlarms' } }));
+
+  if (caps.includes('payments') && (spec.backend || {}).kind === 'none')
+    out.push(issue('E_PAY_NO_BACKEND', 'error', 'capabilities',
+      'In-app purchases need a backend to verify the receipt server-side. Without it, the client would be trusted to say "paid" — which anyone can fake.',
+      { hint: 'Set backend.kind to supabase or custom-rest.' }));
+
+  if (caps.includes('googleAuth') && !caps.includes('internet'))
+    out.push(issue('W_AUTH_NO_NET', 'warning', 'capabilities', 'Google Sign-In needs internet.',
+      { fix: { kind: 'addArrayItem', path: 'capabilities', value: 'internet' } }));
+
+  if (caps.includes('barcode') && !(wv.startUrl || (spec.screens || []).length))
+    out.push(issue('W_BARCODE_UNUSED', 'info', 'capabilities', 'Barcode scanning is enabled but no screen uses it yet.'));
+
+  const nav = spec.navigation || {};
+  if (nav.type === 'bottom-tabs' && (spec.screens || []).length < 2)
+    out.push(issue('W_NAV_THIN', 'warning', 'navigation.type', 'Bottom tabs with fewer than two screens leaves empty tabs.'));
+}
+
+/** L4 — SECURITY: the gate. Critical findings block the build unless overridden. */
+function layer4Security(spec, out) {
+  const caps = spec.capabilities || [];
+  const dl = spec.deepLinks || {};
+  const b = spec.build || {};
+
+  // Unsafe URL schemes must never be routed to a raw Intent (the exact defect
+  // found in ff-user-panel/MainActivity.java).
+  const DANGEROUS = ['intent', 'file', 'content', 'javascript', 'data', 'jar'];
+  const offered = dl.allowedSchemes || [];
+  for (const s of offered) {
+    if (DANGEROUS.includes(String(s).toLowerCase()))
+      out.push(issue('E_UNSAFE_SCHEME', 'critical', 'deepLinks.allowedSchemes',
+        `Scheme "${s}" is unsafe to route automatically. It can launch arbitrary components or read local files.`,
+        { fix: { kind: 'removeArrayItem', path: 'deepLinks.allowedSchemes', value: s } }));
+  }
+
+  if ((spec.signing || {}).mode === 'secret-store' && (spec.signing || {}).failClosed === false)
+    out.push(issue('E_SIGNING_NOT_FAILCLOSED', 'critical', 'signing.failClosed',
+      'Signing is set to a secret store but fail-closed is off. If the keystore is missing, a new one would be generated — which silently changes your app identity and permanently breaks Google Sign-In and every future update.',
+      { fix: { kind: 'set', path: 'signing.failClosed', value: true } }));
+
+  if ((b.outputs || []).some((o) => o !== 'debug-apk') && (spec.signing || {}).mode === 'none')
+    out.push(issue('E_RELEASE_UNSIGNED', 'critical', 'signing.mode',
+      'A release or AAB build was requested with signing disabled. The output could not be installed on any device.',
+      { fix: { kind: 'set', path: 'signing.mode', value: 'secret-store' } }));
+
+  if (caps.includes('ads') && (spec.build || {}).outputs?.length)
+    out.push(issue('W_ADS_TRACKING', 'warning', 'capabilities',
+      'Advertisements add a tracking identifier and are off for a reason. Enable only if you truly need them.'));
+
+  if (caps.includes('location'))
+    out.push(issue('W_LOCATION_HIGH_RISK', 'warning', 'capabilities',
+      'Location is a high-risk permission. Google Play requires a written justification and, for background use, a review.'));
+
+  // Secret-looking values inside the spec itself.
+  const raw = JSON.stringify(spec);
+  const SECRET_PATTERNS = [
+    { re: /eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}/g, what: 'a JWT (possibly a service_role key)' },
+    { re: /sk-[A-Za-z0-9]{20,}/g, what: 'an OpenAI-style secret key' },
+    { re: /AIza[A-Za-z0-9_-]{30,}/g, what: 'a Google API key' },
+    { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g, what: 'a private key' },
+    { re: /(?:password|passwd|secret|service_role)\s*[:=]\s*["'][^"']{8,}["']/gi, what: 'a hard-coded password or secret' },
+  ];
+  for (const { re, what } of SECRET_PATTERNS) {
+    const m = raw.match(re);
+    if (m) out.push(issue('E_SECRET_IN_SPEC', 'critical', 'spec',
+      `The specification appears to contain ${what}. Remove it and keep it in the build engine's secret store — this file is committed to a repository.`,
+      { redactedSample: String(m[0]).slice(0, 4) + '…redacted' }));
+  }
+
+  if (spec.backend && spec.backend.kind !== 'none' && (spec.backend.tablesRequiringRls || []).length === 0 && spec.backend.requiresAuth)
+    out.push(issue('W_RLS_UNSPECIFIED', 'warning', 'backend.tablesRequiringRls',
+      'Authentication is on, but no tables are listed as needing row-level security. RLS is the only thing standing between one signed-in user and another user\'s rows.'));
+}
+
+/** L5 — CAPABILITY: can the chosen engine actually produce this? */
+function layer5Capability(spec, out) {
+  const ENGINE = {
+    'github-actions': { aab: true, signedApk: true, emulator: true, label: 'GitHub Actions (free, unlimited on public repos)' },
+    'local-termux':   { aab: true, signedApk: true, emulator: false, label: 'Termux on the phone' },
+    'local-desktop':  { aab: true, signedApk: true, emulator: true, label: 'This desktop' },
+  };
+  const b = spec.build || {};
+  const e = ENGINE[b.engine || 'github-actions'];
+  if (!e) { out.push(issue('E_UNKNOWN_ENGINE', 'error', 'build.engine', `Unknown build engine "${b.engine}".`)); return; }
+
+  for (const o of b.outputs || []) {
+    if (o === 'aab' && !e.aab) out.push(issue('E_ENGINE_NO_AAB', 'error', 'build.outputs', `${e.label} cannot produce an AAB.`));
+    if ((o === 'signed-apk' || o === 'release-apk') && !e.signedApk) out.push(issue('E_ENGINE_NO_SIGN', 'error', 'build.outputs', `${e.label} cannot sign a release build.`));
+  }
+
+  const a = spec.android || {};
+  // Toolchain compatibility is data-driven (engine/spec/toolchain.mjs) so the
+  // validator and the generator can never disagree about what an AGP version
+  // can actually compile.
+  const effective = resolveToolchain(spec);
+  const compileSdk = a.compileSdk ?? effective.maxCompileSdk;
+  if (compileSdk > effective.maxCompileSdk) {
+    const better = profileForCompileSdk(compileSdk);
+    const bt = TOOLCHAIN_PROFILES[better];
+    out.push(issue('E_TOOLCHAIN_TOO_OLD', 'error', 'build.toolchain.agp',
+      `compileSdk ${compileSdk} cannot be compiled by AGP ${effective.agp} (it stops at SDK ${effective.maxCompileSdk}). ` +
+      `Switch to the "${better}" profile: AGP ${bt.agp} with Gradle ${bt.gradle}.`,
+      {
+        fix: { kind: 'set', path: 'build.toolchain.agp', value: bt.agp },
+        alsoNeeds: { 'build.toolchain.gradle': bt.gradle, 'build.toolchain.buildTools': bt.buildTools },
+      }));
+  }
+  if (a.minSdk != null && a.minSdk < 21) out.push(issue('E_MIN_TOO_LOW', 'error', 'android.minSdk', 'Android 5.0 (API 21) is the oldest version still worth supporting.'));
+  if (spec.app && spec.app.mode === 'pwa' && spec.build && spec.build.engine === 'local-termux')
+    out.push(issue('W_PWA_TERMUX', 'warning', 'app.mode', 'PWA mode works, but offline caching behaves differently on the phone-based engine. Test on a real device.'));
+}
+
+/* ------------------------------------------------------------------ *
+ * MAIN ENTRY
+ * ------------------------------------------------------------------ */
+const LAYERS = [
+  { n: 1, name: 'Schema',     fn: layer1Schema },
+  { n: 2, name: 'Semantic',   fn: layer2Semantic },
+  { n: 3, name: 'Dependency', fn: layer3Dependency },
+  { n: 4, name: 'Security',   fn: layer4Security },
+  { n: 5, name: 'Capability', fn: layer5Capability },
+];
+
+/**
+ * Run all five layers.
+ * @returns {{ok:boolean, blocked:boolean, issues:Array, byLayer:Object, counts:Object}}
+ * `blocked` is the gate: critical or error severities stop the build unless the
+ * caller supplies an explicit, visible, logged override.
+ */
+function validateSpec(spec, opts = {}) {
+  CODES = 0;
+  const issues = [];
+  const byLayer = {};
+  for (const L of LAYERS) {
+    const before = issues.length;
+    L.fn(spec, issues);
+    byLayer[L.n] = { name: L.name, issues: issues.slice(before) };
+  }
+  const overrides = opts.overrides || [];
+  const isOverridden = (i) => overrides.some((o) => o.code === i.code);
+  const blocking = issues.filter((i) => (i.severity === 'critical' || i.severity === 'error') && !isOverridden(i));
+  const counts = { critical: 0, error: 0, warning: 0, info: 0 };
+  for (const i of issues) counts[i.severity] = (counts[i.severity] || 0) + 1;
+  return {
+    ok: blocking.length === 0,
+    blocked: blocking.length > 0,
+    issues,
+    blocking,
+    byLayer,
+    counts,
+    overridesApplied: issues.filter((i) => (i.severity === 'critical' || i.severity === 'error') && isOverridden(i)).map((i) => i.code),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * DETERMINISTIC REPAIR (rule-based only — never AI)
+ * Applies ONLY high-confidence fixes that carry an explicit `fix` object,
+ * records every change so it can be rolled back, and re-validates.
+ * ------------------------------------------------------------------ */
+function applyFixes(spec, issues, { onlyCodes = null, maxRounds = 5 } = {}) {
+  const clone = JSON.parse(JSON.stringify(spec));
+  const applied = [];
+  let current = clone;
+  let result = validateSpec(current);
+
+  for (let round = 0; round < maxRounds; round++) {
+    const candidates = result.issues.filter((i) =>
+      i.fix && (onlyCodes ? onlyCodes.includes(i.code) : true) &&
+      (i.severity === 'critical' || i.severity === 'error' || i.severity === 'warning'));
+    if (candidates.length === 0) break;
+
+    const chosen = candidates[0];
+    const undo = setPath(current, chosen.fix);
+    if (!undo) break;
+    applied.push({ code: chosen.code, path: chosen.path, fix: chosen.fix, message: chosen.message, undo });
+    result = validateSpec(current);
+  }
+  return { spec: current, applied, result, rolledBack: false };
+}
+
+function getParent(obj, path) {
+  const parts = path.split('.');
+  const last = parts.pop();
+  let cur = obj;
+  for (const p of parts) { if (cur == null) return null; cur = cur[p]; }
+  return { parent: cur, key: last };
+}
+
+/** Apply one fix, returning the inverse operation so it can be rolled back. */
+function setPath(spec, fix) {
+  const loc = getParent(spec, fix.path);
+  if (!loc || loc.parent == null) return null;
+  const { parent, key } = loc;
+  switch (fix.kind) {
+    case 'set': {
+      const had = key in parent;
+      const prev = parent[key];
+      parent[key] = fix.value;
+      if (fix.alsoNeeds) for (const [p, v] of Object.entries(fix.alsoNeeds)) { const l = getParent(spec, p); if (l && l.parent) l.parent[l.key] = v; }
+      return { kind: 'set', path: fix.path, had, prev };
+    }
+    case 'addArrayItem': {
+      if (!Array.isArray(parent)) return null;
+      const arr = parent[key] || (parent[key] = []);
+      if (arr.includes(fix.value)) return null;
+      arr.push(fix.value);
+      return { kind: 'removeArrayItem', path: fix.path, value: fix.value };
+    }
+    case 'removeArrayItem': {
+      const arr = parent[key];
+      if (!Array.isArray(arr)) return null;
+      const idx = arr.indexOf(fix.value);
+      if (idx < 0) return null;
+      arr.splice(idx, 1);
+      return { kind: 'insertArrayItem', path: fix.path, value: fix.value, at: idx };
+    }
+    default: return null;
+  }
+}
+
+/** Undo a previously applied fix. Guarantees automatic repairs are reversible. */
+function rollbackFix(spec, entry) {
+  const u = entry.undo, loc = getParent(spec, u.path);
+  if (!loc || loc.parent == null) return false;
+  const { parent, key } = loc;
+  if (u.kind === 'set') { if (u.had) parent[key] = u.prev; else delete parent[key]; return true; }
+  if (u.kind === 'removeArrayItem' && Array.isArray(parent[key])) { parent[key] = parent[key].filter((v) => v !== u.value); return true; }
+  if (u.kind === 'insertArrayItem' && Array.isArray(parent[key])) { parent[key].splice(u.at, 0, u.value); return true; }
+  return false;
+}
+
+
+/* ═══ engine/capability/permissions.mjs ═══ */
+/**
+ * PERMISSION MINIMIZATION ENGINE
+ * ==============================
+ * Android permissions are DERIVED from enabled capabilities — never written by
+ * hand, never inherited "just in case". Disable a capability and its permission
+ * disappears from the manifest. This is enforced by the generator.
+ *
+ * Every derived permission carries the capability that caused it and a
+ * human-readable reason, so the Studio can show the user the exact table:
+ *
+ *   PERMISSION              WHY                        FEATURE
+ *   POST_NOTIFICATIONS      Reminders and alerts       Notifications
+ *   CAMERA                  Needed to scan a code      Barcode / QR
+ *
+ * Just as important: this module reports permissions the generated app does NOT
+ * need, and permissions that were *requested by a capability but dropped as
+ * unnecessary* (e.g. WRITE_EXTERNAL_STORAGE on modern Android, where it is a
+ * no-op). Fewer permissions = smaller attack surface + a smaller APK.
+ */
+
+/** Android permission -> manifest declaration attributes. */
+const PERMISSION_META = {
+  INTERNET:                    { protectionLevel: 'normal' },
+  ACCESS_NETWORK_STATE:        { protectionLevel: 'normal' },
+  POST_NOTIFICATIONS:          { protectionLevel: 'dangerous', runtime: true, since: 33 },
+  SCHEDULE_EXACT_ALARM:        { protectionLevel: 'special', runtime: true, since: 31 },
+  RECEIVE_BOOT_COMPLETED:      { protectionLevel: 'normal' },
+  VIBRATE:                     { protectionLevel: 'normal' },
+  CAMERA:                      { protectionLevel: 'dangerous', runtime: true },
+  READ_EXTERNAL_STORAGE:       { protectionLevel: 'dangerous', runtime: true, maxSdk: 32, replacedBy: 'READ_MEDIA_* (33+)' },
+  WRITE_EXTERNAL_STORAGE:      { protectionLevel: 'dangerous', runtime: true, maxSdk: 28, note: 'Ignored on Android 11+; kept only for Android 9 and below.' },
+  ACCESS_FINE_LOCATION:        { protectionLevel: 'dangerous', runtime: true },
+  ACCESS_COARSE_LOCATION:      { protectionLevel: 'dangerous', runtime: true },
+  AD_ID:                       { protectionLevel: 'normal' },
+  'com.android.vending.BILLING': { protectionLevel: 'normal' },
+};
+
+/**
+ * Derive the minimal permission set for a spec.
+ * @param {object} spec
+ * @returns {{permissions:Array<{name:string,reason:string,feature:string,attrs:object}>,
+ *            dropped:Array<{name:string,reason:string}>,
+ *            unknownCapabilities:string[]}}
+ */
+function derivePermissions(spec) {
+  const caps = Array.isArray(spec.capabilities) ? spec.capabilities : [];
+  const android = spec.android || {};
+  const app = spec.app || {};
+  const targetSdk = android.targetSdk ?? 36;
+
+  // internet is implicit: any networked app needs it, but we still show it.
+  const active = new Set(['internet', ...caps]);
+
+  // ---- collect ---------------------------------------------------------
+  const wanted = new Map(); // name -> { reason, features:Set }
+  for (const capId of active) {
+    const cap = CAPABILITIES[capId];
+    if (!cap) continue;
+    for (const p of cap.permissions) {
+      if (!wanted.has(p)) wanted.set(p, { reason: cap.reason, features: new Set() });
+      wanted.get(p).features.add(cap.label);
+    }
+  }
+
+  // Internet already answered by a richer reason above? keep the specific one.
+
+  // ---- what a careless implementation would have requested ----------------
+  //
+  // The first version of this tried to drop permissions *after* collecting
+  // them, which could never fire: only an enabled capability can contribute a
+  // permission, so the condition "the capability is off" was unreachable. The
+  // feature that was supposed to prove permission minimisation never produced
+  // any output at all. Found by the browser test that asserted on it.
+  //
+  // The honest version compares against everything ANY capability could ask
+  // for, and reports the difference. That is a real, checkable claim: this app
+  // is not requesting these, and here is why.
+  const couldAsk = new Map(); // permission -> Set of capability labels
+  for (const cap of Object.values(CAPABILITIES)) {
+    for (const p of cap.permissions) {
+      if (!couldAsk.has(p)) couldAsk.set(p, new Set());
+      couldAsk.get(p).add(cap.label);
+    }
+  }
+
+  const dropped = [];
+  for (const [name, features] of couldAsk) {
+    if (wanted.has(name)) continue;
+    const names = [...features];
+    dropped.push({
+      name,
+      reason: `capability "${names.join(' / ')}" is turned off`,
+    });
+  }
+  dropped.sort((a, b) => a.name.localeCompare(b.name));
+
+  // ---- build the report ------------------------------------------------
+  const permissions = [];
+  for (const [name, info] of [...wanted.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const meta = PERMISSION_META[name] || {};
+    const attrs = {};
+    // Some permissions are meaningless on newer Android; those are capped with
+    // android:maxSdkVersion rather than requested on every device.
+    if (meta.maxSdk != null) attrs.maxSdkVersion = meta.maxSdk;
+    permissions.push({
+      name: `android.permission.${name}`,
+      short: name,
+      reason: info.reason,
+      feature: [...info.features].join(' + '),
+      attrs,
+      runtime: !!meta.runtime,
+      since: meta.since || null,
+      note: meta.note || null,
+    });
+  }
+
+  const unknownCapabilities = caps.filter((c) => !CAPABILITIES[c]);
+
+  return { permissions, dropped, unknownCapabilities };
+}
+
+/**
+ * Which permissions the user will actually be PROMPTED for at runtime.
+ * Shown before every build so there are no surprises on the phone.
+ */
+function runtimePrompts(spec) {
+  const { permissions } = derivePermissions(spec);
+  const targetSdk = (spec.android || {}).targetSdk ?? 36;
+  return permissions.filter((p) => p.runtime && (!p.since || targetSdk >= p.since));
+}
+
+/** Human-readable summary block used by both the CLI and the Studio UI. */
+function permissionReport(spec) {
+  const { permissions, dropped } = derivePermissions(spec);
+  const rows = permissions.map((p) => ({
+    permission: p.short,
+    why: p.reason,
+    feature: p.feature,
+    prompt: p.runtime ? 'Yes' : 'No',
+    scope: p.attrs.maxSdkVersion ? `Android ≤ ${p.attrs.maxSdkVersion}` : 'All versions',
+  }));
+  return {
+    rows,
+    dropped,
+    total: rows.length,
+    prompts: rows.filter((r) => r.prompt === 'Yes').length,
+  };
+}
+
+
+/* ═══ studio/src/studio.js ═══ */
+/* ============================================================================
+   App Mint Studio
+   ---------------------------------------------------------------------------
+   A phone-first visual editor for the Project Specification.
+
+   The important architectural point: this file IMPORTS the same validator and
+   permission engine that CI and the CLI use. It does not reimplement them. If
+   it did, the Studio and the build would eventually disagree about what is
+   valid, and the user would be told "looks fine" by one and "refused" by the
+   other. One engine, three front ends (CLI, CI, Studio).
+
+   No dependencies. No network except the GitHub API, and only when you press a
+   button that says it will contact GitHub.
+   ========================================================================= */
+
+
+
+/* ── tiny DOM helpers ──────────────────────────────────────────────────── */
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k === 'html') n.innerHTML = v;
+    else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null) continue;
+    n.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return n;
+}
+
+/* ── icons (inline SVG, so nothing loads from the network) ─────────────── */
+const I = {
+  design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
+  caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
+  eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+  build: '<path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>',
+  square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="9.5" r="1.6"/><path d="M4 17l4.5-4.5L13 17"/>',
+  cart: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 10.2A2 2 0 009.2 16h8.4a2 2 0 002-1.6L21 8H6"/>',
+  book: '<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/>',
+  rss: '<path d="M5 19h.01"/><path d="M5 12a7 7 0 017 7"/><path d="M5 5a14 14 0 0114 14"/>',
+  trophy: '<path d="M8 4h8v6a4 4 0 01-8 0z"/><path d="M8 6H5.5A2.5 2.5 0 008 10.5"/><path d="M16 6h2.5A2.5 2.5 0 0116 10.5"/><path d="M12 14v3"/><path d="M9 20h6l-.6-3H9.6z"/>',
+  wrench: '<path d="M15.5 3.5a5 5 0 00-6 6.6L4 15.6 8.4 20l5.5-5.5a5 5 0 006.6-6z"/>',
+  chart: '<path d="M4 20V4"/><path d="M4 20h16"/><rect x="7" y="12" width="3" height="5"/><rect x="12" y="8" width="3" height="9"/><rect x="17" y="14" width="3" height="3"/>',
+};
+const svg = (d, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+
+/* ── storage ───────────────────────────────────────────────────────────── */
+const LS_PROJECTS = 'appmint.projects.v1';
+const LS_ACTIVE = 'appmint.active.v1';
+const LS_TOKEN = 'appmint.token.v1';       // lives only in this browser
+const LS_REPO = 'appmint.repo.v1';
+
+const store = {
+  load() {
+    try { return JSON.parse(localStorage.getItem(LS_PROJECTS) || '[]'); } catch { return []; }
+  },
+  save(list) {
+    try { localStorage.setItem(LS_PROJECTS, JSON.stringify(list)); return true; }
+    catch (e) { return false; }
+  },
+  token() { try { return localStorage.getItem(LS_TOKEN) || ''; } catch { return ''; } },
+  setToken(t) { try { t ? localStorage.setItem(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN); } catch { /* ignore */ } },
+  repo() { try { return localStorage.getItem(LS_REPO) || ''; } catch { return ''; } },
+  setRepo(r) { try { localStorage.setItem(LS_REPO, r); } catch { /* ignore */ } },
+};
+
+/* ── application state ─────────────────────────────────────────────────── */
+const S = {
+  templates: { templates: [] },
+  projects: [],
+  active: null,        // { id, name, spec, updatedAt }
+  tab: 'design',
+  preview: { orientation: 'portrait', theme: 'auto' },
+  lastRun: null,
+  dirty: false,
+};
+
+/* ── project helpers ───────────────────────────────────────────────────── */
+const uid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/** Deep merge a template's partial spec over the defaults. */
+function mergeSpec(base, over) {
+  if (Array.isArray(over)) return over.slice();
+  if (over && typeof over === 'object') {
+    const out = { ...(base && typeof base === 'object' && !Array.isArray(base) ? base : {}) };
+    for (const [k, v] of Object.entries(over)) {
+      out[k] = (v && typeof v === 'object' && !Array.isArray(v)) ? mergeSpec(out[k], v) : (Array.isArray(v) ? v.slice() : v);
+    }
+    return out;
+  }
+  return over === undefined ? base : over;
+}
+
+function specFromTemplate(tpl, name) {
+  const spec = mergeSpec(defaultSpec(), tpl.spec || {});
+  spec.specVersion = SPEC_VERSION;
+  const slug = (name || tpl.name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  spec.identity.appName = name || tpl.name;
+  spec.identity.packageName = 'com.example.' + (slug.slice(0, 20) || 'myapp');
+  return spec;
+}
+
+function persist() {
+  const idx = S.projects.findIndex((p) => p.id === S.active.id);
+  if (idx >= 0) S.projects[idx] = S.active; else S.projects.push(S.active);
+  const ok = store.save(S.projects);
+  try { localStorage.setItem(LS_ACTIVE, S.active.id); } catch { /* ignore */ }
+  return ok;
+}
+
+function touch() {
+  S.active.updatedAt = new Date().toISOString();
+  if (!persist()) toast('Warning: could not save to this browser\'s storage.');
+}
+
+/* ── validation ────────────────────────────────────────────────────────── */
+function check() {
+  return validateSpec(S.active ? S.active.spec : {});
+}
+
+/* ── toast ─────────────────────────────────────────────────────────────── */
+let toastTimer;
+function toast(msg, ms = 2600) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), ms);
+}
+
+/* ── views ─────────────────────────────────────────────────────────────── */
+
+function viewDesign() {
+  const spec = S.active.spec;
+  const id = spec.identity;
+  const th = spec.theme;
+  const a = spec.android;
+  const wv = spec.app.webview || (spec.app.webview = {});
+
+  return [
+    card('Application', [
+      field('Application name', el('input', {
+        type: 'text', value: id.appName, maxlength: 60, 'aria-label': 'Application name',
+        oninput: (e) => { id.appName = e.target.value; touch(); softUpdate(); },
+      }), 'Shown under the launcher icon. It can be changed at any time.'),
+
+      field('Package name', el('input', {
+        type: 'text', value: id.packageName, spellcheck: 'false', autocapitalize: 'off',
+        'aria-label': 'Package name',
+        oninput: (e) => { id.packageName = e.target.value.trim(); touch(); softUpdate(); },
+      }), 'Permanent once published. Google Play rejects names starting with com.example.'),
+    ]),
+
+    card('Appearance', [
+      colourField('Primary', 'primary', th),
+      colourField('Accent', 'accent', th),
+      colourField('Background', 'background', th),
+      colourField('Surface', 'surface', th),
+      colourField('Text on surface', 'onSurface', th),
+    ], 'Colours are applied to the generated Android theme and to the preview.'),
+
+    card('Web content', [
+      field('Content source', el('div', { class: 'selectwrap' }, el('select', {
+        'aria-label': 'Content source',
+        onchange: (e) => {
+          if (e.target.value === 'bundled') { if (!wv.localAsset) wv.localAsset = 'index.html'; }
+          else { wv.localAsset = undefined; }
+          touch(); hardUpdate();
+        },
+      },
+        el('option', { value: 'url', selected: !wv.localAsset }, 'A website address'),
+        el('option', { value: 'bundled', selected: !!wv.localAsset }, 'A page bundled inside the app'),
+      )), 'A bundled page works with no internet at all and cannot be changed by a third party.'),
+
+      wv.localAsset
+        ? field('Bundled page file', el('input', {
+            type: 'text', value: wv.localAsset, spellcheck: 'false',
+            'aria-label': 'Bundled page file',
+            oninput: (e) => { wv.localAsset = e.target.value.trim(); touch(); softUpdate(); },
+          }), 'Put your files in a folder called web next to the specification file.')
+        : field('Website address', el('input', {
+            type: 'url', value: wv.startUrl || '', inputmode: 'url', spellcheck: 'false',
+            autocapitalize: 'off', 'aria-label': 'Website address',
+            oninput: (e) => { wv.startUrl = e.target.value.trim(); touch(); softUpdate(); },
+          }), 'Must start with https://'),
+
+      field('Links that leave the app', el('div', { class: 'selectwrap' }, el('select', {
+        'aria-label': 'External link handling',
+        onchange: (e) => { wv.externalLinks = e.target.value; touch(); softUpdate(); },
+      },
+        el('option', { value: 'custom-tab', selected: wv.externalLinks === 'custom-tab' }, 'Keep it in the app (recommended)'),
+        el('option', { value: 'external-browser', selected: wv.externalLinks === 'external-browser' }, 'Open the browser'),
+        el('option', { value: 'in-app', selected: wv.externalLinks === 'in-app' }, 'Always inside the app'),
+      )), 'Payment and login pages usually need to hand off to another app.'),
+    ]),
+
+    detailsAdvanced('Advanced appearance', [
+      field('Minimum Android version', kvSelect(
+        a.minSdk,
+        [[24, 'Android 7.0 — widest reach'], [26, 'Android 8.0'], [28, 'Android 9'], [29, 'Android 10'], [31, 'Android 12'], [33, 'Android 13']],
+        (v) => { a.minSdk = v; touch(); hardUpdate(); },
+        'Minimum Android version',
+      ), 'Devices older than this cannot install the app.'),
+      field('Screen orientation', kvSelect(
+        a.orientation, [['portrait', 'Portrait'], ['landscape', 'Landscape'], ['sensor', 'Follow the device']],
+        (v) => { a.orientation = v; touch(); softUpdate(); }, 'Screen orientation',
+      )),
+      field('Force dark on web content', el('div', { class: 'sw' }, [
+        el('input', {
+          type: 'checkbox', checked: wv.forceDark === true, role: 'switch',
+          'aria-label': 'Force dark on web content',
+          onchange: (e) => { wv.forceDark = e.target.checked; touch(); hardUpdate(); },
+        }),
+        el('span', { class: 'track' }), el('span', { class: 'knob' }),
+      ]), 'Off is safer. Turning it on can make a page unreadable if the page was not built for dark mode.'),
+    ]),
+  ];
+}
+
+function viewCaps() {
+  const spec = S.active.spec;
+  const on = new Set(spec.capabilities || []);
+  const rep = permissionReport(spec);
+  const derived = derivePermissions(spec);
+
+  const toggles = Object.entries(CAPABILITIES)
+    .filter(([, c]) => !c.implicit)
+    .map(([key, cap]) => el('div', { class: 'opt' }, [
+      el('div', { class: 'txt' }, [
+        el('div', { class: 'name' }, cap.label),
+        el('div', { class: 'why' }, cap.reason),
+        cap.disclosure ? el('span', { class: 'cost' }, cap.disclosure) : null,
+        cap.requiresSetup ? el('span', { class: 'cost' }, 'Needs setup: ' + cap.requiresSetup) : null,
+        cap.highRisk ? el('span', { class: 'cost' }, 'High risk: Google Play requires a written justification.') : null,
+      ]),
+      el('div', { class: 'sw' }, [
+        el('input', {
+          type: 'checkbox', checked: on.has(key), role: 'switch',
+          'aria-label': cap.label,
+          onchange: (e) => {
+            const s = new Set(spec.capabilities || []);
+            e.target.checked ? s.add(key) : s.delete(key);
+            spec.capabilities = [...s];
+            touch(); hardUpdate();
+          },
+        }),
+        el('span', { class: 'track' }), el('span', { class: 'knob' }),
+      ]),
+    ]));
+
+  const permRows = rep.rows.length
+    ? rep.rows.map((r) => el('div', { class: 'perm' }, [
+        el('div', { class: 'top' }, [
+          el('span', { class: 'pname' }, r.permission),
+          el('span', { class: 'chip' }, r.scope),
+          r.prompt === 'Yes' ? el('span', { class: 'chip warn' }, 'asks the user') : null,
+        ]),
+        el('div', { class: 'why' }, r.why),
+        el('div', { class: 'feat' }, 'needed by: ' + r.feature),
+      ]))
+    : [el('p', { class: 'hint' }, 'No permissions are required by this configuration.')];
+
+  return [
+    card('Capabilities', toggles,
+      'Turn a feature on and its Android permission appears automatically. Turn it off and the permission is removed from the app.'),
+
+    card('Permissions this app will request', [
+      el('p', { class: 'hint' },
+        `${rep.total} permission${rep.total === 1 ? '' : 's'}, of which ${rep.prompts} will ask the user directly. Everything below is derived from the capabilities above.`),
+      ...permRows,
+    ]),
+
+    // Kept in its own card on purpose: mixing "what it asks for" with "what it
+    // refuses to ask for" makes the permission table unreadable, and the
+    // refusal list is the actual evidence that minimisation is working.
+    derived.dropped.length
+      ? card('Deliberately not requested', [
+          el('p', { class: 'hint' },
+            'Every one of these is something this app could have asked for and does not. Fewer permissions means a smaller app, fewer Play Store questions and less to explain to your users.'),
+          ...derived.dropped.map((d) => el('div', { class: 'dropped' }, [
+            el('code', {}, d.name), ' — ' + d.reason,
+          ])),
+        ])
+      : null,
+  ].filter(Boolean);
+}
+
+function viewPreview() {
+  const spec = S.active.spec;
+  const th = spec.theme;
+  const isDark = S.preview.theme === 'dark'
+    || (S.preview.theme === 'auto' && luminance(th.background) < 0.5);
+  const bg = isDark ? th.background : lighten(th.background);
+  const fg = isDark ? th.onSurface : darken(th.onSurface);
+
+  const screen = el('div', { class: 'screen' }, [
+    el('div', { class: 'sbar' },
+      el('span', {}, '9:41'),
+      el('span', { class: 'icons' }, [
+        el('i', { class: 'sig' }), el('i', { class: 'batt' }),
+      ])),
+    el('div', { class: 'pv-body' }, [
+      el('div', { class: 'pv-h1' }, spec.identity.appName),
+      el('p', { class: 'pv-p' }, spec.app.webview?.localAsset
+        ? 'A page bundled inside the app. No internet needed.'
+        : (spec.app.webview?.startUrl || 'Set a website address to see it here.')),
+      el('div', { class: 'pv-card' }, [
+        el('p', { class: 't' }, 'Your content appears here'),
+        el('p', { class: 'd' }, 'This frame shows the app shell around your page: the theme colours, the status bar and the navigation you chose.'),
+      ]),
+      el('button', { class: 'pv-btn' }, 'Primary action'),
+      el('div', { class: 'pv-card' }, [
+        el('div', { class: 'skel', style: 'height:11px;width:72%' }),
+        el('div', { class: 'skel', style: 'height:9px;width:94%' }),
+        el('div', { class: 'skel', style: 'height:9px;width:83%;margin-bottom:0' }),
+      ]),
+      el('button', { class: 'pv-btn ghost' }, 'Secondary action'),
+      el('div', { class: 'skel', style: 'height:42px' }),
+    ]),
+    spec.navigation?.type === 'bottom-tabs'
+      ? el('div', { class: 'pv-tabs' }, [
+          el('div', { class: 'on' }, 'Home'), el('div', {}, 'Search'), el('div', {}, 'You'),
+        ])
+      : el('div', { class: 'pv-nav' }),
+  ]);
+
+  screen.style.setProperty('--pv-bg', bg);
+  screen.style.setProperty('--pv-fg', fg);
+  screen.style.setProperty('--pv-primary', th.primary);
+  screen.style.setProperty('--pv-onprimary', th.onPrimary || '#fff');
+  screen.style.setProperty('--pv-sb', isDark ? bg : '#111');
+
+  const device = el('div', {
+    class: 'device' + (S.preview.orientation === 'landscape' ? ' landscape' : ''),
+    role: 'img',
+    'aria-label': `Preview of ${spec.identity.appName}`,
+  }, el('div', { class: 'notch' }), screen);
+
+  return [
+    card('Preview', [
+      el('div', { class: 'chips', style: 'margin-bottom:var(--s4)' }, [
+        chipBtn('Portrait', S.preview.orientation === 'portrait', () => { S.preview.orientation = 'portrait'; hardUpdate(); }),
+        chipBtn('Landscape', S.preview.orientation === 'landscape', () => { S.preview.orientation = 'landscape'; hardUpdate(); }),
+        el('span', { style: 'flex:1' }),
+        chipBtn('Light', S.preview.theme === 'light', () => { S.preview.theme = 'light'; hardUpdate(); }),
+        chipBtn('Dark', S.preview.theme === 'dark', () => { S.preview.theme = 'dark'; hardUpdate(); }),
+        chipBtn('Auto', S.preview.theme === 'auto', () => { S.preview.theme = 'auto'; hardUpdate(); }),
+      ]),
+      el('div', { class: 'stage' }, device),
+      el('p', { class: 'pv-note' },
+        'This shows the app shell around your content — the real thing drawn by Android. '
+        + 'It is not a running app: scrolling, gestures, downloads and how a specific website behaves '
+        + 'can only be seen by building it and running it on a device.'),
+    ]),
+  ];
+}
+
+function viewBuild() {
+  const spec = S.active.spec;
+  const r = check();
+  const repo = store.repo();
+  const token = store.token();
+
+  const layers = LAYERS.map((L) => {
+    const found = r.byLayer[L.n]?.issues || [];
+    const bad = found.filter((i) => i.severity === 'critical' || i.severity === 'error').length;
+    return el('div', { class: 'layerline' }, [
+      el('span', { class: bad ? 'chip fail' : (found.length ? 'chip warn' : 'chip pass') }, bad ? 'FAIL' : (found.length ? 'WARN' : 'PASS')),
+      el('span', { class: 'nm' }, `Layer ${L.n} — ${L.name}`),
+      el('span', { class: 'n' }, found.length ? `${found.length} finding${found.length === 1 ? '' : 's'}` : ''),
+    ]);
+  });
+
+  const findings = r.issues.map((i) => el('div', { class: 'finding' }, [
+    el('span', { class: 'dot ' + i.severity }),
+    el('div', {}, [
+      el('div', { class: 'msg' }, i.message),
+      el('div', { class: 'meta' }, `${i.code} · ${i.path || '(root)'}`),
+      i.fix ? el('button', {
+        class: 'btn ghost sm fixbtn',
+        onclick: () => {
+          const { spec: fixed, applied } = applyFixes(S.active.spec, r.issues, { onlyCodes: [i.code] });
+          if (applied.length) { S.active.spec = fixed; touch(); hardUpdate(); toast('Applied 1 fix. It can be undone from Advanced.'); }
+          else toast('That fix does not apply to the current values.');
+        },
+      }, 'Fix this automatically') : null,
+    ]),
+  ]));
+
+  const statusBanner = r.blocked
+    ? el('div', { class: 'banner fail' }, el('div', {}, [
+        el('strong', {}, 'Build blocked. '),
+        `${r.blocking.length} problem${r.blocking.length === 1 ? '' : 's'} must be fixed first. A build is never started on a configuration that cannot work.`,
+      ]))
+    : (r.counts.warning
+        ? el('div', { class: 'banner warn' }, el('div', {}, [
+            el('strong', {}, 'Ready to build, with warnings. '),
+            `${r.counts.warning} warning${r.counts.warning === 1 ? '' : 's'} will not stop the build but are worth reading.`,
+          ]))
+        : el('div', { class: 'banner pass' }, el('div', {}, [
+            el('strong', {}, 'Specification is valid. '), 'All five validation layers passed.',
+          ])));
+
+  const buildBtn = el('button', {
+    class: 'btn primary', disabled: r.blocked,
+    onclick: () => startBuild(),
+  }, svg(I.build) + ' Start build');
+
+  return [
+    card('Validation', [statusBanner, ...layers], null),
+
+    r.issues.length
+      ? card('Findings', findings, 'Every finding names the exact field, so nothing is vague.')
+      : card('Findings', el('p', { class: 'hint' }, 'Nothing to report.'), null),
+
+    card('Build', [
+      el('p', { class: 'hint' },
+        'A build runs on GitHub Actions: it compiles the app, checks the finished file, then installs it on a real Android emulator and takes screenshots.'),
+      field('Repository', el('input', {
+        type: 'text', value: repo || 'deepsilence10161-source/App-mint-',
+        spellcheck: 'false', autocapitalize: 'off', 'aria-label': 'Repository',
+        oninput: (e) => { store.setRepo(e.target.value.trim()); },
+      })),
+      token
+        ? buildBtn
+        : el('div', {}, [
+            el('p', { class: 'hint' }, 'Connect GitHub to start builds from here.'),
+            el('button', { class: 'btn ghost', onclick: () => openTokenSheet() }, 'Connect GitHub'),
+          ]),
+      el('div', { class: 'row', style: 'margin-top:var(--s3)' }, [
+        el('button', { class: 'btn ghost', onclick: () => downloadSpec() }, 'Save spec file'),
+        el('button', { class: 'btn ghost', onclick: () => copySpec() }, 'Copy as text'),
+      ]),
+      S.lastRun ? el('div', { style: 'margin-top:var(--s4)' },
+        el('h2', {}, 'Last build'),
+        el('div', { class: 'runrow' }, [
+          el('span', { class: 'rname' }, 'Run #' + S.lastRun.run_number),
+          el('span', { class: 'rstate ' + (S.lastRun.conclusion || S.lastRun.status) }, (S.lastRun.conclusion || S.lastRun.status || '').toUpperCase()),
+        ]),
+        el('a', { class: 'btn ghost', href: S.lastRun.html_url, target: '_blank', rel: 'noopener', style: 'margin-top:var(--s2)' }, 'Open build results'),
+      ) : null,
+    ]),
+
+    detailsAdvanced('Advanced', [
+      field('Android Gradle Plugin', el('input', {
+        type: 'text', value: spec.build.toolchain?.agp || TOOLCHAIN_PROFILES.modern.agp, spellcheck: 'false',
+        oninput: (e) => { spec.build.toolchain = { ...(spec.build.toolchain || {}), agp: e.target.value.trim() }; touch(); },
+      }), 'Must match Gradle. See the profiles below.'),
+      el('div', { class: 'chips', style: 'margin-bottom:var(--s4)' },
+        Object.entries(TOOLCHAIN_PROFILES).map(([k, p]) => el('span', { class: 'chip' },
+          `${k}: AGP ${p.agp} / Gradle ${p.gradle} / SDK ≤ ${p.maxCompileSdk}`))),
+      field('Signing', el('div', { class: 'selectwrap' }, el('select', {
+        onchange: (e) => { spec.signing = { ...(spec.signing || {}), mode: e.target.value }; touch(); hardUpdate(); },
+      },
+        el('option', { value: 'debug', selected: spec.signing?.mode === 'debug' }, 'Debug only (test on your phone)'),
+        el('option', { value: 'secret-store', selected: spec.signing?.mode === 'secret-store' }, 'Release key from GitHub secrets'),
+      )), 'Release signing needs a keystore stored as a repository secret. It never goes in the code.'),
+      el('button', { class: 'btn ghost', onclick: () => { openTokenSheet(); } }, 'Manage GitHub connection'),
+      el('button', { class: 'btn danger', style: 'margin-top:var(--s2)', onclick: () => { store.setToken(''); toast('GitHub connection removed.'); hardUpdate(); } }, 'Disconnect GitHub'),
+    ]),
+  ];
+}
+
+/* ── view helpers ──────────────────────────────────────────────────────── */
+function card(title, kids, hint) {
+  return el('section', { class: 'card' }, [
+    title ? el('h2', {}, title) : null,
+    hint ? el('p', { class: 'hint' }, hint) : null,
+    ...(Array.isArray(kids) ? kids : [kids]).filter(Boolean),
+  ]);
+}
+
+function field(label, control, sub) {
+  return el('div', { class: 'field' }, [
+    el('label', {}, label),
+    control,
+    sub ? el('span', { class: 'sub' }, sub) : null,
+  ].filter(Boolean));
+}
+
+function colourField(label, key, theme) {
+  const val = theme[key] || '#000000';
+  const picker = el('input', {
+    type: 'color', value: /^#[0-9a-f]{6}$/i.test(val) ? val : '#000000',
+    'aria-label': label,
+    oninput: (e) => { theme[key] = e.target.value.toUpperCase(); text.value = theme[key]; touch(); softUpdate(); },
+  });
+  const text = el('input', {
+    type: 'text', value: val, spellcheck: 'false', maxlength: 9,
+    'aria-label': label + ' value',
+    oninput: (e) => {
+      const v = e.target.value.trim();
+      if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) { theme[key] = v.toUpperCase(); picker.value = v.length === 7 ? v : picker.value; touch(); softUpdate(); }
+    },
+  });
+  return field(label, el('div', { class: 'swatch' }, [picker, text]));
+}
+
+function kvSelect(current, pairs, onchange, ariaLabel) {
+  const sel = el('select', { 'aria-label': ariaLabel, onchange: (e) => onchange(Number(e.target.value)) },
+    pairs.map(([v, l]) => el('option', { value: v, selected: String(current) === String(v) }, l)));
+  return el('div', { class: 'selectwrap' }, sel);
+}
+
+function chipBtn(label, on, onclick) {
+  const b = el('button', { class: 'chip' + (on ? ' pass' : ''), style: 'cursor:pointer;min-height:34px', onclick }, label);
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  return b;
+}
+
+function detailsAdvanced(summary, kids) {
+  return el('details', { class: 'adv' }, el('summary', {}, summary), ...kids);
+}
+
+function luminance(hex) {
+  const c = String(hex || '#ffffff').replace('#', '');
+  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c;
+  const n = parseInt(full.slice(0, 6), 16);
+  if (!Number.isFinite(n)) return 1;
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+const lighten = (hex) => {
+  const c = String(hex).replace('#', ''); const n = parseInt(c.length === 3 ? c.split('').map((x) => x + x).join('') : c, 16);
+  const f = (v) => Math.round(v + (255 - v) * 0.92).toString(16).padStart(2, '0');
+  return Number.isFinite(n) ? `#${f((n >> 16) & 255)}${f((n >> 8) & 255)}${f(n & 255)}` : '#ffffff';
+};
+const darken = (hex) => {
+  const c = String(hex).replace('#', ''); const n = parseInt(c.length === 3 ? c.split('').map((x) => x + x).join('') : c, 16);
+  const f = (v) => Math.round(v * 0.18).toString(16).padStart(2, '0');
+  return Number.isFinite(n) ? `#${f((n >> 16) & 255)}${f((n >> 8) & 255)}${f(n & 255)}` : '#111111';
+};
+
+/* ── rendering ─────────────────────────────────────────────────────────── */
+function renderTabs() {
+  const defs = [
+    ['design', 'Design', I.design],
+    ['caps', 'Features', I.caps],
+    ['preview', 'Preview', I.eye],
+    ['build', 'Build', I.build],
+  ];
+  const inner = $('.tabbar .inner');
+  inner.replaceChildren(...defs.map(([id, label, icon]) =>
+    el('button', {
+      class: 'tab', role: 'tab', 'aria-selected': S.tab === id ? 'true' : 'false',
+      onclick: () => { S.tab = id; hardUpdate(); },
+    }, el('span', { html: svg(icon) }), el('span', {}, label))));
+}
+
+function renderHealth() {
+  const r = check();
+  const node = $('#health');
+  const total = r.counts.critical + r.counts.error + r.counts.warning;
+  node.replaceChildren(
+    el('span', { class: 'chip ' + (r.blocked ? 'fail' : (total ? 'warn' : 'pass')) },
+      r.blocked ? 'Blocked' : (total ? 'Ready, warnings' : 'Valid')),
+    el('span', { class: 'spacer' }),
+    el('span', { class: 'val' },
+      `${(S.active.spec.capabilities || []).length} feature${(S.active.spec.capabilities || []).length === 1 ? '' : 's'}`),
+  );
+}
+
+function renderActive() {
+  $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
+  const pages = { design: viewDesign, caps: viewCaps, preview: viewPreview, build: viewBuild };
+  const page = pages[S.tab] || viewDesign;
+  main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
+  renderTabs();
+  renderHealth();
+}
+
+/** Light refresh for typing: a full redraw would steal focus mid-keystroke. */
+function softUpdate() {
+  renderHealth();
+  // The title bar shows the app name, so it has to follow what is being typed.
+  // Previously it kept showing the name from when the project was created.
+  const t = $('#projname');
+  if (t && S.active) t.textContent = S.active.spec.identity.appName || 'Untitled';
+}
+/** Full redraw. */
+function hardUpdate() { renderActive(); }
+
+// Created as a real <main> element. An earlier version built a <div> here, which
+// silently stopped every `main { ... }` rule from applying — including the
+// clearance that keeps content out from under the fixed bottom navigation.
+const main = el('main');
+
+/* ── project picker ────────────────────────────────────────────────────── */
+function renderPicker() {
+  $('#projname').textContent = 'New project';
+  const tpls = S.templates.templates || [];
+  main.replaceChildren(
+    el('div', { class: 'tabpage on' }, [
+      card('Start a project', [
+        el('p', { class: 'hint' }, 'Pick a starting point. Every template is an ordinary specification you can change completely.'),
+        ...tpls.map((t) => el('button', {
+          class: 'tpl', onclick: () => createProject(t),
+        }, [
+          el('span', { class: 'tmark', html: svg(I[t.mark] || I.square) }),
+          el('span', { style: 'flex:1;min-width:0' }, [
+            el('div', { class: 'tname' }, t.name),
+            el('div', { class: 'ttag' }, t.tagline),
+          ]),
+        ])),
+      ]),
+      S.projects.length ? card('Your projects', S.projects.map((p) => el('button', {
+        class: 'tpl', onclick: () => { S.active = p; touch(); renderActive(); },
+      }, [
+        el('span', { class: 'tmark', html: svg(I.square) }),
+        el('span', { style: 'flex:1;min-width:0' }, [
+          el('div', { class: 'tname' }, p.spec.identity.appName),
+          el('div', { class: 'ttag' }, p.spec.identity.packageName),
+        ]),
+      ]))) : null,
+    ].filter(Boolean)));
+
+  // tabs are meaningless before a project exists
+  $('.tabbar .inner').replaceChildren();
+  $('#health').replaceChildren(el('span', { class: 'chip' }, `${tpls.length} templates`), el('span', { class: 'spacer' }));
+}
+
+function createProject(tpl) {
+  const spec = specFromTemplate(tpl, tpl.id === 'blank' ? 'My App' : tpl.name + ' App');
+  S.active = { id: uid(), name: spec.identity.appName, spec, updatedAt: new Date().toISOString() };
+  persist();
+  S.tab = 'design';
+  renderActive();
+}
+
+/* ── import / export ───────────────────────────────────────────────────── */
+function downloadSpec() {
+  const blob = new Blob([JSON.stringify(S.active.spec, null, 2) + '\n'], { type: 'application/json' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: 'spec.json' });
+  document.body.append(a); a.click(); a.remove();
+  toast('Saved spec.json');
+}
+
+async function copySpec() {
+  const text = JSON.stringify(S.active.spec, null, 2);
+  try { await navigator.clipboard.writeText(text); toast('Specification copied'); }
+  catch { toast('Copy failed — select the text manually.'); }
+}
+
+function importSpec() {
+  const input = el('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+  input.addEventListener('change', async () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    try {
+      const spec = JSON.parse(await f.text());
+      S.active = { id: uid(), name: spec.identity?.appName || 'Imported', spec, updatedAt: new Date().toISOString() };
+      persist(); renderActive();
+      const r = check();
+      toast(r.blocked ? `Imported with ${r.blocking.length} blocking problem(s).` : 'Imported and valid.');
+    } catch (e) {
+      toast('That file is not valid JSON.');
+    }
+    input.remove();
+  });
+  document.body.append(input); input.click();
+}
+
+/* ── GitHub connection + build ─────────────────────────────────────────── */
+function openTokenSheet() {
+  const dlg = el('div', { class: 'card', style: 'position:fixed;inset:auto var(--s4) var(--s4);z-index:70;box-shadow:0 20px 60px rgba(0,0,0,.6);margin:0' }, [
+    el('h2', {}, 'Connect GitHub'),
+    el('p', { class: 'hint' },
+      'To start a build from your phone, the Studio needs permission to commit the specification to your repository. '
+      + 'Use a fine-grained token limited to that one repository, with Contents: Read and write and Actions: Read and write. '
+      + 'It is stored only in this browser and is only ever sent to api.github.com.'),
+    field('Token', el('input', {
+      type: 'password', placeholder: 'github_pat_…', autocomplete: 'off', spellcheck: 'false',
+      'aria-label': 'GitHub token',
+    })),
+    el('div', { class: 'row' }, [
+      el('button', { class: 'btn primary', onclick: () => {
+        const v = $('input[type=password]', dlg).value.trim();
+        if (!v) { toast('Paste a token first.'); return; }
+        store.setToken(v);
+        dlg.remove();
+        hardUpdate();
+        toast('Connected. Starting builds from here is now possible.');
+      } }, 'Save'),
+      el('button', { class: 'btn ghost', onclick: () => dlg.remove() }, 'Cancel'),
+    ]),
+  ]);
+  document.body.append(dlg);
+}
+
+async function startBuild() {
+  const token = store.token();
+  const repo = store.repo() || 'deepsilence10161-source/App-mint-';
+  if (!token) { openTokenSheet(); return; }
+
+  const path = `apps/studio/${(S.active.spec.identity.packageName || 'app').split('.').pop()}/spec.json`;
+  const api = `https://api.github.com/repos/${repo}/contents/${path}`;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+  };
+  toast('Sending the specification…');
+
+  try {
+    // Read the current file first so we send the correct sha. Without it GitHub
+    // rejects the write, and a blind overwrite is not something to attempt.
+    let sha;
+    const head = await fetch(api + '?ref=main', { headers });
+    if (head.ok) sha = (await head.json()).sha;
+    else if (head.status !== 404) throw new Error(`GitHub returned ${head.status} while reading the file.`);
+
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(S.active.spec, null, 2) + '\n')));
+    const body = { message: `spec: update ${S.active.spec.identity.appName} from the Studio`, content, branch: 'main' };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(api, { method: 'PUT', headers, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}));
+      throw new Error(detail.message || `GitHub returned ${res.status}.`);
+    }
+
+    toast('Committed. The build is starting…');
+
+    // Watch the run so the screen shows something real instead of a static claim.
+    const since = Date.now() - 5000;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r2) => setTimeout(r2, 3000));
+      const runs = await fetch(
+        `https://api.github.com/repos/${repo}/actions/runs?per_page=5&event=push`,
+        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } },
+      ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+      const run = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
+      if (run) { S.lastRun = run; hardUpdate(); break; }
+    }
+  } catch (e) {
+    toast(e.message || 'Could not reach GitHub.', 5000);
+  }
+}
+
+/* ── boot ──────────────────────────────────────────────────────────────── */
+async function boot(templatesData) {
+  S.templates = templatesData || { templates: [] };
+  // Saved projects may predate a schema change, so they are re-validated on
+  // load rather than trusted. An old project that no longer fits simply shows
+  // its findings instead of failing silently or crashing the Studio.
+  S.projects = (store.load() || []).map((p) => {
+    const d = defaultSpec();
+    const merged = mergeSpec(d, p.spec || {});
+    merged.specVersion = SPEC_VERSION;
+    return { ...p, spec: merged };
+  });
+
+  const shell = $('#main');
+  shell.replaceWith(main);
+  main.id = 'main';
+
+  let activeId = null;
+  try { activeId = localStorage.getItem(LS_ACTIVE); } catch { /* ignore */ }
+  const found = S.projects.find((p) => p.id === activeId) || S.projects[0];
+  if (found) { S.active = found; renderActive(); } else { renderPicker(); }
+
+  $('#newproj').addEventListener('click', () => { renderPicker(); });
+  $('#importproj').addEventListener('click', importSpec);
+}
+
+window.__appmintBoot = boot;
+
+/* templates are inlined as data, not fetched */
+
+window.__appmintTemplates = {
+  "note": "Template library. Each entry is a partial Project Specification merged over the defaults — so a template can never introduce a field the schema does not know about, and every template stays valid as the schema evolves.",
+  "templates": [
+    {
+      "id": "blank",
+      "name": "Blank",
+      "tagline": "A clean start with nothing assumed.",
+      "mark": "square",
+      "spec": {}
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "tagline": "Company site wrapped as an app, with tap-to-call and email.",
+      "mark": "briefcase",
+      "spec": {
+        "capabilities": ["telephone", "email", "share"],
+        "theme": { "primary": "#1D4ED8", "accent": "#0EA5E9", "background": "#0B1220", "surface": "#151E33", "onSurface": "#E8ECF8", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "offlinePage": true, "fileUploads": false } },
+        "deepLinks": { "allowedSchemes": ["https", "tel", "mailto"] }
+      }
+    },
+    {
+      "id": "portfolio",
+      "name": "Portfolio",
+      "tagline": "Show work, share links, keep it visual.",
+      "mark": "image",
+      "spec": {
+        "capabilities": ["share", "clipboard"],
+        "theme": { "primary": "#7C3AED", "accent": "#F472B6", "background": "#0C0A15", "surface": "#1A1526", "onSurface": "#F1EAFE", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true } },
+        "deepLinks": { "allowedSchemes": ["https", "mailto"] }
+      }
+    },
+    {
+      "id": "commerce",
+      "name": "Shop",
+      "tagline": "Storefront with UPI checkout handed to the payment app.",
+      "mark": "cart",
+      "spec": {
+        "capabilities": ["upi", "share", "notifications"],
+        "theme": { "primary": "#059669", "accent": "#FBBF24", "background": "#06140F", "surface": "#11241C", "onSurface": "#E6F5EE", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "fileUploads": false, "domStorage": true } },
+        "deepLinks": { "allowedSchemes": ["https", "upi", "tel"] }
+      }
+    },
+    {
+      "id": "education",
+      "name": "Learning",
+      "tagline": "Lessons and reminders, readable offline.",
+      "mark": "book",
+      "spec": {
+        "capabilities": ["notifications", "exactAlarms", "bootStart"],
+        "theme": { "primary": "#D97706", "accent": "#22D3EE", "background": "#14100A", "surface": "#241C12", "onSurface": "#F7EFE4", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true, "offlinePage": true } },
+        "deepLinks": { "allowedSchemes": ["https", "mailto"] }
+      }
+    },
+    {
+      "id": "news",
+      "name": "News",
+      "tagline": "Fast reading, shareable links, no clutter.",
+      "mark": "rss",
+      "spec": {
+        "capabilities": ["notifications", "share", "clipboard"],
+        "theme": { "primary": "#DC2626", "accent": "#F59E0B", "background": "#120B0B", "surface": "#221414", "onSurface": "#F6EAEA", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "zoom": true } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    },
+    {
+      "id": "tournament",
+      "name": "Tournament",
+      "tagline": "Fixtures, results and signups for a competition.",
+      "mark": "trophy",
+      "spec": {
+        "capabilities": ["notifications", "share", "upi", "googleAuth"],
+        "theme": { "primary": "#EA580C", "accent": "#22D3EE", "background": "#100C08", "surface": "#211610", "onSurface": "#F8EEE6", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "custom-tab", "fileUploads": true, "domStorage": true } },
+        "deepLinks": { "customScheme": "tournament", "allowedSchemes": ["https", "upi", "whatsapp"] },
+        "backend": { "kind": "supabase", "requiresAuth": true, "tablesRequiringRls": [] }
+      }
+    },
+    {
+      "id": "utility",
+      "name": "Utility",
+      "tagline": "A small tool with scanning and haptics.",
+      "mark": "wrench",
+      "spec": {
+        "capabilities": ["barcode", "vibration", "clipboard", "share"],
+        "theme": { "primary": "#0891B2", "accent": "#A3E635", "background": "#06151A", "surface": "#0F2530", "onSurface": "#E6F6FA", "statusBarStyle": "dark" },
+        "app": { "webview": { "externalLinks": "external-browser", "fileUploads": false } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "tagline": "Numbers and status at a glance, light by default.",
+      "mark": "chart",
+      "spec": {
+        "capabilities": ["notifications", "share"],
+        "theme": { "primary": "#4F46E5", "accent": "#06B6D4", "background": "#F7F8FC", "surface": "#FFFFFF", "onSurface": "#101426", "statusBarStyle": "light" },
+        "android": { "theme": "light" },
+        "app": { "webview": { "externalLinks": "custom-tab", "canvasBackground": "#FFFFFF", "domStorage": true } },
+        "deepLinks": { "allowedSchemes": ["https"] }
+      }
+    }
+  ]
+};
+window.__appmintBoot(window.__appmintTemplates);
+</script>
+</body>
+</html>

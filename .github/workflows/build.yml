@@ -75,6 +75,9 @@ jobs:
       - name: Engine self-tests
         run: node --test tools/tests/ 2>&1 | tail -40
 
+      - name: Build the Studio bundle
+        run: node tools/build-studio.mjs
+
       # ---- Generate ------------------------------------------------------
       - name: Generate Android project
         id: gen
