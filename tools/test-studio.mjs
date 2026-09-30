@@ -423,6 +423,110 @@ async function main() {
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(shotDir, 'studio-permissions.png') });
 
+  /* ── the repair screen ─────────────────────────────────────────────── */
+
+  /*
+   * A project with two problems of deliberately different kinds:
+   *   android.minSdk above android.targetSdk  — impossible, so repairable
+   *   android.cleartextTraffic turned on      — legal, so only your call
+   * The repair screen must treat them differently: fix the first in bulk, and
+   * never touch the second without being asked.
+   */
+  async function loadBrokenProject() {
+    await page.evaluate(() => {
+      const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+      const p = list[0];
+      p.spec.identity.appName = 'Repair Screen Test';
+      p.spec.android.minSdk = 36;
+      p.spec.android.targetSdk = 26;
+      p.spec.android.cleartextTraffic = true;
+      delete p.repairs;
+      localStorage.setItem('appmint.projects.v1', JSON.stringify(list));
+      localStorage.setItem('appmint.active.v1', p.id);
+    });
+    await page.reload();
+    await page.waitForTimeout(500);
+    await page.locator('.tabbar .tab', { hasText: 'Build' }).click();
+    await page.waitForTimeout(400);
+  }
+
+  await loadBrokenProject();
+  const repairText = await page.textContent('#main');
+  check('A problem that cannot work is offered as a repair',
+    /Ready to repair/i.test(repairText), 'expected the repair card');
+  check('The repair says what it will change before changing it',
+    /minSdk/.test(repairText) && /36 → 26/.test(repairText),
+    'the before and after must both be visible before the press');
+  check('A repair that changes your decision is listed, not applied',
+    /Your call/i.test(repairText) && /cleartextTraffic/.test(repairText),
+    'the HTTP setting must be offered separately');
+
+  const caughtByBulk = await page.evaluate(() => {
+    // The bulk button must not carry the judgement call with it.
+    const bulk = [...document.querySelectorAll('button')].find((b) => /^Repair \d+ problem/.test(b.textContent));
+    return bulk ? bulk.textContent.trim() : null;
+  });
+  check('The bulk repair counts only the problems it may touch',
+    caughtByBulk === 'Repair 1 problem', `the button said: ${caughtByBulk}`);
+
+  await page.locator('button:has-text("Repair 1 problem")').click();
+  await page.waitForTimeout(600);
+  const afterRepair = await page.textContent('#main');
+  // "36 → 26" also appears in the record of what was done, so the check is on
+  // the offer disappearing rather than on the string being absent.
+  const stillOffered = await page.evaluate(() =>
+    [...document.querySelectorAll('button')].some((b) => /^Repair \d+ problem/.test(b.textContent)));
+  check('Repairing fixes the impossible value',
+    !stillOffered && /Ready to repair/i.test(afterRepair) === false,
+    'the repaired step should no longer be offered');
+  check('Repairing leaves the judgement call alone',
+    /cleartextTraffic/.test(afterRepair), 'the HTTP setting must survive the bulk repair');
+
+  const stored = await page.evaluate(() => {
+    const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+    const p = list.find((x) => x.spec.identity.appName === 'Repair Screen Test');
+    return { min: p.spec.android.minSdk, target: p.spec.android.targetSdk, clear: p.spec.android.cleartextTraffic, journal: (p.repairs || []).length };
+  });
+  check('The repair is written to the project, not just to the screen',
+    stored.min === stored.target && stored.clear === true,
+    `minSdk=${stored.min} targetSdk=${stored.target} cleartext=${stored.clear}`);
+  check('The repair is recorded so it can be undone', stored.journal >= 1, `${stored.journal} recorded`);
+
+  const toastText = await page.textContent('#toast');
+  check('The result is stated exactly, and never claims more than was done',
+    /Repaired 1 problem/.test(toastText) && !/Nothing is outstanding/i.test(toastText),
+    `the toast said "${toastText.trim()}" while the header still reported warnings`);
+
+  check('What was repaired is shown afterwards, with the value it replaced',
+    /Repaired in this project/i.test(afterRepair) && /36 → 26/.test(afterRepair),
+    'the journal must show the old value, not just a tick');
+
+  // undo puts the field back exactly
+  await page.locator('.repair-done button:has-text("Undo")').first().click();
+  await page.waitForTimeout(600);
+  const afterUndo = await page.evaluate(() => {
+    const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+    const p = list.find((x) => x.spec.identity.appName === 'Repair Screen Test');
+    return { min: p.spec.android.minSdk, journal: (p.repairs || []).length };
+  });
+  check('Undo puts the value back exactly as it was',
+    afterUndo.min === 36, `minSdk is ${afterUndo.min}, expected 36`);
+  check('Undo is removed from the record once used',
+    afterUndo.journal === 0, `${afterUndo.journal} entries left`);
+
+  // applying a judgement call explicitly does work
+  await page.locator('.repair-decision button:has-text("Apply this one")').first().click();
+  await page.waitForTimeout(600);
+  const decided = await page.evaluate(() => {
+    const list = JSON.parse(localStorage.getItem('appmint.projects.v1') || '[]');
+    const p = list.find((x) => x.spec.identity.appName === 'Repair Screen Test');
+    return { clear: p.spec.android.cleartextTraffic, entries: (p.repairs || []).map((r) => r.decided) };
+  });
+  check('A judgement call applies when it is asked for by name',
+    decided.clear === false, `cleartextTraffic is ${decided.clear}`);
+  check('The record marks which repairs were your decision',
+    decided.entries.includes(true), `recorded: ${JSON.stringify(decided.entries)}`);
+
   if (!process.argv.includes('--keep')) await browser.close();
 
   const failed = results.filter((r) => !r.ok);

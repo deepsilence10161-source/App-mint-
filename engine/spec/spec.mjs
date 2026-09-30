@@ -26,6 +26,7 @@ export { COMPONENTS, ACTIONS, EVENTS };
 
 import { TOOLCHAIN_PROFILES, resolveToolchain, profileForCompileSdk } from './toolchain.mjs';
 import { validateScreens, COMPONENTS, ACTIONS, EVENTS } from '../components/library.mjs';
+import { confidenceOf, isAutoFixable } from './fix-policy.mjs';
 
 /* ------------------------------------------------------------------ *
  * CAPABILITY REGISTRY
@@ -639,4 +640,234 @@ export function rollbackFix(spec, entry) {
   if (u.kind === 'removeArrayItem' && Array.isArray(parent[key])) { parent[key] = parent[key].filter((v) => v !== u.value); return true; }
   if (u.kind === 'insertArrayItem' && Array.isArray(parent[key])) { parent[key].splice(u.at, 0, u.value); return true; }
   return false;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   REPAIR PLANNING
+   ══════════════════════════════════════════════════════════════════════════
+
+   applyFixes() above answers "make it valid". This answers the question that
+   comes first: "what exactly would change, and am I allowed to do that on my
+   own?"
+
+   It works on a copy, so nothing is altered until the caller decides. Every
+   step it returns carries the value before and the value after, because a
+   repair nobody can inspect is a repair nobody can refuse.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/** The value at a dotted path, or undefined. Arrays use the usual [i] form. */
+function readPath(obj, path) {
+  if (!path) return undefined;
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  let cur = obj;
+  for (const p of parts) {
+    if (cur == null) return undefined;
+    cur = cur[p];
+  }
+  return cur;
+}
+
+/**
+ * What one repair would do, in the terms a person reads.
+ *
+ * The `before` and `after` are taken from the real specification rather than
+ * composed from the finding's text, so what the screen shows is what the
+ * engine would actually write.
+ */
+function describeFix(spec, issue) {
+  const fix = issue.fix;
+  // Read from the specification as it stands now, never from the post-repair
+  // copy: "before" has to mean what the owner has, or the screen would show a
+  // change from the repaired value to itself.
+  const before = readPath(spec, fix.path);
+  let next;
+  if (fix.kind === 'set') next = fix.value;
+  else if (fix.kind === 'addArrayItem') next = [...(Array.isArray(before) ? before : []), fix.value];
+  else if (fix.kind === 'removeArrayItem') next = (Array.isArray(before) ? before : []).filter((v) => v !== fix.value);
+  else next = undefined;
+
+  const policy = confidenceOf(issue.code);
+  return {
+    code: issue.code,
+    severity: issue.severity,
+    path: fix.path,
+    message: issue.message,
+    kind: fix.kind,
+    before,
+    after: next,
+    alsoNeeds: fix.alsoNeeds ? Object.entries(fix.alsoNeeds).map(([p, v]) => ({ path: p, value: v })) : [],
+    confidence: policy.confidence,
+    why: policy.why,
+  };
+}
+
+/** A short "a → b" rendering of a value, for the screen. */
+export function showValue(v) {
+  if (v === undefined) return 'not set';
+  if (v === null) return 'nothing';
+  if (typeof v === 'boolean') return v ? 'on' : 'off';
+  if (Array.isArray(v)) return v.length ? v.join(', ') : 'empty';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+/**
+ * Apply every forced repair, repeating until nothing is left to force.
+ *
+ * Two things make this less simple than it looks.
+ *
+ * First, one pass is not enough. Repairs have consequences: raising the compile
+ * version to match the target version can leave the build tool too old for it,
+ * a second problem that only exists because the first one was fixed.
+ *
+ * Second — and this is the part that matters — a repair offered by the engine is
+ * not automatically a repair that works. The engine's own rule for a mismatched
+ * SDK pair is "set compile to target", which is right until the target itself is
+ * out of range, at which point carrying it out moves the value somewhere the
+ * schema forbids and turns one error into two. A repair that makes the
+ * specification worse is not a repair, and it is not applied here however
+ * confidently it was proposed.
+ *
+ * So each round is judged on its result: it is kept only if it strictly reduces
+ * the number of errors. Otherwise it is discarded, the loop stops, and the
+ * reason is handed back for the screen to explain.
+ */
+function autoRepairAll(spec, maxRounds = 6) {
+  const errorsIn = (r) => r.issues.filter((i) => i.severity === 'critical' || i.severity === 'error').length;
+
+  let current = JSON.parse(JSON.stringify(spec));
+  const applied = [];
+  const refused = [];
+  let result = validateSpec(current);
+  let stopped = 'nothing-to-do';
+
+  for (let round = 0; round < maxRounds; round++) {
+    const codes = result.issues.filter((i) => i.fix && isAutoFixable(i.code)).map((i) => i.code);
+    if (!codes.length) { stopped = 'settled'; break; }
+
+    const step = applyFixes(current, result.issues, { onlyCodes: codes });
+    if (!step.applied.length) { stopped = 'settled'; break; }
+
+    const after = validateSpec(step.spec);
+    if (errorsIn(after) >= errorsIn(result) && errorsIn(after) > 0) {
+      // Kept nothing: say which repair was refused and what it would have cost.
+      refused.push({
+        code: step.applied[0].code,
+        path: step.applied[0].path,
+        message: step.applied[0].message,
+        why: 'Carrying this out would leave more problems than it solves, so it was left alone.',
+        wouldGive: errorsIn(after),
+        had: errorsIn(result),
+      });
+      stopped = 'refused';
+      break;
+    }
+
+    applied.push(...step.applied);
+    current = step.spec;
+    result = after;
+  }
+
+  return { spec: current, applied, result, refused, stopped };
+}
+
+/**
+ * Plan the repairs for a specification.
+ *
+ * Returns three things:
+ *   steps         — every repair available, each with its before and after
+ *   stepsAuto     — the subset that may be done without asking
+ *   stepsReview   — the subset that changes something the owner chose
+ *
+ * `preview.spec` is the specification you would get from doing the automatic
+ * repairs, worked out on a copy. `preview.result` is what the validator says
+ * about that outcome, which is how a caller can tell the honest truth — "this
+ * fixes 3 of 5 problems" — instead of implying that every repair succeeds.
+ */
+export function planFixes(spec, issues = null, { onlyCodes = null } = {}) {
+  const findings = issues || validateSpec(spec).issues;
+  const withFix = findings.filter((i) => i && i.fix && (!onlyCodes || onlyCodes.includes(i.code)));
+
+  // Only forced repairs take the automatic pass. A repair that changes a
+  // decision the owner made is never in it, whatever its severity: severity
+  // says how bad the problem is, not how safe the answer is.
+  const preview = autoRepairAll(spec);
+
+  const steps = withFix.map((i) => describeFix(spec, i));
+
+  // A forced repair can be discovered by another forced repair — the toolchain
+  // step above only exists once the compile version has moved. Those are real
+  // steps, so they are listed too, marked as automatic.
+  const known = new Set(steps.map((x) => x.code));
+  for (const a of preview.applied) {
+    if (known.has(a.code)) continue;
+    known.add(a.code);
+    steps.push({
+      code: a.code,
+      severity: 'error',
+      path: a.path,
+      message: a.message,
+      kind: (a.fix || {}).kind || 'set',
+      before: a.undo && a.undo.kind === 'set' ? a.undo.prev : undefined,
+      after: (a.fix || {}).value,
+      alsoNeeds: [],
+      confidence: 'high',
+      why: confidenceOf(a.code).why,
+      discovered: true,
+    });
+  }
+
+  return {
+    steps,
+    stepsAuto: steps.filter((s) => s.confidence === 'high'),
+    stepsReview: steps.filter((s) => s.confidence !== 'high'),
+    preview: {
+      spec: preview.spec,
+      applied: preview.applied.map((a) => ({ code: a.code, path: a.path, message: a.message, undo: a.undo })),
+      result: preview.result,
+      // Repairs the engine declined to make, and why. Empty is the normal case;
+      // when it is not empty the screen says so rather than pretending the
+      // problem was handled.
+      refused: preview.refused || [],
+      stopped: preview.stopped,
+    },
+    changed: preview.applied.length,
+  };
+}
+
+/**
+ * Apply the repairs a person has agreed to, and report what changed.
+ *
+ * `codes` names the findings to repair; leaving it out means "everything that
+ * may be done without asking". Each entry in `applied` carries the inverse
+ * operation, so the whole thing can be undone by walking backwards through it
+ * with rollbackFix().
+ */
+export function repair(spec, { codes = null, issues = null } = {}) {
+  const before = validateSpec(spec);
+  const chosen = codes || before.issues.filter((i) => i.fix && isAutoFixable(i.code)).map((i) => i.code);
+  if (!chosen.length) return { spec, applied: [], before, after: before, changed: 0 };
+
+  const reviewCodes = chosen.filter((c) => !isAutoFixable(c));
+  const wantsAuto = chosen.some((c) => isAutoFixable(c));
+
+  // The forced repairs run to completion, including any they reveal along the
+  // way. A repair that needed a decision is applied exactly as asked, one code
+  // at a time, with its own undo entry — recorded with the same honesty.
+  const first = wantsAuto
+    ? autoRepairAll(spec)
+    : { spec: JSON.parse(JSON.stringify(spec)), applied: [], result: before };
+
+  let current = first.spec;
+  const applied = [...first.applied];
+
+  for (const code of reviewCodes) {
+    const result = applyFixes(current, validateSpec(current).issues, { onlyCodes: [code] });
+    current = result.spec;
+    applied.push(...result.applied);
+  }
+
+  const after = validateSpec(current);
+  return { spec: current, applied, before, after, changed: applied.length };
 }

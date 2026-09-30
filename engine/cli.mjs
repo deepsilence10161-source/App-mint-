@@ -13,7 +13,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { validateSpec, applyFixes, defaultSpec } from './spec/spec.mjs';
+import { validateSpec, applyFixes, planFixes, repair, defaultSpec, showValue } from './spec/spec.mjs';
+import { confidenceOf, isAutoFixable } from './spec/fix-policy.mjs';
 import { generateAndroidProject, TOOLCHAIN_PROFILES } from './gen/android.mjs';
 import { permissionReport, derivePermissions } from './capability/permissions.mjs';
 
@@ -41,22 +42,56 @@ function cmdValidate(args) {
   let fixedSpec = null;
 
   if (args.fix && result.issues.some((i) => i.fix)) {
-    const { spec: repaired, applied, result: after } = applyFixes(spec);
+    // Repair only what is provably wrong. A repair that changes a decision the
+    // owner made is listed and left alone, however sensible it looks: --fix is
+    // not consent for changes the owner never saw. (Before this, --fix applied
+    // every repair the engine knew how to make, including turning off Android
+    // backup and plain-HTTP traffic, which can quietly break a working app.)
+    const plan = planFixes(spec, result.issues);
+    const { spec: repaired, applied, after, before } = repair(spec);
     fixedSpec = repaired;
     if (!args.json) {
-      console.log(paint(C.cyan, `\n  Deterministic repair applied ${applied.length} high-confidence fix(es):`));
-      for (const a of applied) {
-        console.log(`    ${paint(C.green, 'FIXED')}  ${a.code}  ${paint(C.dim, a.path)}`);
-        console.log(`           ${a.message.split('.')[0]}.`);
+      if (applied.length) {
+        console.log(paint(C.cyan, `\n  Repaired ${applied.length} problem(s) that could not have worked as they were:`));
+        for (const a of applied) {
+          const step = plan.steps.find((x) => x.code === a.code);
+          const was = step ? showValue(step.before) : '?';
+          const now = step ? showValue(step.after) : '?';
+          console.log(`    ${paint(C.green, 'FIXED')}  ${a.code}  ${paint(C.dim, a.path)}`);
+          console.log(`           ${was} → ${now}`);
+        }
+      } else {
+        console.log(paint(C.dim, '\n  Nothing could be repaired automatically.'));
       }
+
+      // What was declined, and why — including repairs that were declined
+      // because carrying them out would have made things worse.
+      const declined = plan.stepsReview.filter((x) => after.issues.some((i) => i.code === x.code));
+      for (const r of plan.preview.refused) {
+        console.log(paint(C.yellow, `\n  Declined to repair ${r.code} (${r.path}):`));
+        console.log(`    ${r.why}`);
+      }
+      if (declined.length) {
+        console.log(paint(C.yellow, `\n  ${declined.length} problem(s) need your decision — a repair exists, but it changes something you chose:`));
+        for (const d of declined) {
+          console.log(`    ${paint(C.yellow, 'YOURS')}  ${d.code}  ${paint(C.dim, d.path)}`);
+          console.log(`           ${d.why}`);
+        }
+      }
+
       if (args.write) {
         fs.writeFileSync(file, JSON.stringify(repaired, null, 2) + '\n');
         console.log(paint(C.green, `\n  Written back to ${file}`));
       } else {
-        console.log(paint(C.dim, `\n  (dry run — pass --write to save. Every fix is reversible.)`));
+        console.log(paint(C.dim, `\n  (dry run — pass --write to save. Every repair is reversible.)`));
       }
     }
     result = after;
+    if (before.counts.error !== after.counts.error || before.counts.warning !== after.counts.warning) {
+      // Say plainly what the repair did and did not achieve.
+      const left = after.counts.critical + after.counts.error + after.counts.warning;
+      if (!args.json && left) console.log(paint(C.dim, `\n  ${left} finding(s) remain.`));
+    }
   }
 
   if (args.json) {
@@ -81,7 +116,8 @@ function cmdValidate(args) {
       const [col, label] = SEV[i.severity] || [C.dim, i.severity];
       const overridden = result.overridesApplied.includes(i.code);
       console.log(`        ${paint(col, label.padEnd(8))} ${i.message}`);
-      console.log(`                 ${paint(C.dim, `code=${i.code}  field=${i.path || '(root)'}${overridden ? '  OVERRIDDEN' : ''}${i.fix ? '  auto-fix available' : ''}`)}`);
+      const repairNote = i.fix ? (isAutoFixable(i.code) ? '  repair available' : '  repair available — your decision') : '';
+      console.log(`                 ${paint(C.dim, `code=${i.code}  field=${i.path || '(root)'}${overridden ? '  OVERRIDDEN' : ''}${repairNote}`)}`);
       if (i.options && i.options.length) console.log(`                 ${paint(C.dim, `did you mean: ${i.options.slice(0, 4).join(', ')}`)}`);
       if (i.hint) console.log(`                 ${paint(C.dim, i.hint)}`);
     }

@@ -31,6 +31,7 @@ const ENGINE_MODULES = [
   'engine/spec/toolchain.mjs',
   'engine/components/scales.mjs',
   'engine/components/library.mjs',
+  'engine/spec/fix-policy.mjs',
   'engine/spec/spec.mjs',
   'engine/capability/permissions.mjs',
 ];
@@ -42,6 +43,7 @@ const ENGINE_MODULES = [
 const APP_MODULES = [
   'studio/src/designer.js',
   'studio/src/studio.js',
+  'studio/src/repairs.js',
 ];
 
 /**

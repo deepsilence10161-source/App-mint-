@@ -894,3 +894,108 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   word-break: break-all;
 }
 .finding .fixbtn { margin-top: 9px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   REPAIRS
+   ══════════════════════════════════════════════════════════════════════
+
+   The repair screen has to do one thing that is easy to get wrong: show a
+   change to someone's work before making it, and show what was done after,
+   without either being a wall of text.
+
+   So every repair is a row with three fixed parts — the field, the change, and
+   the reason — and the change is always in the same place, at the right, in a
+   monospace face, so the eye can scan down the column of values and see what
+   would move.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.card h2 .count {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fg-3);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+}
+
+.btn.block { display: flex; width: 100%; justify-content: center; }
+
+.consequence {
+  margin: var(--s3) 0;
+  padding: 11px 13px;
+  border-radius: var(--r2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  background: rgba(123, 120, 255, 0.09);
+  border: 1px solid rgba(123, 120, 255, 0.28);
+}
+
+.repair-preview {
+  margin-top: var(--s4);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+}
+.repair-preview::before {
+  content: 'What would change';
+  display: block;
+  margin-bottom: 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.repair-step, .repair-decision, .repair-done, .repair-declined {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+.repair-step:first-child, .repair-decision:first-of-type,
+.repair-done:first-of-type, .repair-declined:first-of-type { border-top: 0; }
+
+.rs-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.rs-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-1);
+  word-break: break-all;
+}
+.rs-change {
+  margin-left: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--accent-2);
+  white-space: nowrap;
+}
+.rs-why {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+}
+
+/* A repair that has been carried out: a tick, the field, the change. */
+.repair-done .okmark {
+  display: inline-flex;
+  width: 18px; height: 18px;
+  align-items: center; justify-content: center;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--ok);
+  flex: 0 0 auto;
+  align-self: center;
+}
+.repair-done .okmark svg { width: 12px; height: 12px; }
+.repair-done .rs-head { align-items: center; }
+
+/* A repair that was declined: quieter, and clearly not something to worry at. */
+.repair-declined .rs-change { color: var(--warn); }
+
+.repair-decision .row, .repair-done .row { margin-top: 10px; }

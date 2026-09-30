@@ -16,7 +16,9 @@
 import {
   validateSpec, applyFixes, defaultSpec, CAPABILITIES, SPEC_VERSION, LAYERS,
 } from '../../engine/spec/spec.mjs';
+import { isAutoFixable } from '../../engine/spec/fix-policy.mjs';
 import { permissionReport, derivePermissions } from '../../engine/capability/permissions.mjs';
+import { viewRepairs, journalOf } from './repairs.js';
 import { TOOLCHAIN_PROFILES } from '../../engine/spec/toolchain.mjs';
 
 /* ── tiny DOM helpers ──────────────────────────────────────────────────── */
@@ -502,14 +504,12 @@ function viewBuild() {
     el('div', {}, [
       el('div', { class: 'msg' }, i.message),
       el('div', { class: 'meta' }, `${i.code} · ${i.path || '(root)'}`),
-      i.fix ? el('button', {
-        class: 'btn ghost sm fixbtn',
-        onclick: () => {
-          const { spec: fixed, applied } = applyFixes(S.active.spec, r.issues, { onlyCodes: [i.code] });
-          if (applied.length) { S.active.spec = fixed; touch(); hardUpdate(); toast('Applied 1 fix. It can be undone from Advanced.'); }
-          else toast('That fix does not apply to the current values.');
-        },
-      }, 'Fix this automatically') : null,
+      // Where the repair happens is stated here and performed in the repair
+      // card above, so there is exactly one place in the app that changes a
+      // specification on your behalf.
+      i.fix ? el('span', {
+        class: 'chip ' + (isAutoFixable(i.code) ? 'pass' : 'warn'),
+      }, isAutoFixable(i.code) ? 'ready to repair' : 'your call') : null,
     ]),
   ]));
 
@@ -532,8 +532,22 @@ function viewBuild() {
     onclick: () => startBuild(),
   }, svg(I.build) + ' Start build');
 
+  // The repair screen sits directly under the verdict, because "fix it" is the
+  // question that follows "is it broken" — and it is built from the same
+  // validation result shown below it, not from a second opinion.
+  const repairs = viewRepairs({
+    project: S.active,
+    spec,
+    result: r,
+    recheck: (s) => validateSpec(s),
+    onSpecChange: (next) => { S.active.spec = next; touch(); },
+    onSay: (msg) => { toast(msg, 4200); hardUpdate(); },
+  });
+
   return [
     card('Validation layers', [statusBanner, ...layers], null),
+
+    ...repairs,
 
     r.issues.length
       ? card('What needs attention', findings, 'Every finding names the exact field, so nothing is vague.')
