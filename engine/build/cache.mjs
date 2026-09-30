@@ -255,12 +255,35 @@ export class BuildCache {
       return { reason: 'no-comparable', message: `There ${index.entries.length === 1 ? 'is 1 entry' : `are ${index.entries.length} entries`}, but none records what it was built from.` };
     }
 
+    // The build being asked about is in the cache. Saying so is the whole
+    // answer, and it has to come first: the explanation below is written for a
+    // miss, and given an exact match it produced "This app has been built
+    // before, but  since." — a sentence with a hole where the reason goes.
+    const exact = withParts.find((x) => x.entry.key === key.full);
+    if (exact) {
+      return {
+        reason: 'exact',
+        message: `This build is in the cache, stored ${exact.manifest.builtAt || 'at an unrecorded time'}. Nothing needs to be compiled.`,
+        entry: exact.manifest,
+      };
+    }
+
     // Same specification, different everything else: the most informative case,
     // because it isolates what changed to the parts that are not the app.
     const sameSpec = withParts.filter((x) => x.manifest.parts.spec === key.parts.spec);
     if (sameSpec.length) {
       const newest = sameSpec[0];
       const changed = diffKeyParts(newest.manifest.parts, key.parts);
+      if (!changed.length) {
+        // The parts are equal but the entries are not, which means the keys
+        // were derived from different sets of parts. Better to say that than to
+        // print a half-finished sentence about nothing changing.
+        return {
+          reason: 'unexplained',
+          message: 'An entry for this specification exists, but its key does not match. The next build compiles and stores a current one.',
+          previous: newest.manifest,
+        };
+      }
       return {
         reason: 'inputs-changed',
         message: `This app has been built before, but ${changed.map((c) => c.why).join(' and ')} since.`,

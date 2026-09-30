@@ -66,6 +66,33 @@ function writeSpec(dir, name = 'Build Script Test') {
   return { file, spec };
 }
 
+test('the builder and the command line derive the same key, for every app', () => {
+  /*
+   * CI names its build cache with one of these and looks builds up with the
+   * other. When they disagree the cache never hits, every run compiles from
+   * nothing, and nothing anywhere reports a problem — a fault with no symptom
+   * except a slow pipeline and a bill. They had already drifted apart: the
+   * builder asked for a `.resolved` property that resolveToolchain() does not
+   * return, fell back to four raw fields, and derived a different key from the
+   * command line for the identical specification.
+   */
+  const apps = fs.readdirSync(path.join(ROOT, 'apps'))
+    .filter((d) => fs.existsSync(path.join(ROOT, 'apps', d, 'spec.json')))
+    .sort();
+  assert.ok(apps.length >= 2, 'this test is only meaningful with the real app specifications');
+
+  for (const app of apps) {
+    const spec = path.join('apps', app, 'spec.json');
+    const fromCli = JSON.parse(execFileSync(process.execPath, [path.join(ROOT, 'engine', 'cli.mjs'), 'build-key', spec, '--json'], {
+      cwd: ROOT, encoding: 'utf8', timeout: 60000,
+    })).key;
+    const fromBuilder = JSON.parse(execFileSync(process.execPath, [SCRIPT, spec, '--key-only', '--json'], {
+      cwd: ROOT, encoding: 'utf8', timeout: 60000,
+    })).key;
+    assert.equal(fromBuilder, fromCli, `the two must agree for ${app}, or the cache key names nothing`);
+  }
+});
+
 test('the cache-hit path runs, and restores the app and its description', () => {
   // The fault this exists for was a ReferenceError in this path, reached only
   // when an entry was found. Reading the code did not catch it and neither did

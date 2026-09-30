@@ -21,7 +21,6 @@ import { generateAndroidProject, TOOLCHAIN_PROFILES } from './gen/android.mjs';
 import { permissionReport, derivePermissions } from './capability/permissions.mjs';
 import { BuildCache } from './build/cache.mjs';
 import { buildKey, buildKeyParts, diffKeyParts } from './build/key.mjs';
-import { resolveToolchain } from './spec/toolchain.mjs';
 
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
@@ -286,12 +285,10 @@ function cmdBuildKey(args) {
   const spec = readSpec(file);
   const buildType = args.type || 'debug';
 
-  // Resolve the toolchain the same way the generator does, so the key covers
-  // the versions that will actually be used rather than whatever was typed.
-  let toolchain = null;
-  try { toolchain = resolveToolchain(spec)?.resolved || resolveToolchain(spec); } catch { /* key falls back to the raw values */ }
-
-  const key = buildKey(spec, { buildType, toolchain: toolchain || undefined });
+  // The key resolves the toolchain itself now — one place, so the command line
+  // and the builder cannot drift apart again. See toolchainFor() in
+  // engine/build/key.mjs for what went wrong when both did it separately.
+  const key = buildKey(spec, { buildType });
 
   if (args.json) {
     console.log(JSON.stringify({ spec: file, buildType, key: key.full, short: key.short, parts: key.parts }, null, 2));
@@ -333,7 +330,9 @@ function defaultCacheDir() {
  * cache
  * ---------------------------------------------------------------- */
 function cmdCache(args) {
-  const cache = new BuildCache(args.dir || defaultCacheDir());
+  // --cache as well as --dir: the builder takes --cache, and an option that a
+  // person has to remember differently for each tool is an option they get wrong.
+  const cache = new BuildCache(args.cache || args.dir || defaultCacheDir());
 
   if (args.prune !== undefined) {
     const keep = Number(args.prune) || 20;

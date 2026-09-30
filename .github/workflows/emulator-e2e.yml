@@ -104,14 +104,20 @@ jobs:
         id: keys
         run: |
           set -euo pipefail
+          # Asked of the builder, not of a second opinion. The key is derived in
+          # one place (engine/build/key.mjs) precisely because two places had
+          # already disagreed once: the cache was named with one key and builds
+          # were looked up with another, which is a cache that never hits and
+          # never complains. --key-only prints the key and stops, so this stays
+          # cheap and cannot start compiling by accident.
           for app in demo native-demo; do
-            node engine/cli.mjs build-key "apps/$app/spec.json" --json > "/tmp/key-$app.json"
+            node tools/build-apk.mjs "apps/$app/spec.json" --key-only --json > "/tmp/key-$app.json"
           done
           DEMO=$(node -e "console.log(require('/tmp/key-demo.json').key)")
           NATIVE=$(node -e "console.log(require('/tmp/key-native-demo.json').key)")
-          # Only the toolchain and the workflow count as environment. The key
-          # itself already covers the specification and the generators, so it
-          # does not need to be re-derived from the source tree here.
+          # Only the interpreter and the compiler count as environment now; the
+          # key already covers the specified toolchain, the specification and the
+          # generators.
           ENV_HASH=$(printf '%s' "$(node --version)|$(java -version 2>&1 | head -1)" | sha256sum | cut -c1-12)
           echo "combined=${DEMO:0:16}-${NATIVE:0:16}-$ENV_HASH" >> "$GITHUB_OUTPUT"
           echo "demo=$DEMO" >> "$GITHUB_OUTPUT"

@@ -37,7 +37,6 @@ import { execFileSync } from 'node:child_process';
 import { BuildCache, builtReceipt, cachedReceipt, writeReceipt } from '../engine/build/cache.mjs';
 import { buildKey } from '../engine/build/key.mjs';
 import { validateSpec, defaultSpec } from '../engine/spec/spec.mjs';
-import { resolveToolchain } from '../engine/spec/toolchain.mjs';
 import { generateAndroidProject } from '../engine/gen/android.mjs';
 
 /* ── arguments ──────────────────────────────────────────────────────────── */
@@ -74,11 +73,18 @@ const spec = JSON.parse(fs.readFileSync(specFile, 'utf8'));
 const name = spec?.identity?.appName || path.basename(specFile);
 
 // The same key the CLI prints, so a person can check the two agree without
-// having to trust either of them.
-const toolchain = (() => {
-  try { return resolveToolchain(spec)?.resolved || null; } catch { return null; }
-})();
-const key = buildKey(spec, { buildType, toolchain: toolchain || undefined });
+// having to trust either of them. The resolution lives in the key module so
+// there is exactly one answer to "what does this build depend on".
+const key = buildKey(spec, { buildType });
+
+// --key-only answers one question and stops: which key would this build use?
+// CI names its cache with this, and names it with the builder's answer rather
+// than a second opinion, so the name and the lookup cannot disagree.
+if (flags['key-only']) {
+  if (flags.json) console.log(JSON.stringify({ spec: specFile, buildType, key: key.full, short: key.short, parts: key.parts }, null, 2));
+  else console.log(key.short);
+  process.exit(0);
+}
 
 console.log(`\n  ${name}`);
 console.log(`  specification  ${specFile}`);

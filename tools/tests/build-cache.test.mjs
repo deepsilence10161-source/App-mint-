@@ -96,6 +96,91 @@ test('the toolchain is part of the key', () => {
   assert.notEqual(a.full, b.full, 'a different build tool can produce a different app');
 });
 
+test('explaining a build that is cached says so, in a whole sentence', () => {
+  // Given an exact match, explain() used to fall into the miss wording and
+  // return "This app has been built before, but  since." — a sentence with a
+  // hole in it, produced by joining an empty list of changes. A person reading
+  // that learns nothing and assumes the tool is broken.
+  const w = workspace();
+  try {
+    const spec = specFor();
+    const key = buildKey(spec);
+    const apk = w.fakeApk('native.apk', 'a previously built app');
+    w.cache.put(key, [apk], { spec: { appName: spec.identity.appName } });
+
+    const why = w.cache.explain(key);
+    assert.equal(why.reason, 'exact');
+    assert.ok(!/\bbut\s+since\b/.test(why.message), `a sentence with a hole: ${why.message}`);
+    assert.ok(!/\s{2,}/.test(why.message.trim()), `doubled space in: ${why.message}`);
+    assert.match(why.message, /in the cache/);
+    assert.ok(why.entry, 'and it should hand back the entry it found');
+  } finally { w.cleanup(); }
+});
+
+test('explaining a genuine miss names what changed', () => {
+  const w = workspace();
+  try {
+    const spec = specFor();
+    const apk = w.fakeApk('native.apk', 'the first build');
+    w.cache.put(buildKey(spec), [apk], { spec: { appName: spec.identity.appName } });
+
+    const changed = specFor();
+    changed.identity.appName = 'Renamed After The Build';
+    const why = w.cache.explain(buildKey(changed));
+
+    assert.ok(['inputs-changed', 'different-app'].includes(why.reason), why.reason);
+    assert.match(why.message, /\w/, 'the message must contain words');
+    assert.ok(!/\s{2,}/.test(why.message), `doubled space in: ${why.message}`);
+  } finally { w.cleanup(); }
+});
+
+test('a version that reaches the build changes the key', () => {
+  // jdk is written into build.gradle as a source/target compatibility, so two
+  // specifications that differ only in it produce different projects and must
+  // not share a cache entry.
+  const base = specFor();
+  const other = specFor();
+  other.build = { ...(other.build || {}), toolchain: { jdk: '21' } };
+  assert.notEqual(
+    buildKey(base).full, buildKey(other).full,
+    'a toolchain version that is written into the project must change the key',
+  );
+});
+
+test('how a toolchain profile is described does not change the key', () => {
+  // name and label are for a person reading a specification. If they counted,
+  // rewording a label would throw away every cached build for no reason.
+  const plain = { agp: '8.13.2', gradle: '8.13', buildTools: '36.0.0', jdk: '17', maxCompileSdk: 36 };
+  const described = { ...plain, name: 'modern', label: 'Modern — Play-compliant (compileSdk 36)' };
+  assert.equal(
+    buildKey(specFor(), { toolchain: plain }).full,
+    buildKey(specFor(), { toolchain: described }).full,
+    'a description of a profile is not part of what gets built',
+  );
+  assert.equal(
+    buildKey(specFor(), { toolchain: plain }).parts.toolchainValues.label, undefined,
+    'and it should not appear in the values the key records either',
+  );
+});
+
+test('the key is the same wherever it is derived', () => {
+  // The key answers "what does this build depend on", so it cannot depend on
+  // anything about the machine asking — not the environment, not the clock.
+  const spec = specFor();
+  const first = buildKey(spec).full;
+  const before = { ...process.env };
+  process.env.JAVA_HOME = '/somewhere/else';
+  process.env.ANDROID_HOME = '/another/place';
+  try {
+    assert.equal(buildKey(spec).full, first, 'the key moved with the environment');
+    assert.equal(buildKey(spec).full, first, 'and it must not move between calls either');
+  } finally {
+    for (const k of ['JAVA_HOME', 'ANDROID_HOME']) {
+      if (before[k] === undefined) delete process.env[k]; else process.env[k] = before[k];
+    }
+  }
+});
+
 test('the generators are part of the key', () => {
   // Build a throwaway engine tree, change a generator's bytes, and watch the
   // digest move. If this did not happen, updating a generator would keep

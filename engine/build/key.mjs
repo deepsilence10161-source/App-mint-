@@ -36,6 +36,7 @@
  */
 
 import crypto from 'node:crypto';
+import { resolveToolchain } from '../spec/toolchain.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -141,14 +142,48 @@ function walk(dir, out) {
  * hash, so a miss can be explained ("the generator changed") instead of only
  * announced ("not in the cache").
  */
+/**
+ * The toolchain values a build depends on.
+ *
+ * Resolved here rather than at each call site, because the two call sites had
+ * already drifted apart: the builder asked resolveToolchain() for a `.resolved`
+ * property that does not exist and quietly fell back to four raw fields, while
+ * the command line fell back to the whole profile. Same specification, two keys,
+ * and nothing to notice it by: the key is only ever compared with another key,
+ * so a key that is consistently wrong looks exactly like a key that is right.
+ * CI made it worse by naming the cache with one of them and looking builds up
+ * with the other.
+ *
+ * `name` and `label` are dropped because they are how the profile is described
+ * to a person, not what gets built: they never reach a generated file. Keeping
+ * them would mean that rewording a description threw away every cached build.
+ * Everything else is kept, deliberately including fields this key does not use
+ * yet — over-covering costs a rebuild, under-covering ships a stale app, and
+ * only one of those two is recoverable.
+ */
+/** Drop the fields that describe a profile to a person rather than build it. */
+function withoutPresentation(values) {
+  const { label, name, ...rest } = values || {};
+  return rest;
+}
+
+export function toolchainFor(spec) {
+  let resolved;
+  try {
+    resolved = resolveToolchain(spec);
+  } catch {
+    // A specification broken enough to defeat resolution still gets a key, and
+    // it is a key derived from what was written rather than a guess.
+    resolved = spec?.build?.toolchain || { compileSdk: spec?.android?.compileSdk ?? null };
+  }
+  return withoutPresentation(resolved);
+}
+
 export function buildKeyParts(spec, { buildType = 'debug', toolchain = null, engineDir = ENGINE_DIR } = {}) {
   const gen = generatorDigest(engineDir);
-  const resolved = toolchain || {
-    agp: spec?.build?.toolchain?.agp ?? null,
-    gradle: spec?.build?.toolchain?.gradle ?? null,
-    compileSdk: spec?.android?.compileSdk ?? null,
-    buildTools: spec?.build?.toolchain?.buildTools ?? null,
-  };
+  // An explicit override goes through the same rule, so the key covers the same
+  // things whether the toolchain came from the specification or was handed in.
+  const resolved = withoutPresentation(toolchain || toolchainFor(spec));
 
   return {
     spec: sha256(canonicalJson(spec)),
