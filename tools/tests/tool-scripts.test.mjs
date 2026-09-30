@@ -55,7 +55,7 @@ function entryScripts() {
  * Not a parser. It tracks the five states that carry text rather than code and
  * leaves everything else alone.
  */
-function stripText(src) {
+function stripText(src, { keepStrings = false } = {}) {
   let out = '';
   let i = 0;
   const n = src.length;
@@ -85,9 +85,12 @@ function stripText(src) {
 
       if (c === '/' && next === '/') { mode = 'line'; i += 2; out += '  '; continue; }
       if (c === '/' && next === '*') { mode = 'block'; i += 2; out += '  '; continue; }
-      if (c === "'") { push('single'); i++; out += "''"; continue; }
-      if (c === '"') { push('double'); i++; out += '""'; continue; }
-      if (c === '`') { push('template'); i++; out += '``'; continue; }
+      // The opening quote has to be emitted as well as the closing one: dropping
+      // it produced `from ./x.mjs'`, which no import pattern can match, and a
+      // check that matches nothing passes for the wrong reason.
+      if (c === "'") { push('single'); i++; out += keepStrings ? "'" : "''"; continue; }
+      if (c === '"') { push('double'); i++; out += keepStrings ? '"' : '""'; continue; }
+      if (c === '`') { push('template'); i++; out += keepStrings ? '`' : '``'; continue; }
       out += c; i++;
       continue;
     }
@@ -104,14 +107,16 @@ function stripText(src) {
     }
     if (mode === 'single' || mode === 'double') {
       const quote = mode === 'single' ? "'" : '"';
-      if (c === '\\') { i += 2; continue; }
-      if (c === quote) { pop(); i++; }
-      else i++;
+      if (c === '\\') { if (keepStrings) out += c + next; i += 2; continue; }
+      if (c === quote) { if (keepStrings) out += c; pop(); i++; continue; }
+      if (keepStrings) out += c;
+      i++;
       continue;
     }
     if (mode === 'template') {
-      if (c === '\\') { i += 2; continue; }
-      if (c === '`') { pop(); i++; continue; }
+      if (c === '\\') { if (keepStrings) out += c + next; i += 2; continue; }
+      if (c === '`') { if (keepStrings) out += c; pop(); i++; continue; }
+      if (keepStrings) out += c;
       if (c === '$' && next === '{') {
         // code resumes inside the braces, and may contain further templates
         stack[stack.length - 1].braceDepth = 1;
@@ -127,6 +132,11 @@ function stripText(src) {
     i++;
   }
   return out;
+}
+
+/** Comments removed, string literals left alone. For reading import paths. */
+function stripComments(src) {
+  return stripText(src, { keepStrings: true });
 }
 
 /**
@@ -289,17 +299,31 @@ test('every module a script imports is actually in the repository', () => {
     // Comments and strings first: build-studio.mjs documents "export { X } from
     // './y.mjs'" in a comment, and a scanner that ignored that would report a
     // file nobody imports.
-    const src = stripText(fs.readFileSync(path.join(ROOT, file), 'utf8'));
-    const re = /from\s*['"]?(\.\.?\/[^'";\n]*)['"]/g;
+    const src = stripComments(fs.readFileSync(path.join(ROOT, file), "utf8"));
+    const re = /from\s*['"](\.[^'"]+)['"]/g;
     let m;
     while ((m = re.exec(src))) {
       const target = path.normalize(path.join(path.dirname(file), m[1]));
-      if (!fs.existsSync(path.join(ROOT, target))) missing.push(`${file} imports ${m[1]}, which does not exist`);
-      else {
+      if (!fs.existsSync(path.join(ROOT, target))) {
+        missing.push(`${file} imports ${m[1]}, which does not exist`);
+        continue;
+      }
+      // Is git actually carrying this file?
+      //
+      // Not `git check-ignore`: that answers a narrower question and skips
+      // files that are already tracked, so it stays silent in exactly the case
+      // that matters — a module that exists on disk and is not in the commit.
+      // Asking whether git tracks the path catches both an ignore rule and a
+      // file that was simply never added.
+      try {
+        execFileSync('git', ['ls-files', '--error-unmatch', '--', target], { cwd: ROOT, stdio: 'pipe' });
+      } catch {
         try {
           execFileSync('git', ['check-ignore', '-q', target], { cwd: ROOT, stdio: 'pipe' });
           ignored.push(`${file} imports ${target}, which .gitignore excludes — CI would not have it`);
-        } catch { /* exit 1 means "not ignored", which is what we want */ }
+        } catch {
+          ignored.push(`${file} imports ${target}, which git does not track — it would not exist in CI`);
+        }
       }
     }
   }

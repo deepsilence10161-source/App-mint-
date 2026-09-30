@@ -55,6 +55,26 @@ def read_build_info(name):
     return None
 
 
+def read_receipt(name):
+    """What the build of this app actually did.
+
+    The receipt is written by tools/build-apk.mjs and distinguishes a compile
+    from a cache restore. The report repeats it rather than implying that the
+    compiler ran, because on a cached run it did not."""
+    candidates = {
+        "demo": ["build/out/build-receipt.json", "build/apk/demo.apk.receipt.json"],
+        "native": ["build/native/build-receipt.json", "build/apk/native.apk.receipt.json"],
+    }.get(name, [])
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            try:
+                with open(candidate) as fh:
+                    return json.load(fh)
+            except (OSError, ValueError):
+                pass
+    return None
+
+
 def fmt(value):
     return html.escape(str(value)) if value is not None else "—"
 
@@ -86,6 +106,23 @@ for key, title, blurb, result, info in rows:
             + '</p>'
         )
     facts = []
+    receipt = read_receipt(key)
+    if receipt:
+        # Stated plainly, because "built" and "restored" are different facts and
+        # a report that blurs them is a report you cannot audit.
+        if receipt.get("source") == "cache":
+            origin = receipt.get("originalBuildAt")
+            when = origin.split("T")[0] if origin else "an earlier run"
+            how = f'<code>restored from cache</code> — originally built {fmt(when)}, compiler not run'
+        else:
+            secs = (receipt.get("durationMs") or 0) / 1000
+            how = f'<code>compiled</code> — {secs:.0f}s'
+        facts.append(f'<li><span>This build</span>{how}</li>')
+        if receipt.get("keyShort"):
+            facts.append(f'<li><span>Build key</span><code>{fmt(receipt["keyShort"])}</code></li>')
+        art = (receipt.get("artefacts") or [{}])[0]
+        if art.get("sha256"):
+            facts.append(f'<li><span>APK fingerprint</span><code>{fmt(str(art["sha256"])[:16])}…</code></li>')
     if info:
         facts.append(f'<li><span>Package</span><code>{fmt(info.get("packageName"))}</code></li>')
         facts.append(f'<li><span>Started by</span><code>{fmt(info.get("launcherActivity"))}</code></li>')
