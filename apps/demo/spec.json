@@ -1,0 +1,78 @@
+{
+  "specVersion": "1.0",
+  "identity": {
+    "appName": "Mint Demo",
+    "packageName": "com.appmint.demo",
+    "versionName": "1.0.0",
+    "versionCode": 1,
+    "versionStrategy": "manual",
+    "description": "Reference project for App Mint. Proves the generator, the permission engine and the build pipeline end to end."
+  },
+  "android": {
+    "minSdk": 24,
+    "targetSdk": 36,
+    "compileSdk": 36,
+    "orientation": "portrait",
+    "theme": "system",
+    "allowBackup": false,
+    "cleartextTraffic": false
+  },
+  "app": {
+    "mode": "webview",
+    "webview": {
+      "startUrl": "https://example.com",
+      "allowedHosts": [],
+      "offlinePage": true,
+      "fileUploads": false,
+      "zoom": false,
+      "javascriptEnabled": true,
+      "domStorage": true,
+      "externalLinks": "custom-tab"
+    },
+    "splash": {
+      "enabled": true,
+      "backgroundColor": "#0B1020",
+      "durationMs": 600
+    }
+  },
+  "capabilities": ["share", "clipboard", "notifications"],
+  "theme": {
+    "primary": "#2563EB",
+    "onPrimary": "#FFFFFF",
+    "background": "#0B1020",
+    "surface": "#151B2E",
+    "onSurface": "#E8ECF8",
+    "accent": "#22D3EE",
+    "statusBarStyle": "dark"
+  },
+  "deepLinks": {
+    "customScheme": "mintdemo",
+    "hosts": [],
+    "allowedSchemes": ["https", "tel", "mailto"]
+  },
+  "build": {
+    "engine": "github-actions",
+    "outputs": ["debug-apk"],
+    "minify": false,
+    "abiSplits": false,
+    "cache": true,
+    "r8": false,
+    "toolchain": {
+      "agp": "8.13.2",
+      "gradle": "8.13",
+      "buildTools": "36.0.0",
+      "jdk": "17"
+    }
+  },
+  "signing": {
+    "mode": "debug",
+    "failClosed": true
+  },
+  "backend": {
+    "kind": "none"
+  },
+  "screens": [],
+  "navigation": {
+    "type": "none"
+  }
+}

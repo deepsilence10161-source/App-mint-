@@ -1,0 +1,188 @@
+name: Build
+
+# Generates the Android project from the specification, compiles it, validates
+# the real artifact, and hands the APK to the emulator job.
+#
+# Why the split: the build job is fast and deterministic, so a failure there is
+# unambiguous. The emulator job is slow and occasionally flaky, so it runs
+# separately and can be re-run on its own without rebuilding.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      spec:
+        description: 'Spec file to build'
+        required: false
+        default: 'apps/demo/spec.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Generate, build and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      spec: ${{ steps.pick.outputs.spec }}
+      slug: ${{ steps.gen.outputs.slug }}
+      content_hash: ${{ steps.gen.outputs.content_hash }}
+      apk: ${{ steps.find.outputs.apk }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The generated build.gradle can derive versionCode from the commit
+          # count, which needs the full history. A shallow checkout would make
+          # that number wrong, so full depth is fetched unconditionally.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Pick specification
+        id: pick
+        run: |
+          SPEC="${{ github.event.inputs.spec || 'apps/demo/spec.json' }}"
+          if [ ! -f "$SPEC" ]; then
+            echo "::error::Specification not found: $SPEC"
+            exit 1
+          fi
+          echo "spec=$SPEC" >> "$GITHUB_OUTPUT"
+          echo "Building $SPEC"
+
+      # ---- Layer 1-5: specification validation --------------------------
+      - name: Validate specification (layers 1-5)
+        run: |
+          node engine/cli.mjs validate "${{ steps.pick.outputs.spec }}"
+          echo "### Specification validated" >> $GITHUB_STEP_SUMMARY
+          node engine/cli.mjs validate "${{ steps.pick.outputs.spec }}" --json > spec-check.json || true
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat spec-check.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      # ---- The Studio's own tests --------------------------------------
+      - name: Engine self-tests
+        run: node --test tools/tests/ 2>&1 | tail -40
+
+      # ---- Generate ------------------------------------------------------
+      - name: Generate Android project
+        id: gen
+        run: |
+          node engine/cli.mjs generate "${{ steps.pick.outputs.spec }}" --out build/out
+          SLUG=$(node -e "console.log(require('./build/out/BUILD-INFO.json').appName.toLowerCase().replace(/[^a-z0-9]+/g,'-'))")
+          HASH=$(node -e "console.log(require('./build/out/BUILD-INFO.json').contentHash)")
+          echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
+          echo "content_hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "content hash: $HASH"
+
+      - name: Show permission table
+        run: node engine/cli.mjs permissions "${{ steps.pick.outputs.spec }}" | tee permissions.txt
+
+      # ---- Toolchain -----------------------------------------------------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-read-only: false
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK platform and build tools
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager --list_installed | sed -n '1,20p'
+
+      # ---- Compile -------------------------------------------------------
+      - name: Build debug APK
+        working-directory: build/out/android
+        env:
+          GRADLE_OPTS: '-Dorg.gradle.jvmargs=-Xmx2560m -XX:MaxMetaspaceSize=768m'
+        run: gradle assembleDebug --stacktrace --console=plain
+
+      - name: Locate artifact
+        id: find
+        run: |
+          APK=$(find build/out/android -name '*.apk' | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::Gradle reported success but no APK exists. A build is only successful if the artifact is real."
+            exit 1
+          fi
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK"
+
+      # ---- Layer 7: artifact validation ----------------------------------
+      - name: Validate the real artifact
+        run: |
+          set -euo pipefail
+          APK="${{ steps.find.outputs.apk }}"
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+
+          echo "### Artifact validation" >> $GITHUB_STEP_SUMMARY
+
+          # Identity + version actually inside the APK
+          "$BT/aapt2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdkVersion" | tee badging.txt
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat badging.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          TARGET=$(grep -oP "targetSdkVersion:'\K[0-9]+" badging.txt)
+          if [ "$TARGET" -lt 35 ]; then
+            echo "::error::targetSdk $TARGET is below the Google Play floor. Since 31 Aug 2026 new apps and updates need API 36."
+            exit 1
+          fi
+          echo "targetSdk $TARGET is Play-compliant"
+
+          # Signature must actually verify — never claim "signed" without this
+          "$BT/apksigner" verify --verbose "$APK" | head -8
+
+          # Alignment
+          "$BT/zipalign" -c 4 "$APK" && echo "zipalign: OK"
+
+          # A launcher icon must exist (this was a real defect in the old repos)
+          if ! unzip -l "$APK" | grep -q "mipmap.*ic_launcher"; then
+            echo "::error::The APK has no launcher icon resource."
+            exit 1
+          fi
+          echo "launcher icons: $(unzip -l "$APK" | grep -c 'mipmap.*ic_launcher') resources"
+
+          sha256sum "$APK" | tee "${APK%.apk}.sha256"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: |
+            build/out/android/app/build/outputs/apk/**/*.apk
+            build/out/android/app/build/outputs/apk/**/*.sha256
+          retention-days: 30
+
+      - name: Upload build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-report
+          path: |
+            build/out/BUILD-INFO.json
+            permissions.txt
+            spec-check.json
+            badging.txt
+          retention-days: 30
+          if-no-files-found: warn

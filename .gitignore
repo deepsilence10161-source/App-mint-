@@ -1,0 +1,37 @@
+# Generated output — always reproducible from the project specification.
+build/
+out/
+site/
+dist/
+
+# Android / Gradle
+local.properties
+.gradle/
+*.apk
+*.aab
+*.keystore
+*.jks
+keystore.properties
+captures/
+
+# Never commit signing material or secrets.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+secrets/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Test evidence produced locally
+/tmp-e2e/
