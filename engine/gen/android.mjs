@@ -451,7 +451,12 @@ public class App extends Application {
      thing in it allowed to know the backend's address. It sits beside the
      bundled web assets rather than among them: it is not a web asset, but it
      belongs where the app can load it. */
-  if ((spec.backend || {}).kind && spec.backend.kind !== 'none') {
+  // Only where there is a WebView to run it. A native-screens app draws its own
+  // UI and has no page to load a script into, so emitting the file there would
+  // put a module in the APK that can never execute — a configuration that looks
+  // wired up and is not, which is the exact thing this module exists to stop.
+  const hasWebView = app.mode === 'webview' || app.mode === 'hybrid' || app.mode === 'pwa';
+  if ((spec.backend || {}).kind && spec.backend.kind !== 'none' && hasWebView) {
     const rt = dataRuntime(spec);
     if (rt.ok) {
       files.push({ path: rt.file, data: rt.code });

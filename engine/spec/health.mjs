@@ -172,11 +172,23 @@ function backendHealth(spec) {
           `${b.url} — over plain HTTP every request, including sign-in, can be read or altered in transit.`));
   }
 
+  // A native-screens app draws its own UI and has no WebView to load a script
+  // into, so it is not given the runtime. Saying so here is the difference
+  // between a configuration that explains itself and one that implies a
+  // connection it did not make.
+  const mode = ((spec.app || {}).mode) || 'webview';
+  if (mode === 'native-screens') {
+    checks.push(warn('The app can load the data runtime',
+      'Architecture is native-screens, which draws its own UI and has no WebView. The runtime is not emitted for it, so this app must reach the backend from its own code.'));
+  }
+
   // The data runtime is the only module in the generated app that knows where
   // the backend is. If it cannot be generated, the app would be left reaching
   // the backend from wherever it liked, which is the thing the runtime exists to
   // prevent.
-  checks.push(rt.generated
+  checks.push(mode === 'native-screens'
+    ? warn('The app gets one controlled path to the backend', 'Not emitted for native-screens — see above.')
+    : rt.generated
     ? pass('The app gets one controlled path to the backend',
         `data-runtime.js, ${(rt.bytes / 1024).toFixed(1)} KB, generated from this specification`)
     : fail('The app gets one controlled path to the backend', rt.errors.join('; ') || 'the runtime could not be generated'));

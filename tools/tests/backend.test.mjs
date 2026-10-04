@@ -76,7 +76,7 @@ test('no backend at all is a legitimate configuration, not a finding', () => {
 /* ── the generator ──────────────────────────────────────────────────────── */
 
 test('a project with a backend gets the data runtime, and one without does not', () => {
-  const withIt = generateAndroidProject(withBackend(GOOD));
+  const withIt = generateAndroidProject(withBackend(GOOD, { app: { mode: 'webview', webview: { startUrl: 'https://example.com' } } }));
   assert.equal(withIt.ok, true, withIt.errors.join('; '));
   const runtime = withIt.files.find((f) => f.path.endsWith('data-runtime.js'));
   assert.ok(runtime, 'the runtime was not emitted');
@@ -90,13 +90,13 @@ test('a project with a backend gets the data runtime, and one without does not',
 
 test('the emitted runtime is the one the generator module produces, byte for byte', () => {
   // If these ever differ, the app ships something the tests did not check.
-  const spec = withBackend(GOOD);
+  const spec = withBackend(GOOD, { app: { mode: 'webview', webview: { startUrl: 'https://example.com' } } });
   const fromGenerator = generateAndroidProject(spec).files.find((f) => f.path.endsWith('data-runtime.js'));
   assert.equal(fromGenerator.data, dataRuntime(spec).code);
 });
 
 test('the runtime is emitted where the app can load it, beside the bundled web assets', () => {
-  const spec = withBackend(GOOD);
+  const spec = withBackend(GOOD, { app: { mode: 'webview', webview: { startUrl: 'https://example.com' } } });
   const runtime = generateAndroidProject(spec).files.find((f) => f.path.endsWith('data-runtime.js'));
   assert.equal(runtime.path, 'android/app/src/main/assets/www/data-runtime.js');
 });
@@ -104,7 +104,8 @@ test('the runtime is emitted where the app can load it, beside the bundled web a
 test('a backend that cannot produce a runtime fails the build instead of shipping without one', () => {
   // The runtime is the only thing allowed to know the backend's address. An app
   // that configured a backend and got no runtime would reach it from anywhere.
-  const spec = withBackend({ ...GOOD, url: 'http://example.supabase.co' });
+  const spec = withBackend({ ...GOOD, url: 'http://example.supabase.co' },
+    { app: { mode: 'webview', webview: { startUrl: 'https://example.com' } } });
   const out = generateAndroidProject(spec);
   assert.equal(out.ok, false);
   assert.ok(out.errors.some((e) => /data runtime/i.test(e)), out.errors.join('; '));
@@ -146,4 +147,22 @@ test('requiring auth without naming the tables warns, and naming them does not',
   assert.ok(bare.checks.some((c) => c.status === 'warn' && /row-level security/.test(c.name)));
   assert.ok(named.checks.every((c) => c.status === 'pass' || !/row-level security/.test(c.name)));
   assert.ok(named.score > bare.score, `named ${named.score} vs bare ${bare.score}`);
+});
+
+test('a native-screens app is not given a module it has no way to run', () => {
+  // It draws its own UI, so there is no page to load a script into. Shipping the
+  // file anyway would put a dead module in the APK — a configuration that looks
+  // wired up and is not.
+  const spec = withBackend(GOOD, { app: { mode: 'native-screens' }, screens: [{ id: 'home', name: 'Home' }] });
+  const out = generateAndroidProject(spec);
+  assert.equal(out.ok, true, out.errors.join('; '));
+  assert.equal(out.files.some((f) => /data-runtime/.test(f.path)), false,
+    'a module nothing can execute should not be in the package');
+});
+
+test('a hybrid app gets the runtime, because a hybrid app has a WebView', () => {
+  const spec = withBackend(GOOD, { app: { mode: 'hybrid', webview: { startUrl: 'https://example.com' } } });
+  const out = generateAndroidProject(spec);
+  assert.equal(out.ok, true, out.errors.join('; '));
+  assert.ok(out.files.some((f) => /data-runtime/.test(f.path)));
 });
