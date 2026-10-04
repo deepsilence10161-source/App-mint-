@@ -1804,8 +1804,89 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (max-width: 899.98px) {
   .railpin { display: none; }
 }
+
+/* ── build log console ──────────────────────────────────────────────────────
+   A drawer at the bottom of the Build screen. Monospace, because the entries
+   are timestamps and step names rather than prose, and colour-coded by level so
+   a failed step is visible before it is read.
+   ─────────────────────────────────────────────────────────────────────────── */
+.logconsole {
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.loghead {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 44px;
+  padding: var(--s3) var(--s4);
+  border: 0; background: none; cursor: pointer;
+  color: var(--fg-2);
+  font: var(--t-label);
+  text-align: left;
+}
+.loghead:hover { color: var(--fg); }
+.logtitle { font-weight: 600; color: var(--fg); font-size: 13.5px; }
+.logcount { margin-left: auto; font-variant-numeric: tabular-nums; }
+.logchev { display: grid; place-items: center; transition: transform var(--d-fast) var(--ease-out); }
+.logchev svg { width: 16px; height: 16px; }
+.logconsole.open .logchev { transform: rotate(180deg); }
+.logdot { width: 8px; height: 8px; border-radius: var(--r-full); background: var(--fg-3); flex: none; }
+.logconsole.open .logdot { background: var(--info); }
+
+.logbar {
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+  padding: 0 var(--s4) var(--s3);
+}
+.logsearch {
+  flex: 1 1 160px; min-height: 36px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font: var(--t-label);
+}
+.logsearch:focus { outline: none; border-color: var(--accent-line); }
+.loglevels { display: flex; gap: 2px; flex-wrap: wrap; }
+.loglevel {
+  min-height: 32px; padding: 0 var(--s3);
+  border: 1px solid var(--line); border-radius: var(--r-full);
+  background: none; color: var(--fg-3);
+  font: var(--t-label); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5px;
+  cursor: pointer;
+}
+.loglevel:hover { color: var(--fg); }
+.loglevel.on { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
+
+.loglist {
+  list-style: none; margin: 0;
+  max-height: 280px; overflow: auto;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font: var(--t-code); font-size: 12px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.loglist li { display: grid; grid-template-columns: auto auto 1fr; gap: var(--s3); align-items: baseline; }
+.loglist .lt { color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.loglist .ll { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+.loglist .lx { color: var(--fg-2); word-break: break-word; }
+.loglist li.lv-info .ll { color: var(--info-ink); }
+.loglist li.lv-step .ll { color: var(--fg-3); }
+.loglist li.lv-ok .ll { color: var(--ok-ink); }
+.loglist li.lv-ok .lx { color: var(--fg); }
+.loglist li.lv-warn .ll { color: var(--warn-ink); }
+.loglist li.lv-warn .lx { color: var(--warn-ink); }
+.loglist li.lv-error .ll { color: var(--bad-ink); }
+.loglist li.lv-error .lx { color: var(--bad-ink); }
+.logempty { display: block !important; grid-template-columns: none !important; color: var(--fg-3); font-family: var(--font-ui); font-size: 12.5px; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .logchev { transition: none; }
+}
 </style>
-<meta name="appmint-build" content="6d0d3a3bdf174807">
+<meta name="appmint-build" content="8d674d54690a945d">
 </head>
 <body>
 
@@ -7286,6 +7367,10 @@ const S = {
   // Which settings tab is open, and whether Advanced Mode is on. Kept for the
   // life of the page rather than saved: it is a view state, not a decision.
   settings: { tab: 'general', advanced: false },
+  // The build log. Real events only: what the Studio did, what GitHub reported,
+  // and what went wrong talking to it. Nothing is written here to make the
+  // console look busy.
+  log: [], logOpen: false,
   dirty: false,
 };
 
@@ -7325,6 +7410,27 @@ function persist() {
 function touch() {
   S.active.updatedAt = new Date().toISOString();
   if (!persist()) toast('Warning: could not save to this browser\'s storage.');
+}
+
+/* ── the build log ─────────────────────────────────────────────────────────
+   One place records what happened during a build. The console drawer reads it;
+   nothing else does. Entries carry a level so the drawer can colour them, and
+   the caller supplies the words, because a log that paraphrases itself into
+   vagueness is worse than no log. */
+const LOG_MAX = 400;
+function logEvent(level, text) {
+  S.log.push({ t: new Date().toISOString().slice(11, 19), level, text });
+  // The first entry opens the drawer. Until then the drawer is not in the
+  // document at all, so without this an entry could arrive and be recorded and
+  // still never be seen - which is the one thing a log must not do.
+  S.logOpen = true;
+  if (S.log.length > LOG_MAX) S.log.splice(0, S.log.length - LOG_MAX);
+  // Replace the drawer wherever it is in the document. If the Build screen is
+  // on screen, this is what makes the log real-time: the entry appears as the
+  // event arrives rather than at the next full redraw. If it is not, there is
+  // no drawer in the document and this quietly does nothing.
+  const c = $('#logconsole');
+  if (c) c.replaceWith(renderLogConsole());
 }
 
 /* ── validation ────────────────────────────────────────────────────────── */
@@ -7724,6 +7830,11 @@ function viewBuild() {
     // The stepper comes first when there is a run to report: "what is my build
     // doing" is the question the Build screen exists to answer.
     ...viewPipeline(),
+
+    // The log drawer sits under the stepper: what is happening, then the record
+    // of what happened. It is absent entirely until a build has been started,
+    // because an empty console that says "waiting" is decoration.
+    (S.log && S.log.length) || S.logOpen ? renderLogConsole() : null,
 
     card('Validation layers', [statusBanner, ...layers], null),
 
@@ -8187,7 +8298,9 @@ async function startBuild() {
     }
 
     toast('Committed. The build is starting…');
+    logEvent('info', `Committed ${path} to ${repo} — the build should start on its own`);
 
+    S.log = []; S.logOpen = true;
     S.pipeline = { run: null, steps: [], artifacts: [], polling: true, error: null };
     hardUpdate();
     // Watch the run so the stepper shows what is actually happening instead
@@ -8222,7 +8335,10 @@ async function pollPipeline(since) {
           { headers },
         ).then((x) => (x.ok ? x.json() : null));
         const found = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
-        if (found) { S.pipeline.run = found; S.lastRun = found; }
+        if (found) {
+          S.pipeline.run = found; S.lastRun = found;
+          logEvent('info', `Run #${found.run_number} appeared — ${found.name} (${found.status})`);
+        }
         else S.pipeline.error = 'the run has not appeared yet';
       } else {
         const id = S.pipeline.run.id;
@@ -8231,7 +8347,19 @@ async function pollPipeline(since) {
           fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}/jobs?per_page=50`, { headers }).then((x) => (x.ok ? x.json() : null)),
         ]);
         if (run) { S.pipeline.run = run; S.lastRun = run; }
-        if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
+        if (jobs) {
+          const next = stepsFromJobs(jobs);
+          const before = new Map((S.pipeline.steps || []).map((s) => [s.name, buildStepStatus(s)]));
+          for (const s of next) {
+            const now = buildStepStatus(s);
+            const was = before.get(s.name);
+            if (was !== now) {
+              logEvent(now === 'failed' ? 'error' : now === 'running' ? 'step' : 'ok',
+                `${now === 'failed' ? 'FAILED' : now.toUpperCase()}  ${s.name}`);
+            }
+          }
+          S.pipeline.steps = next;
+        }
         S.pipeline.error = null;
         if (run && run.status === 'completed') {
           // The artifact list carries the size and checksum of the file that was
@@ -8240,7 +8368,14 @@ async function pollPipeline(since) {
             `https://api.github.com/repos/${repo}/actions/runs/${id}/artifacts?per_page=20`,
             { headers },
           ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-          if (arts) S.pipeline.artifacts = arts.artifacts || [];
+          if (arts) {
+            S.pipeline.artifacts = arts.artifacts || [];
+            for (const a of S.pipeline.artifacts) {
+              if (/apk|aab/i.test(a.name)) logEvent('ok', `Artifact ${a.name} — ${(a.size_in_bytes / 1048576).toFixed(1)} MB`);
+            }
+          }
+          logEvent(run.conclusion === 'success' ? 'ok' : 'error',
+            `Run #${run.run_number} ${run.conclusion || 'finished'}`);
           S.pipeline.polling = false;
           S.pipeline._watching = false;
           hardUpdate();
@@ -8249,6 +8384,7 @@ async function pollPipeline(since) {
       }
     } catch (e) {
       S.pipeline.error = e.message || 'could not reach GitHub';
+      logEvent('warn', `Could not check the run: ${S.pipeline.error}`);
     }
     // Only the Build screen draws the stepper, so nothing else is redrawn while
     // somebody is typing somewhere else.
@@ -8349,6 +8485,15 @@ window.__appmintPipeline = (next) => {
 
 // The specification as the app holds it, so a verification can compare what a
 // screen displays against the object the build would read.
+// A verification cannot start a real build to see the log fill, and a console
+// that only ever renders "nothing yet" would pass every test that could
+// otherwise be written for it. This calls the same logEvent() the polling uses.
+window.__appmintLog = (level, text) => logEvent(level, text);
+window.__appmintLogReset = () => {
+  S.log = []; S.logOpen = false; S.logQuery = ''; S.logLevel = 'all';
+  if (S.active) renderActive();
+};
+
 window.__appmintSpec = () => JSON.parse(JSON.stringify(S.active ? S.active.spec : {}));
 
 // What is currently stopping a build, as the validator sees it.
@@ -9326,6 +9471,113 @@ function viewSettings() {
     ...panel,
     ...(st.advanced ? tabAdvanced(spec) : []),
   ];
+}
+
+
+/* ═══ studio/src/logConsole.js ═══ */
+/* ============================================================================
+   LOG CONSOLE — what actually happened, as it happened
+   ----------------------------------------------------------------------------
+   The design prompt asks for a real-time log console: a collapsible drawer,
+   monospace, colour-coded levels, searchable.
+
+   The rule for what goes in it is the same as everywhere else in this app. A
+   log console is very easy to fake — a few lines of plausible output on a timer
+   look exactly like a build doing something. So the only entries here are real
+   events: the specification being committed, the run appearing, each step
+   changing state as GitHub reports it, the artifacts that were stored, and the
+   times the Studio could not reach the API. Nothing is written to make the
+   drawer look busy, and when nothing has happened the drawer is not there at all.
+   ========================================================================= */
+
+const LOG_LEVELS = ['all', 'info', 'step', 'ok', 'warn', 'error'];
+
+function renderLogConsole() {
+  const entries = S.log || [];
+  const q = (S.logQuery || '').toLowerCase();
+  const level = S.logLevel || 'all';
+
+  const shown = entries.filter((e) =>
+    (level === 'all' || e.level === level) &&
+    (!q || e.text.toLowerCase().includes(q) || e.level.includes(q)));
+
+  const head = el('button', {
+    class: 'loghead', type: 'button', id: 'logtoggle',
+    'aria-expanded': S.logOpen ? 'true' : 'false',
+    onclick: () => {
+      S.logOpen = !S.logOpen;
+      const c = $('#logconsole');
+      if (c) c.replaceWith(renderLogConsole());
+    },
+  },
+    el('span', { class: 'logdot', 'aria-hidden': 'true' }),
+    el('span', { class: 'logtitle' }, 'Build log'),
+    el('span', { class: 'logcount' }, entries.length ? `${shown.length} of ${entries.length}` : 'nothing yet'),
+    el('span', { class: 'logchev', html: svg('<path d="m6 9 6 6 6-6"/>'), 'aria-hidden': 'true' }),
+  );
+
+  if (!S.logOpen) return el('div', { class: 'logconsole', id: 'logconsole' }, head);
+
+  const controls = el('div', { class: 'logbar' },
+    el('input', {
+      type: 'search', class: 'logsearch', placeholder: 'Filter the log',
+      'aria-label': 'Filter the build log', value: S.logQuery || '',
+      oninput: (e) => {
+        S.logQuery = e.target.value;
+        // Redraw only the list, so typing does not lose the field or the cursor.
+        const list = $('#loglist');
+        if (list) list.replaceWith(logList());
+        const n = $('#logconsole .logcount');
+        if (n) n.textContent = `${(S.log || []).filter((x) => matches(x)).length} of ${(S.log || []).length}`;
+      },
+    }),
+    el('div', { class: 'loglevels', role: 'group', 'aria-label': 'Filter by level' },
+      ...LOG_LEVELS.map((l) => el('button', {
+        class: 'loglevel' + (level === l ? ' on' : ''), type: 'button',
+        'aria-pressed': level === l ? 'true' : 'false',
+        onclick: () => {
+          S.logLevel = l;
+          const c = $('#logconsole');
+          if (c) c.replaceWith(renderLogConsole());
+        },
+      }, l)),
+    ),
+    entries.length
+      ? el('button', {
+          class: 'btn ghost small', type: 'button',
+          onclick: () => {
+            S.log = [];
+            const c = $('#logconsole');
+            if (c) c.replaceWith(renderLogConsole());
+          },
+        }, 'Clear')
+      : null,
+  );
+
+  return el('div', { class: 'logconsole open', id: 'logconsole' }, head, controls, logList());
+}
+
+function matches(e) {
+  const q = (S.logQuery || '').toLowerCase();
+  const level = S.logLevel || 'all';
+  return (level === 'all' || e.level === level) &&
+    (!q || e.text.toLowerCase().includes(q) || e.level.includes(q));
+}
+
+function logList() {
+  const shown = (S.log || []).filter(matches);
+  return el('ol', { class: 'loglist', id: 'loglist' },
+    shown.length
+      ? shown.map((e) => el('li', { class: `lv-${e.level}` },
+          el('span', { class: 'lt' }, e.t),
+          el('span', { class: 'll' }, e.level),
+          el('span', { class: 'lx' }, e.text),
+        ))
+      : el('li', { class: 'logempty' },
+          (S.log || []).length
+            ? 'Nothing matches that filter.'
+            : 'Nothing has happened yet. Start a build and the entries here will be what GitHub reports, not a description of what a build usually does.'),
+  );
 }
 
 
