@@ -102,15 +102,13 @@ async function main() {
 
   /* ── every section renders ──────────────────────────────────────────── */
   for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
-    await page.locator('.tabbar .tab', { hasText: label }).click();
-    await page.waitForTimeout(200);
+    await tapTab(page, label);
     const text = await page.textContent('#main');
     check(`Section "${label}" renders its content`, text.includes(expect), `looking for "${expect}"`);
   }
 
   /* ── editing actually changes state ─────────────────────────────────── */
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(150);
+  await tapTab(page, 'Design');
   const nameInput = page.locator('input[aria-label="Application name"]');
   await nameInput.fill('Phone Test App');
   await page.waitForTimeout(250);
@@ -118,8 +116,7 @@ async function main() {
   check('Typing an app name updates the header', shown.includes('Phone Test App'), `header="${shown}"`);
 
   /* ── the real engine is running inside the page ─────────────────────── */
-  await page.locator('.tabbar .tab', { hasText: 'Features' }).click();
-  await page.waitForTimeout(200);
+  await tapTab(page, 'Features');
   // CAMERA legitimately appears in the "deliberately not requested" list, so
   // the assertion has to look at the *requested* table, not the whole page.
   const requestedText = async () => page.evaluate(() => {
@@ -150,23 +147,20 @@ async function main() {
     'expected a list of permissions left out because their features are off');
 
   /* ── validation genuinely blocks ────────────────────────────────────── */
-  await page.locator('.tabbar .tab', { hasText: 'Build' }).click();
-  await page.waitForTimeout(200);
+  await tapTab(page, 'Build');
   let build = await page.textContent('#main');
   check('Valid configuration is not blocked', !/Build blocked/i.test(build), 'expected a pass banner');
 
   // Break it on purpose. Note: minSdk 33 with targetSdk 36 is perfectly valid,
   // so the obvious choice is the wrong one. A package name with a space is a
   // genuine format error, and the field is reachable from the UI.
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(150);
+  await tapTab(page, 'Design');
   await page.locator('input[aria-label="Package name"]').fill('com.example.not valid');
   await page.waitForTimeout(350);
   const health2 = (await page.textContent('#health')) || '';
   check('Health strip reacts to an invalid change', /Blocked/.test(health2), `health="${health2.trim()}"`);
 
-  await page.locator('.tabbar .tab', { hasText: 'Build' }).click();
-  await page.waitForTimeout(300);
+  await tapTab(page, 'Build');
   build = await page.textContent('#main');
   check('An invalid configuration visibly blocks the build',
     /Build blocked/i.test(build), 'a package name containing a space must block the build');
@@ -177,8 +171,7 @@ async function main() {
   check('The build button is disabled while blocked', startDisabled === true, `disabled=${startDisabled}`);
 
   // Put it back so the remaining checks run against a valid project.
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(150);
+  await tapTab(page, 'Design');
   await page.locator('input[aria-label="Package name"]').fill('com.example.phonetest');
   // Wait for the value to reach storage before reloading. Reloading on a fixed
   // delay raced the save and failed about one run in three with "New project" —
@@ -201,8 +194,7 @@ async function main() {
   // Everything here goes through the real component library: the palette is
   // generated from it, the properties come from it, and the findings are its
   // findings. So these checks are also checks on the library.
-  await page.locator('.tabbar .tab', { hasText: 'Screens' }).click();
-  await page.waitForTimeout(250);
+  await tapTab(page, 'Screens');
 
   check('The designer offers to start the first screen',
     /Build the first screen/i.test(await page.textContent('#main')), 'expected an empty-state call to action');
@@ -279,8 +271,7 @@ async function main() {
   await page.waitForTimeout(200);
   await page.locator('.pitem', { hasText: 'Card' }).first().click();
   await page.waitForTimeout(300);
-  await page.locator('.tabbar .tab', { hasText: 'Screens' }).click();
-  await page.waitForTimeout(200);
+  await tapTab(page, 'Screens');
   const firstNode = page.locator('.tree .node-main').first();
   await firstNode.click();
   await page.waitForTimeout(200);
@@ -313,8 +304,7 @@ async function main() {
   check('A second screen can be added and selected', chipCount >= 3, `found ${chipCount} chips (including the add button)`);
 
   // the app is switched to native screens, so the build path matches the design
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(200);
+  await tapTab(page, 'Design');
   const modeSelect = page.locator('select[aria-label="Architecture"]');
   check('The architecture can be set to designed screens', await modeSelect.count() > 0, 'expected an architecture selector');
   await modeSelect.selectOption('native-screens');
@@ -324,19 +314,57 @@ async function main() {
     /Valid|Ready|Blocked/.test(healthAfter), `health="${healthAfter.trim()}"`);
 
   /* ── offline: no external requests at all ───────────────────────────── */
-  const external = [];
+  /* ── tapping a section ────────────────────────────────────────────────────
+   Every section change in this file goes through here rather than calling
+   .click() directly, for a reason that cost a whole CI run to learn.
+
+   A bare .click() that cannot reach its target throws, the throw escapes
+   main(), and the process exits 1 having reported nothing — so 33 checks that
+   come later in the file never run, and the only output is "Timeout exceeded"
+   with no clue what was in the way. This helper waits for the tab to be
+   actionable, retries, and on the last attempt asks the page what element is
+   actually sitting at that point. "Covered by <div class=sheet-back>" is a
+   finding. "Timeout exceeded" is not. */
+async function tapTab(page, label) {
+  const tab = page.locator('.tabbar .tab', { hasText: label });
+  const attempts = 4;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await tab.scrollIntoViewIfNeeded({ timeout: 4000 });
+      await tab.click({ timeout: i === attempts - 1 ? 15000 : 5000 });
+      await page.waitForTimeout(200);
+      return;
+    } catch (e) {
+      if (i === attempts - 1) {
+        const why = await page.evaluate((text) => {
+          const t = [...document.querySelectorAll('.tabbar .tab')]
+            .find((n) => n.textContent.includes(text));
+          if (!t) return `no tab contains "${text}"`;
+          const r = t.getBoundingClientRect();
+          const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          const vis = getComputedStyle(t);
+          const shown = r.width > 0 && r.height > 0 && vis.visibility !== 'hidden' && vis.display !== 'none';
+          return `tab "${text}" shown=${shown} rect=${Math.round(r.width)}x${Math.round(r.height)} `
+            + `at ${Math.round(r.left)},${Math.round(r.top)}; the element there is `
+            + (at ? `<${at.tagName.toLowerCase()} class="${at.className}">` : 'nothing');
+        }, label).catch(() => 'the page could not be inspected');
+        throw new Error(`could not tap the "${label}" section — ${why}`);
+      }
+      await page.waitForTimeout(700);
+    }
+  }
+}
+
+const external = [];
   page.on('request', (r) => {
     const u = r.url();
     if (!u.startsWith('file://') && !u.startsWith('data:') && !u.startsWith('blob:')) external.push(u);
   });
-  await page.locator('.tabbar .tab', { hasText: 'Preview' }).click();
-  await page.waitForTimeout(300);
-  await page.locator('.tabbar .tab', { hasText: 'Build' }).click();
-  await page.waitForTimeout(300);
+  await tapTab(page, 'Preview');
+  await tapTab(page, 'Build');
   check('No external resources are requested', external.length === 0, external.join(', '));
 
-  await page.locator('.tabbar .tab', { hasText: 'Preview' }).click();
-  await page.waitForTimeout(300);
+  await tapTab(page, 'Preview');
   const frameCount = await page.locator('.device').count();
   check('Preview draws a device frame', frameCount === 1, `found ${frameCount} .device elements`);
 
@@ -378,8 +406,7 @@ async function main() {
   // so the check covers the path a person actually takes. Each control is
   // addressed by its accessible label, because the order of the colour fields
   // is a layout detail and the label is the contract.
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(200);
+  await tapTab(page, 'Design');
   const colourInputs = await page.locator('input[type="color"]').count();
   check('The theme offers colour controls to change', colourInputs >= 2, `found ${colourInputs} colour inputs`);
   for (const [label, value] of [
@@ -395,8 +422,7 @@ async function main() {
   }
   await page.waitForTimeout(400);
 
-  await page.locator('.tabbar .tab', { hasText: 'Preview' }).click();
-  await page.waitForTimeout(400);
+  await tapTab(page, 'Preview');
   const drawn = await previewColours();
 
   check('Preview applies the project theme colours',
@@ -470,8 +496,7 @@ async function main() {
   // and one of them reached the health strip before this check existed.
   const brokenWords = [];
   for (const tab of ['Design', 'Screens', 'Features', 'Preview', 'Build']) {
-    await page.locator('.tabbar .tab', { hasText: tab }).click();
-    await page.waitForTimeout(250);
+    await tapTab(page, tab);
     const text = await page.textContent('#main');
     const header = await page.textContent('#health');
     const top = await page.textContent('.topbar');
@@ -486,8 +511,7 @@ async function main() {
     brokenWords.join(', ') || 'no undefined, NaN or [object Object] anywhere in the interface');
 
   /* ── sections fold, and say what is inside ──────────────────────────── */
-  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
-  await page.waitForTimeout(250);
+  await tapTab(page, 'Design');
   const secCount = await page.locator('.sec').count();
   check('The design tab is organised into foldable sections', secCount >= 4, `found ${secCount}`);
   const closedCount = await page.locator('.sec[data-open="0"]').count();
@@ -528,14 +552,22 @@ async function main() {
   /* ── screenshot for the record ──────────────────────────────────────── */
   const shotDir = path.join(ROOT, 'studio/screenshots');
   fs.mkdirSync(shotDir, { recursive: true });
+  /* Capturing a picture is evidence, not an assertion. If one cannot be taken
+     the run should say so and carry on: the checks that follow are the point of
+     this file, and a screenshot is not worth losing them over. Before this, a
+     click that timed out inside the loop escaped main() and the process exited
+     1 having printed nothing at all. */
   const shoot = async (tab, file) => {
-    await page.locator('.tabbar .tab', { hasText: tab }).click();
-    await page.waitForTimeout(350);
-    // The top bar is sticky, so a scrolled page puts the health strip behind it
-    // and the screenshot looks broken. Return to the top before capturing.
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: path.join(shotDir, file) });
+    try {
+      await tapTab(page, tab);
+      // The top bar is sticky, so a scrolled page puts the health strip behind it
+      // and the screenshot looks broken. Return to the top before capturing.
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: path.join(shotDir, file) });
+    } catch (e) {
+      console.log(`  (screenshot "${file}" skipped: ${e.message.split('\n')[0]})`);
+    }
   };
   await shoot('Design', 'studio-design.png');
   await shoot('Features', 'studio-features.png');
@@ -545,11 +577,14 @@ async function main() {
 
   // A second frame, scrolled down, to show the permission table rather than
   // the tab buttons covering it.
-  await page.locator('.tabbar .tab', { hasText: 'Features' }).click();
-  await page.waitForTimeout(300);
-  await page.evaluate(() => window.scrollBy(0, 620));
-  await page.waitForTimeout(250);
-  await page.screenshot({ path: path.join(shotDir, 'studio-permissions.png') });
+  try {
+    await tapTab(page, 'Features');
+    await page.evaluate(() => window.scrollBy(0, 620));
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: path.join(shotDir, 'studio-permissions.png') });
+  } catch (e) {
+    console.log(`  (screenshot "studio-permissions.png" skipped: ${e.message.split('\n')[0]})`);
+  }
 
   /* ── the repair screen ─────────────────────────────────────────────── */
 
@@ -574,8 +609,7 @@ async function main() {
     });
     await page.reload();
     await page.waitForTimeout(500);
-    await page.locator('.tabbar .tab', { hasText: 'Build' }).click();
-    await page.waitForTimeout(400);
+    await tapTab(page, 'Build');
   }
 
   await loadBrokenProject();
@@ -822,4 +856,13 @@ a { color: #6B3A1F; }</style></head>
   process.exit(failed.length ? 1 : 0);
 }
 
-main().catch((e) => { console.error('\n  Studio test crashed:', e.message, '\n'); process.exit(1); });
+/* A crash is reported, and so is everything that had already been decided.
+   Exiting on the exception alone used to throw the whole result set away, which
+   made a late cosmetic failure look identical to a product that would not
+   start. */
+main().catch((e) => {
+  console.error('\n  Studio test crashed:', e.message, '\n');
+  const failed = results.filter((r) => !r.ok);
+  console.log(`  ${results.length - failed.length}/${results.length} checks had run before the crash`);
+  process.exit(1);
+});
