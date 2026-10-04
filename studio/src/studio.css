@@ -1328,3 +1328,110 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .wv-finding .ev { margin-top: 6px; font-size: .85rem; color: var(--fg-3); }
 .wv-finding .ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
 .wv-finding .ev li { word-break: break-all; }
+
+/* ── health: score rings ────────────────────────────────────────────────────
+   The arc is the score and the list under "Why this score?" is the reason for
+   it. Both are drawn from engine/spec/health.mjs, so a ring cannot disagree
+   with the findings on the Build screen. Nothing here hardcodes a colour: the
+   band classes only pick between tokens, which is also why the light theme
+   needs no separate rules.
+   ─────────────────────────────────────────────────────────────────────────── */
+.rings {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.ringcard { gap: var(--s4); }
+.ringcard.band-good  { border-color: var(--ok-line); }
+.ringcard.band-fair  { border-color: var(--warn-line); }
+.ringcard.band-poor  { border-color: var(--bad-line); }
+
+.ringhead { display: flex; align-items: center; gap: var(--s4); }
+
+.ring { position: relative; display: grid; place-items: center; width: 64px; height: 64px; flex: none; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--surface-3); stroke-width: 6; }
+.ring-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--d-slow) var(--ease-out);
+}
+.ring-num { font: 600 17px/1 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--fg); }
+
+.ring.band-good { color: var(--ok); }
+.ring.band-fair { color: var(--warn); }
+.ring.band-poor { color: var(--bad); }
+.ring.band-none { color: var(--fg-3); }
+.ring.band-none .ring-num { color: var(--fg-3); }
+
+.ringmeta { min-width: 0; }
+.ringname { font: var(--t-h3); margin: 0 0 2px; }
+.ringsub { font: var(--t-label); color: var(--fg-2); margin: 0; }
+
+.overall { display: flex; align-items: center; gap: var(--s5); }
+.overall .ring { width: 96px; height: 96px; }
+.overall .ring-num { font-size: 26px; }
+.overall .ringname { font: var(--t-h2); }
+
+/* "Why this score?" — the point of the whole screen. */
+.why-box { border-top: 1px solid var(--line); padding-top: var(--s3); }
+.why-box > summary {
+  font: var(--t-label);
+  color: var(--fg-2);
+  cursor: pointer;
+  list-style: none;
+  padding: var(--s2) 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.why-box > summary::-webkit-details-marker { display: none; }
+.why-box > summary::before {
+  content: '';
+  width: 6px; height: 6px;
+  margin-right: var(--s2);
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--d-fast) var(--ease-out);
+}
+.why-box[open] > summary::before { transform: rotate(45deg); }
+.why-box > summary:hover { color: var(--fg); }
+
+.why { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.why-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: var(--s3);
+  align-items: start;
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--line);
+}
+.why-mark { width: 8px; height: 8px; margin-top: 6px; border-radius: var(--r-full); background: currentColor; }
+.why-row.s-pass { color: var(--ok); }
+.why-row.s-warn { color: var(--warn); }
+.why-row.s-fail { color: var(--bad); }
+.why-main { min-width: 0; color: var(--fg); }
+.why-name { display: block; font: var(--t-body); }
+.why-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
+.why-tag {
+  font: var(--t-label);
+  color: currentColor;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px var(--s2);
+  border: 1px solid currentColor;
+  border-radius: var(--r-full);
+  opacity: 0.85;
+}
+.why-none { font: var(--t-body); color: var(--fg-2); margin: 0; padding-top: var(--s2); }
+
+.banner.info { border-color: var(--info-line); background: var(--info-soft); }
+.banner.info strong { color: var(--info-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-arc, .why-box > summary::before { transition: none; }
+}

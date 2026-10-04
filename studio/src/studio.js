@@ -84,6 +84,7 @@ const I = {
   design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+  gauge: '<path d="M20 15a8 8 0 1 0-16 0"/><path d="m12 15 3.5-4.5"/><circle cx="12" cy="15" r="1.4"/>',
   build: '<path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
   briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/>',
@@ -818,6 +819,7 @@ const TAB_DEFS = [
   ['screens', 'Screens', I.layers, 'screen designer, components, layout'],
   ['caps', 'Features', I.caps, 'capabilities and the permissions they need'],
   ['preview', 'Preview', I.eye, 'the app drawn in your theme'],
+  ['health', 'Health', I.gauge, 'score rings, and the checks behind each one'],
   ['build', 'Build', I.build, 'validation findings, repairs, start a build'],
 ];
 
@@ -878,7 +880,7 @@ function projectMeta(spec) {
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
   $('#projmeta').textContent = projectMeta(S.active.spec);
-  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, build: viewBuild };
+  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, health: viewHealth, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
   renderTabs();
@@ -1127,4 +1129,15 @@ async function boot(templatesData) {
 }
 
 window.__appmintBoot = boot;
+
+// The Health screen prints a score for every category. A test can only check
+// those numbers against the engine if it can reach the engine, so the functions
+// behind the rings are exposed here — the same way boot is. Without this the
+// only available test is "a number was printed", which passes just as happily
+// once the UI and the engine have quietly drifted apart.
+window.__appmintHealth = () => {
+  const spec = S.active ? S.active.spec : {};
+  return projectHealth(spec, check(), permissionReport(spec));
+};
+
 export { boot };

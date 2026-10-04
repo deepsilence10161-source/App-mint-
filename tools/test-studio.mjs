@@ -95,16 +95,111 @@ async function main() {
   await page.waitForTimeout(250);
 
   const tabs = await page.locator('.tabbar .tab').count();
-  check('Opening a template reveals the five sections', tabs === 5, `found ${tabs} tabs`);
+  check('Opening a template reveals the six sections', tabs === 6, `found ${tabs} tabs`);
 
   const health = (await page.textContent('#health')) || '';
   check('Health strip reports a verdict', /Valid|Blocked|Ready/.test(health), `health="${health.trim()}"`);
 
   /* ── every section renders ──────────────────────────────────────────── */
-  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Build', 'Validation']]) {
+  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Health', 'Project health'], ['Build', 'Validation']]) {
     await tapTab(page, label);
     const text = await page.textContent('#main');
     check(`Section "${label}" renders its content`, text.includes(expect), `looking for "${expect}"`);
+  }
+
+  /* ── health: a score you can argue with ─────────────────────────────────
+     The design prompt allows score rings on one condition — "Do not invent
+     arbitrary scores. Every score must be calculated from measurable checks" —
+     and a person must be able to open "Why this score?" and see them. So the
+     assertion that matters is not that a number is printed; it is that the
+     number printed is the number the engine derives, and that the reasons are
+     on the page. */
+  await tapTab(page, 'Health');
+
+  const rings = await page.locator('.rings .ringcard').count();
+  check('Health shows a ring for every category', rings === 5, `found ${rings} rings`);
+
+  const whys = await page.locator('.why-box > summary').count();
+  check('Every ring offers "Why this score?"', whys === 5, `found ${whys}`);
+
+  const ringFacts = await page.evaluate(() => {
+    const h = window.__appmintHealth();
+    const cards = [...document.querySelectorAll('.rings .ringcard')];
+    return {
+      engine: h.categories.map((c) => ({ label: c.label, score: c.score, n: c.checks.length })),
+      overall: h.overall,
+      weakest: h.weakest,
+      shown: cards.map((c) => ({
+        label: c.querySelector('.ringname').textContent.trim(),
+        num: c.querySelector('.ring-num').textContent.trim(),
+        rows: c.querySelectorAll('.why-row').length,
+        // A ring drawn from a constant would pass a test that only looks at the
+        // number, so the arc length is checked against the score as well.
+        arc: c.querySelector('.ring-arc').getAttribute('stroke-dasharray'),
+        band: [...c.querySelector('.ring').classList].find((x) => x.startsWith('band-')),
+      })),
+      overallNum: document.querySelector('.overall .ring-num').textContent.trim(),
+    };
+  });
+
+  const CIRC = 2 * Math.PI * 26;
+  let mismatches = [];
+  ringFacts.engine.forEach((e, i) => {
+    const got = ringFacts.shown[i];
+    if (!got) { mismatches.push(`${e.label}: no ring rendered`); return; }
+    if (got.label !== e.label) mismatches.push(`ring ${i} is labelled "${got.label}", engine says "${e.label}"`);
+    const want = e.score === null ? '—' : String(e.score);
+    if (got.num !== want) mismatches.push(`${e.label}: ring shows ${got.num}, engine derives ${want}`);
+    if (got.rows !== e.n) mismatches.push(`${e.label}: ${got.rows} reason rows for ${e.n} checks`);
+    if (e.score !== null) {
+      const arcLen = parseFloat(got.arc);
+      const want = CIRC * e.score / 100;
+      if (!(Math.abs(arcLen - want) < 0.6)) mismatches.push(`${e.label}: arc ${arcLen.toFixed(2)} for score ${e.score}, expected ${want.toFixed(2)}`);
+      const wantBand = e.score >= 85 ? 'band-good' : (e.score >= 60 ? 'band-fair' : 'band-poor');
+      if (got.band !== wantBand) mismatches.push(`${e.label}: band ${got.band}, score ${e.score} is ${wantBand}`);
+    } else if (got.band !== 'band-none') {
+      mismatches.push(`${e.label}: an unmeasured category must not wear a band, got ${got.band}`);
+    }
+  });
+  check('Each ring shows the score the engine derives, not a number chosen for the layout',
+    mismatches.length === 0, mismatches.join('; '));
+
+  check('The overall number is the weakest category, so nothing failing is averaged away',
+    ringFacts.overallNum === String(ringFacts.overall),
+    `page shows ${ringFacts.overallNum}, engine derives ${ringFacts.overall} (weakest: ${ringFacts.weakest})`);
+
+  // "Why this score?" has to actually open onto the checks. A disclosure that
+  // never reveals anything is the decorative version of this feature.
+  const firstWhy = page.locator('.rings .ringcard').first().locator('.why-box > summary');
+  await firstWhy.click();
+  await page.waitForTimeout(200);
+  const opened = await page.evaluate(() => {
+    const box = document.querySelector('.rings .ringcard .why-box');
+    const rows = [...box.querySelectorAll('.why-row')];
+    return {
+      open: box.open,
+      n: rows.length,
+      named: rows.every((r) => r.querySelector('.why-name').textContent.trim().length > 0),
+      reasoned: rows.every((r) => r.querySelector('.why-detail').textContent.trim().length > 0),
+      tagged: rows.every((r) => /^(pass|warn|fail)$/.test(r.querySelector('.why-tag').textContent.trim())),
+      first: rows[0] ? rows[0].textContent.replace(/\s+/g, ' ').trim().slice(0, 110) : '',
+    };
+  });
+  check('"Why this score?" opens onto the checks behind the ring',
+    opened.open && opened.n > 0, `open=${opened.open}, rows=${opened.n}`);
+  check('Every check states a name and a reason, because that is the whole feature',
+    opened.named && opened.reasoned && opened.tagged, JSON.stringify(opened).slice(0, 160));
+
+  // A category with nothing configured must say so rather than score 100.
+  const unmeasured = await page.evaluate(() => {
+    const h = window.__appmintHealth();
+    return h.categories.filter((c) => c.score === null).map((c) => c.label);
+  });
+  if (unmeasured.length) {
+    const bannerText = await page.textContent('#main');
+    check('Unmeasured categories are named instead of being given a score',
+      bannerText.includes('not measured') && unmeasured.every((n) => bannerText.includes(n)),
+      `unmeasured: ${unmeasured.join(', ')}`);
   }
 
   /* ── editing actually changes state ─────────────────────────────────── */
