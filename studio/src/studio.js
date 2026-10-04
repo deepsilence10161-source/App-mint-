@@ -180,6 +180,10 @@ const S = {
   // Which settings tab is open, and whether Advanced Mode is on. Kept for the
   // life of the page rather than saved: it is a view state, not a decision.
   settings: { tab: 'general', advanced: false },
+  // The build log. Real events only: what the Studio did, what GitHub reported,
+  // and what went wrong talking to it. Nothing is written here to make the
+  // console look busy.
+  log: [], logOpen: false,
   dirty: false,
 };
 
@@ -219,6 +223,27 @@ function persist() {
 function touch() {
   S.active.updatedAt = new Date().toISOString();
   if (!persist()) toast('Warning: could not save to this browser\'s storage.');
+}
+
+/* ── the build log ─────────────────────────────────────────────────────────
+   One place records what happened during a build. The console drawer reads it;
+   nothing else does. Entries carry a level so the drawer can colour them, and
+   the caller supplies the words, because a log that paraphrases itself into
+   vagueness is worse than no log. */
+const LOG_MAX = 400;
+function logEvent(level, text) {
+  S.log.push({ t: new Date().toISOString().slice(11, 19), level, text });
+  // The first entry opens the drawer. Until then the drawer is not in the
+  // document at all, so without this an entry could arrive and be recorded and
+  // still never be seen - which is the one thing a log must not do.
+  S.logOpen = true;
+  if (S.log.length > LOG_MAX) S.log.splice(0, S.log.length - LOG_MAX);
+  // Replace the drawer wherever it is in the document. If the Build screen is
+  // on screen, this is what makes the log real-time: the entry appears as the
+  // event arrives rather than at the next full redraw. If it is not, there is
+  // no drawer in the document and this quietly does nothing.
+  const c = $('#logconsole');
+  if (c) c.replaceWith(renderLogConsole());
 }
 
 /* ── validation ────────────────────────────────────────────────────────── */
@@ -618,6 +643,11 @@ function viewBuild() {
     // The stepper comes first when there is a run to report: "what is my build
     // doing" is the question the Build screen exists to answer.
     ...viewPipeline(),
+
+    // The log drawer sits under the stepper: what is happening, then the record
+    // of what happened. It is absent entirely until a build has been started,
+    // because an empty console that says "waiting" is decoration.
+    (S.log && S.log.length) || S.logOpen ? renderLogConsole() : null,
 
     card('Validation layers', [statusBanner, ...layers], null),
 
@@ -1081,7 +1111,9 @@ async function startBuild() {
     }
 
     toast('Committed. The build is starting…');
+    logEvent('info', `Committed ${path} to ${repo} — the build should start on its own`);
 
+    S.log = []; S.logOpen = true;
     S.pipeline = { run: null, steps: [], artifacts: [], polling: true, error: null };
     hardUpdate();
     // Watch the run so the stepper shows what is actually happening instead
@@ -1116,7 +1148,10 @@ async function pollPipeline(since) {
           { headers },
         ).then((x) => (x.ok ? x.json() : null));
         const found = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
-        if (found) { S.pipeline.run = found; S.lastRun = found; }
+        if (found) {
+          S.pipeline.run = found; S.lastRun = found;
+          logEvent('info', `Run #${found.run_number} appeared — ${found.name} (${found.status})`);
+        }
         else S.pipeline.error = 'the run has not appeared yet';
       } else {
         const id = S.pipeline.run.id;
@@ -1125,7 +1160,19 @@ async function pollPipeline(since) {
           fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}/jobs?per_page=50`, { headers }).then((x) => (x.ok ? x.json() : null)),
         ]);
         if (run) { S.pipeline.run = run; S.lastRun = run; }
-        if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
+        if (jobs) {
+          const next = stepsFromJobs(jobs);
+          const before = new Map((S.pipeline.steps || []).map((s) => [s.name, buildStepStatus(s)]));
+          for (const s of next) {
+            const now = buildStepStatus(s);
+            const was = before.get(s.name);
+            if (was !== now) {
+              logEvent(now === 'failed' ? 'error' : now === 'running' ? 'step' : 'ok',
+                `${now === 'failed' ? 'FAILED' : now.toUpperCase()}  ${s.name}`);
+            }
+          }
+          S.pipeline.steps = next;
+        }
         S.pipeline.error = null;
         if (run && run.status === 'completed') {
           // The artifact list carries the size and checksum of the file that was
@@ -1134,7 +1181,14 @@ async function pollPipeline(since) {
             `https://api.github.com/repos/${repo}/actions/runs/${id}/artifacts?per_page=20`,
             { headers },
           ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-          if (arts) S.pipeline.artifacts = arts.artifacts || [];
+          if (arts) {
+            S.pipeline.artifacts = arts.artifacts || [];
+            for (const a of S.pipeline.artifacts) {
+              if (/apk|aab/i.test(a.name)) logEvent('ok', `Artifact ${a.name} — ${(a.size_in_bytes / 1048576).toFixed(1)} MB`);
+            }
+          }
+          logEvent(run.conclusion === 'success' ? 'ok' : 'error',
+            `Run #${run.run_number} ${run.conclusion || 'finished'}`);
           S.pipeline.polling = false;
           S.pipeline._watching = false;
           hardUpdate();
@@ -1143,6 +1197,7 @@ async function pollPipeline(since) {
       }
     } catch (e) {
       S.pipeline.error = e.message || 'could not reach GitHub';
+      logEvent('warn', `Could not check the run: ${S.pipeline.error}`);
     }
     // Only the Build screen draws the stepper, so nothing else is redrawn while
     // somebody is typing somewhere else.
@@ -1243,6 +1298,15 @@ window.__appmintPipeline = (next) => {
 
 // The specification as the app holds it, so a verification can compare what a
 // screen displays against the object the build would read.
+// A verification cannot start a real build to see the log fill, and a console
+// that only ever renders "nothing yet" would pass every test that could
+// otherwise be written for it. This calls the same logEvent() the polling uses.
+window.__appmintLog = (level, text) => logEvent(level, text);
+window.__appmintLogReset = () => {
+  S.log = []; S.logOpen = false; S.logQuery = ''; S.logLevel = 'all';
+  if (S.active) renderActive();
+};
+
 window.__appmintSpec = () => JSON.parse(JSON.stringify(S.active ? S.active.spec : {}));
 
 // What is currently stopping a build, as the validator sees it.

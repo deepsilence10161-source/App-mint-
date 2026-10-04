@@ -1795,3 +1795,84 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (max-width: 899.98px) {
   .railpin { display: none; }
 }
+
+/* ── build log console ──────────────────────────────────────────────────────
+   A drawer at the bottom of the Build screen. Monospace, because the entries
+   are timestamps and step names rather than prose, and colour-coded by level so
+   a failed step is visible before it is read.
+   ─────────────────────────────────────────────────────────────────────────── */
+.logconsole {
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.loghead {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; min-height: 44px;
+  padding: var(--s3) var(--s4);
+  border: 0; background: none; cursor: pointer;
+  color: var(--fg-2);
+  font: var(--t-label);
+  text-align: left;
+}
+.loghead:hover { color: var(--fg); }
+.logtitle { font-weight: 600; color: var(--fg); font-size: 13.5px; }
+.logcount { margin-left: auto; font-variant-numeric: tabular-nums; }
+.logchev { display: grid; place-items: center; transition: transform var(--d-fast) var(--ease-out); }
+.logchev svg { width: 16px; height: 16px; }
+.logconsole.open .logchev { transform: rotate(180deg); }
+.logdot { width: 8px; height: 8px; border-radius: var(--r-full); background: var(--fg-3); flex: none; }
+.logconsole.open .logdot { background: var(--info); }
+
+.logbar {
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+  padding: 0 var(--s4) var(--s3);
+}
+.logsearch {
+  flex: 1 1 160px; min-height: 36px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font: var(--t-label);
+}
+.logsearch:focus { outline: none; border-color: var(--accent-line); }
+.loglevels { display: flex; gap: 2px; flex-wrap: wrap; }
+.loglevel {
+  min-height: 32px; padding: 0 var(--s3);
+  border: 1px solid var(--line); border-radius: var(--r-full);
+  background: none; color: var(--fg-3);
+  font: var(--t-label); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5px;
+  cursor: pointer;
+}
+.loglevel:hover { color: var(--fg); }
+.loglevel.on { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
+
+.loglist {
+  list-style: none; margin: 0;
+  max-height: 280px; overflow: auto;
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  font: var(--t-code); font-size: 12px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.loglist li { display: grid; grid-template-columns: auto auto 1fr; gap: var(--s3); align-items: baseline; }
+.loglist .lt { color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.loglist .ll { text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+.loglist .lx { color: var(--fg-2); word-break: break-word; }
+.loglist li.lv-info .ll { color: var(--info-ink); }
+.loglist li.lv-step .ll { color: var(--fg-3); }
+.loglist li.lv-ok .ll { color: var(--ok-ink); }
+.loglist li.lv-ok .lx { color: var(--fg); }
+.loglist li.lv-warn .ll { color: var(--warn-ink); }
+.loglist li.lv-warn .lx { color: var(--warn-ink); }
+.loglist li.lv-error .ll { color: var(--bad-ink); }
+.loglist li.lv-error .lx { color: var(--bad-ink); }
+.logempty { display: block !important; grid-template-columns: none !important; color: var(--fg-3); font-family: var(--font-ui); font-size: 12.5px; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .logchev { transition: none; }
+}

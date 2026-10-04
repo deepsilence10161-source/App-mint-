@@ -468,6 +468,91 @@ async function main() {
   await setPipeline(null, []);
   await page.waitForTimeout(150);
 
+  /* ── the log console ───────────────────────────────────────────────────────
+     A log console is trivial to fake and the fake looks identical, so the checks
+     are about behaviour: it is absent until something has happened, the entries
+     are the ones that were recorded, and the filters actually filter. */
+  await page.evaluate(() => { window.__appmintPipeline(null); });
+  await page.evaluate(() => { window.__appmintLogReset(); });
+  await tapTab(page, 'Design');
+  await tapTab(page, 'Build');
+  await page.waitForTimeout(250);
+  check('No log console before anything has happened',
+    (await page.locator('#logconsole').count()) === 0,
+    'an empty console saying "waiting" would be decoration');
+
+  await page.evaluate(() => {
+    window.__appmintLog('info', 'Committed apps/studio/demo/spec.json');
+    window.__appmintLog('step', 'RUNNING  Build debug APK');
+    window.__appmintLog('ok', 'DONE  Validate the real artifact');
+    window.__appmintLog('error', 'FAILED  Row level security gate');
+    window.__appmintLog('warn', 'Could not check the run: rate limited');
+  });
+  // The drawer is part of the Build screen, so it appears when that screen is
+  // drawn - which is the same thing a person does: they were on another tab,
+  // something happened, they came back to look.
+  await tapTab(page, 'Design');
+  await tapTab(page, 'Build');
+  await page.waitForTimeout(300);
+
+  const log = await page.evaluate(() => ({
+    open: document.querySelector('#logconsole').classList.contains('open'),
+    n: document.querySelectorAll('#loglist li.lv-info, #loglist li.lv-step, #loglist li.lv-ok, #loglist li.lv-warn, #loglist li.lv-error').length,
+    mono: getComputedStyle(document.querySelector('#loglist')).fontFamily,
+    count: document.querySelector('#logconsole .logcount').textContent.trim(),
+  }));
+  check('The log console appears once there is something to show',
+    log.open && log.n === 5, `open=${log.open}, rows=${log.n}`);
+  check('The log is monospace, because it is timestamps and step names',
+    /mono/i.test(log.mono), log.mono.slice(0, 60));
+
+  await page.locator('.loglevel', { hasText: 'error' }).click();
+  await page.waitForTimeout(250);
+  const onlyErrors = await page.evaluate(() => ({
+    rows: [...document.querySelectorAll('#loglist li')].map((n) => n.className),
+    text: document.querySelector('#loglist').textContent,
+  }));
+  check('Filtering by level shows only that level',
+    onlyErrors.rows.length === 1 && onlyErrors.rows[0] === 'lv-error' && /Row level security gate/.test(onlyErrors.text),
+    JSON.stringify(onlyErrors.rows));
+
+  await page.locator('.loglevel', { hasText: 'all' }).click();
+  await page.waitForTimeout(200);
+  await page.locator('input[aria-label="Filter the build log"]').fill('artifact');
+  await page.waitForTimeout(300);
+  const searched = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#loglist li:not(.logempty)').length,
+    text: document.querySelector('#loglist').textContent,
+    count: document.querySelector('#logconsole .logcount').textContent.trim(),
+  }));
+  check('Searching the log narrows it to what matches',
+    searched.rows === 1 && /Validate the real artifact/.test(searched.text) && /^1 of 5$/.test(searched.count),
+    `rows=${searched.rows} count="${searched.count}"`);
+
+  await page.locator('input[aria-label="Filter the build log"]').fill('nothing will ever match this');
+  await page.waitForTimeout(300);
+  check('A search with no match says so instead of showing an empty box',
+    /Nothing matches/.test(await page.textContent('#loglist')), await page.textContent('#loglist'));
+
+  await page.locator('input[aria-label="Filter the build log"]').fill('');
+  await page.waitForTimeout(250);
+  await page.locator('#logtoggle').click();
+  await page.waitForTimeout(250);
+  check('The console collapses', (await page.locator('#loglist').count()) === 0, 'the list should be gone when collapsed');
+  await page.locator('#logtoggle').click();
+  await page.waitForTimeout(250);
+  check('and opens again', (await page.locator('#loglist li').count()) === 5, 'all five entries should be back');
+
+  await page.locator('#logconsole button:has-text("Clear")').click();
+  await page.waitForTimeout(250);
+  check('Clearing empties it rather than hiding it',
+    /Nothing has happened yet/.test(await page.textContent('#loglist')), await page.textContent('#loglist'));
+
+  await page.evaluate(() => { window.__appmintLogReset(); });
+  await tapTab(page, 'Design');
+  await tapTab(page, 'Build');
+  await page.waitForTimeout(250);
+
   /* ── editing actually changes state ─────────────────────────────────── */
   await tapTab(page, 'Design');
   const nameInput = page.locator('input[aria-label="Application name"]');
