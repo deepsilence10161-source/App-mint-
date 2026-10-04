@@ -1416,13 +1416,17 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   grid-template-columns: 10px 1fr auto;
   gap: var(--s3);
   align-items: start;
-  padding: var(--s2) 0;
-  border-top: 1px solid var(--line);
+  padding: var(--s2) var(--s3);
+  /* The design prompt asks for a colour-coded left border on each check row, so
+     a column of reasons can be read by colour before it is read by word. */
+  border-left: 3px solid var(--line-2);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: var(--surface-2);
 }
 .why-mark { width: 8px; height: 8px; margin-top: 6px; border-radius: var(--r-full); background: currentColor; }
-.why-row.s-pass { color: var(--ok); }
-.why-row.s-warn { color: var(--warn); }
-.why-row.s-fail { color: var(--bad); }
+.why-row.s-pass { color: var(--ok);   border-left-color: var(--ok); }
+.why-row.s-warn { color: var(--warn); border-left-color: var(--warn); }
+.why-row.s-fail { color: var(--bad);  border-left-color: var(--bad); }
 .why-main { min-width: 0; color: var(--fg); }
 .why-name { display: block; font: var(--t-body); }
 .why-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
@@ -1546,8 +1550,69 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   .skel { animation: none; }
   .pstep.s-running .pmark svg { animation: none; }
 }
+
+/* ── build outcome ──────────────────────────────────────────────────────────
+   Success is a drawn checkmark and the file itself, with the size and checksum
+   of the artifact GitHub stored. No confetti: the interesting part is not that
+   the build passed but what it produced.
+   ─────────────────────────────────────────────────────────────────────────── */
+.outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.outcome.s-success { border-color: var(--ok-line); background: var(--ok-soft); }
+.outcome.s-failure { border-color: var(--bad-line); background: var(--bad-soft); }
+.outcome.s-cancelled { border-color: var(--warn-line); background: var(--warn-soft); }
+.outcome-text { flex: 1 1 220px; min-width: 0; }
+.outcome-text h3 { font: var(--t-h3); margin: 0 0 2px; }
+.outcome.s-success .outcome-text h3 { color: var(--ok-ink); }
+.outcome.s-failure .outcome-text h3 { color: var(--bad-ink); }
+.outcome.s-cancelled .outcome-text h3 { color: var(--warn-ink); }
+
+.outcome-mark { flex: none; width: 52px; height: 52px; display: grid; place-items: center; }
+.outcome-mark svg { width: 52px; height: 52px; overflow: visible; }
+.outcome-mark.ok .om-ring {
+  fill: none; stroke: var(--ok); stroke-width: 2.5;
+  stroke-dasharray: 145; stroke-dashoffset: 145;
+  transform-origin: 26px 26px;
+  animation: om-ring 620ms var(--ease-out) forwards;
+}
+.outcome-mark.ok .om-tick {
+  fill: none; stroke: var(--ok); stroke-width: 3.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 34; stroke-dashoffset: 34;
+  animation: om-tick 320ms var(--ease-out) 420ms forwards;
+}
+@keyframes om-ring { to { stroke-dashoffset: 0; } }
+@keyframes om-tick { to { stroke-dashoffset: 0; } }
+.outcome-mark.bad, .outcome-mark.warn { color: var(--bad-ink); }
+.outcome-mark.warn { color: var(--warn-ink); }
+.outcome-mark.bad svg, .outcome-mark.warn svg { width: 26px; height: 26px; }
+
+.outcome-files { list-style: none; margin: 0; padding: 0; flex: 1 1 100%; display: flex; flex-direction: column; gap: var(--s2); }
+.outcome-files li {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.fname { font: 500 13.5px/1.4 var(--font-ui); color: var(--fg); }
+.fsize { font: var(--t-label); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.fsha { font: var(--t-code); color: var(--fg-2); }
+.outcome-files .btn { margin-left: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .outcome-mark.ok .om-ring, .outcome-mark.ok .om-tick { animation: none; stroke-dashoffset: 0; }
+}
 </style>
-<meta name="appmint-build" content="b84f35db27d7d610">
+<meta name="appmint-build" content="2691c3d2119158d8">
 </head>
 <body>
 
@@ -3757,6 +3822,46 @@ function backendHealth(spec) {
   return checks;
 }
 
+function testingHealth(spec) {
+  const checks = [];
+  const mode = ((spec.app || {}).mode) || 'webview';
+
+  // The device harness judges an app by looking at what is on its screen, and a
+  // website and an app that draws its own screens share no UI code — so what can
+  // be verified differs by architecture. That is a fact about the harness, not a
+  // guess about the app's quality.
+  if (mode === 'native-screens') {
+    const n = (spec.screens || []).length;
+    checks.push(n
+      ? pass('The device harness has screens to verify', `${n} screen(s) it can find and check by name`)
+      : warn('The device harness has screens to verify', 'No screens are defined, so there is nothing on the device to verify.'));
+  } else {
+    checks.push(warn('The device harness can inspect the running app',
+      `Architecture is "${mode}": the harness can confirm it launched and stayed alive, but the content is a web page it cannot see into.`));
+    const wv = ((spec.app || {}).webview) || {};
+    checks.push(wv.localAsset
+      ? pass('The app can be tested without a network', `It opens a bundled page (${String(wv.localAsset).slice(0, 40)})`)
+      : warn('The app can be tested without a network',
+          'It opens a remote address, so a device test depends on that host being reachable at the time.'));
+  }
+  return checks;
+}
+
+/**
+ * Performance is a category the design prompt asks for, and it is the one with
+ * nothing behind it: this project has never profiled a generated app, so there is
+ * no measurement to derive a score from. It returns no checks, which makes the
+ * ring show a dash and the dashboard say so.
+ *
+ * The alternative is a number computed from things that merely correlate with
+ * slowness — permission count, screen count — and that is the invention the
+ * prompt forbids, wearing a lab coat. An empty category is the honest answer and
+ * it costs nothing: the ring is still there, and it says what it does not know.
+ */
+function performanceHealth() {
+  return [];
+}
+
 /* ── scoring ───────────────────────────────────────────────────────────────── */
 
 /**
@@ -3793,12 +3898,17 @@ function bandOf(score) {
  */
 function projectHealth(spec, validation, report) {
   const s = spec || {};
+  // The seven categories the design prompt names, in its order. Two of them may
+  // come back with nothing to measure, and that is a result rather than a gap:
+  // see performanceHealth.
   const categories = [
-    { key: 'build',      label: 'Build',      checks: buildHealth(s, validation) },
-    { key: 'security',   label: 'Security',   checks: securityHealth(s, validation) },
-    { key: 'dependency', label: 'Dependency', checks: dependencyHealth(s, validation) },
-    { key: 'permission', label: 'Permission', checks: permissionHealth(s, report) },
-    { key: 'backend',    label: 'Backend',    checks: backendHealth(s) },
+    { key: 'build',       label: 'Build',       checks: buildHealth(s, validation) },
+    { key: 'security',    label: 'Security',    checks: securityHealth(s, validation) },
+    { key: 'performance', label: 'Performance', checks: performanceHealth() },
+    { key: 'dependency',  label: 'Dependency',  checks: dependencyHealth(s, validation) },
+    { key: 'backend',     label: 'Backend',     checks: backendHealth(s) },
+    { key: 'permission',  label: 'Permission',  checks: permissionHealth(s, report) },
+    { key: 'testing',     label: 'Testing',     checks: testingHealth(s) },
   ];
 
   for (const c of categories) {
@@ -6974,7 +7084,7 @@ const S = {
   lastRun: null,
   // The run the Studio started, plus the real steps GitHub has reported for
   // it. The stepper is drawn from this and from nothing else.
-  pipeline: { run: null, steps: [], polling: false, error: null },
+  pipeline: { run: null, steps: [], artifacts: [], polling: false, error: null },
   dirty: false,
 };
 
@@ -7876,7 +7986,7 @@ async function startBuild() {
 
     toast('Committed. The build is starting…');
 
-    S.pipeline = { run: null, steps: [], polling: true, error: null };
+    S.pipeline = { run: null, steps: [], artifacts: [], polling: true, error: null };
     hardUpdate();
     // Watch the run so the stepper shows what is actually happening instead
     // of a static claim. pollPipeline stops itself once the run concludes.
@@ -7922,6 +8032,13 @@ async function pollPipeline(since) {
         if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
         S.pipeline.error = null;
         if (run && run.status === 'completed') {
+          // The artifact list carries the size and checksum of the file that was
+          // actually stored, which is what the success state shows.
+          const arts = await fetch(
+            `https://api.github.com/repos/${repo}/actions/runs/${id}/artifacts?per_page=20`,
+            { headers },
+          ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+          if (arts) S.pipeline.artifacts = arts.artifacts || [];
           S.pipeline.polling = false;
           S.pipeline._watching = false;
           hardUpdate();
@@ -8006,7 +8123,7 @@ window.__appmintBoot = boot;
 // ever renders "waiting" would pass every test that could otherwise be written
 // for it, including the ones that matter most.
 window.__appmintPipeline = (next) => {
-  S.pipeline = next ? { polling: false, error: null, ...next } : { run: null, steps: [], polling: false, error: null };
+  S.pipeline = next ? { artifacts: [], polling: false, error: null, ...next } : { run: null, steps: [], artifacts: [], polling: false, error: null };
   renderActive();
 };
 
@@ -8532,8 +8649,66 @@ function viewPipeline() {
       : 'Watching the run. Each stage moves when its real steps move.'));
   }
 
-  return [card('Build pipeline', [head, ...body],
+  const outcome = outcomeNode(P);
+
+  return [card('Build pipeline', [head, ...body, outcome],
     'The stages are the steps this workflow reported, grouped. Nothing here advances on a timer.')];
+}
+
+/* ── the outcome ────────────────────────────────────────────────────────────
+   The design prompt asks for an elegant success state rather than confetti:
+   an animated checkmark, then the file with its size and checksum. The size
+   and checksum come from the artifact GitHub actually stored, so they are the
+   properties of the file a person is about to download and not a description
+   of what the file was meant to be.
+   ─────────────────────────────────────────────────────────────────────────── */
+function sayBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function outcomeNode(P) {
+  const run = P.run;
+  if (!run || run.status !== 'completed') return null;
+
+  // The checkmark is drawn, not swapped in: the stroke is animated from nothing
+  // so the mark appears to be drawn as you look at it. One shape, one property.
+  const glyph = run.conclusion === 'success'
+    ? el('span', { class: 'outcome-mark ok', html: '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="om-ring" cx="26" cy="26" r="23"/><path class="om-tick" d="M15 27l8 8 15-16"/></svg>' })
+    : el('span', { class: 'outcome-mark ' + (run.conclusion === 'cancelled' ? 'warn' : 'bad'), html: svg(run.conclusion === 'cancelled' ? PIPE_ICONS.minus : PIPE_ICONS.cross) });
+
+  const arts = P.artifacts || [];
+  const apks = arts.filter((a) => /apk|aab/i.test(a.name));
+
+  const kids = [
+    glyph,
+    el('div', { class: 'outcome-text' },
+      el('h3', {}, run.conclusion === 'success' ? 'The build succeeded'
+        : run.conclusion === 'cancelled' ? 'The build was cancelled'
+        : 'The build failed'),
+      el('p', { class: 'hint' }, run.conclusion === 'success'
+        ? 'Everything below was verified against the finished file, not against the specification that described it.'
+        : run.conclusion === 'cancelled'
+        ? 'It was stopped before it finished, so nothing here was verified. That is not the same as a build that failed.'
+        : 'The stages above name the step that failed.'),
+    ),
+  ];
+
+  if (run.conclusion === 'success' && apks.length) {
+    kids.push(el('ul', { class: 'outcome-files' },
+      ...apks.map((a) => el('li', {},
+        el('span', { class: 'fname' }, a.name),
+        sayBytes(a.size_in_bytes) ? el('span', { class: 'fsize' }, sayBytes(a.size_in_bytes)) : null,
+        a.sha256 ? el('code', { class: 'fsha', title: a.sha256 }, `sha256 ${a.sha256.slice(0, 16)}…`) : null,
+        a.id ? el('a', { class: 'btn ghost small', href: `https://api.github.com/repos/${(store.repo() || 'deepsilence10161-source/App-mint-')}/actions/artifacts/${a.id}/zip`, target: '_blank', rel: 'noopener' }, 'Download') : null,
+      ))));
+  } else if (run.conclusion === 'success') {
+    kids.push(el('p', { class: 'hint' }, 'The run reported no APK artifact, so there is nothing to download from here.'));
+  }
+
+  return el('div', { class: `outcome s-${run.conclusion || 'unknown'}` }, kids);
 }
 
 
