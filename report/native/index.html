@@ -59,7 +59,7 @@
   <header>
     <div class="dim" style="font-size:.75rem;letter-spacing:.08em;text-transform:uppercase">App Mint · device test</div>
     <div class="verdict">FAIL</div>
-    <div class="sub">2 of 21 checks passed · run #24 · <code>5090d1ba</code></div>
+    <div class="sub">1 of 14 checks passed · run #26 · <code>22cee0bf</code></div>
   </header>
 
   <section class="card">
@@ -83,7 +83,7 @@
         <span class="badge" style="background:#dc2626">FAIL</span>
         <div class="ck">
           <div class="lbl">Package is registered on the device</div>
-          <div class="ev">dumpsys package com.appmint.nativedemo: 0 bytes</div>
+          <div class="ev">dumpsys package : 0 bytes</div>
         </div>
       </li>
       <li>
@@ -104,6 +104,20 @@
         <span class="badge" style="background:#dc2626">FAIL</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: launch</div>
+          <div class="ev">0 bytes</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#dc2626">FAIL</span>
+        <div class="ck">
+          <div class="lbl">Screenshot captured: page loaded</div>
+          <div class="ev">0 bytes</div>
+        </div>
+      </li>
+      <li>
+        <span class="badge" style="background:#dc2626">FAIL</span>
+        <div class="ck">
+          <div class="lbl">Screenshot captured: after pull-to-refresh</div>
           <div class="ev">0 bytes</div>
         </div>
       </li>
@@ -131,78 +145,15 @@
       <li>
         <span class="badge" style="background:#dc2626">FAIL</span>
         <div class="ck">
-          <div class="lbl">Screenshot captured: first screen drawn</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: designed screen 1</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: designed screen 2</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: designed screen 3</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Screenshot captured: designed screen 4</div>
-          <div class="ev">0 bytes</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
           <div class="lbl">Loaded screen shows real rendered content</div>
           <div class="ev">no loaded screenshot to inspect</div>
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#16a34a">PASS</span>
-        <div class="ck">
-          <div class="lbl">This app draws its own screens, so no page script is expected</div>
-          <div class="ev">architecture=native-screens: the interface comes from 4 designed screen(s) compiled into the app, not from a web page</div>
-        </div>
-      </li>
-      <li>
         <span class="badge" style="background:#dc2626">FAIL</span>
         <div class="ck">
-          <div class="lbl">The app drew its first screen immediately</div>
-          <div class="ev">0 distinct colours, luminance spread 0.0 in the launch frame (a designed app has nothing to download, so this is already the finished screen)</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Each designed screen can be reached and draws its own content</div>
-          <div class="ev">no screenshot to compare for screen(s) [2, 3, 4]</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">The first tab leads back to the screen the app opens on</div>
-          <div class="ev">no screenshots to compare</div>
-        </div>
-      </li>
-      <li>
-        <span class="badge" style="background:#dc2626">FAIL</span>
-        <div class="ck">
-          <div class="lbl">Pressing back from another tab returns to the first screen</div>
-          <div class="ev">no screenshot after the back press</div>
+          <div class="lbl">JavaScript ran inside the WebView</div>
+          <div class="ev">no APPMINT_READY marker in logcat — the page may have loaded but its script did not run</div>
         </div>
       </li>
       <li>

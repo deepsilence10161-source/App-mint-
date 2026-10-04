@@ -1,7 +1,7 @@
 {
   "verdict": "FAIL",
-  "passed": 2,
-  "total": 21,
+  "passed": 1,
+  "total": 14,
   "warnings": 1,
   "checks": [
     {
@@ -22,7 +22,7 @@
       "key": "installed_package",
       "label": "Package is registered on the device",
       "ok": false,
-      "evidence": "dumpsys package com.appmint.nativedemo: 0 bytes",
+      "evidence": "dumpsys package : 0 bytes",
       "severity": "fail"
     },
     {
@@ -42,6 +42,20 @@
     {
       "key": "shot_01-launch",
       "label": "Screenshot captured: launch",
+      "ok": false,
+      "evidence": "0 bytes",
+      "severity": "fail"
+    },
+    {
+      "key": "shot_02-loaded",
+      "label": "Screenshot captured: page loaded",
+      "ok": false,
+      "evidence": "0 bytes",
+      "severity": "fail"
+    },
+    {
+      "key": "shot_03-refreshed",
+      "label": "Screenshot captured: after pull-to-refresh",
       "ok": false,
       "evidence": "0 bytes",
       "severity": "fail"
@@ -68,41 +82,6 @@
       "severity": "fail"
     },
     {
-      "key": "shot_02-loaded",
-      "label": "Screenshot captured: first screen drawn",
-      "ok": false,
-      "evidence": "0 bytes",
-      "severity": "fail"
-    },
-    {
-      "key": "shot_tab-1",
-      "label": "Screenshot captured: designed screen 1",
-      "ok": false,
-      "evidence": "0 bytes",
-      "severity": "fail"
-    },
-    {
-      "key": "shot_tab-2",
-      "label": "Screenshot captured: designed screen 2",
-      "ok": false,
-      "evidence": "0 bytes",
-      "severity": "fail"
-    },
-    {
-      "key": "shot_tab-3",
-      "label": "Screenshot captured: designed screen 3",
-      "ok": false,
-      "evidence": "0 bytes",
-      "severity": "fail"
-    },
-    {
-      "key": "shot_tab-4",
-      "label": "Screenshot captured: designed screen 4",
-      "ok": false,
-      "evidence": "0 bytes",
-      "severity": "fail"
-    },
-    {
       "key": "content_rendered",
       "label": "Loaded screen shows real rendered content",
       "ok": false,
@@ -110,38 +89,10 @@
       "severity": "fail"
     },
     {
-      "key": "no_webview_needed",
-      "label": "This app draws its own screens, so no page script is expected",
-      "ok": true,
-      "evidence": "architecture=native-screens: the interface comes from 4 designed screen(s) compiled into the app, not from a web page",
-      "severity": "fail"
-    },
-    {
-      "key": "native_first_frame",
-      "label": "The app drew its first screen immediately",
+      "key": "js_executed",
+      "label": "JavaScript ran inside the WebView",
       "ok": false,
-      "evidence": "0 distinct colours, luminance spread 0.0 in the launch frame (a designed app has nothing to download, so this is already the finished screen)",
-      "severity": "fail"
-    },
-    {
-      "key": "screens_reachable",
-      "label": "Each designed screen can be reached and draws its own content",
-      "ok": false,
-      "evidence": "no screenshot to compare for screen(s) [2, 3, 4]",
-      "severity": "fail"
-    },
-    {
-      "key": "first_tab_is_home",
-      "label": "The first tab leads back to the screen the app opens on",
-      "ok": false,
-      "evidence": "no screenshots to compare",
-      "severity": "fail"
-    },
-    {
-      "key": "back_returns_home",
-      "label": "Pressing back from another tab returns to the first screen",
-      "ok": false,
-      "evidence": "no screenshot after the back press",
+      "evidence": "no APPMINT_READY marker in logcat \u2014 the page may have loaded but its script did not run",
       "severity": "fail"
     },
     {
@@ -157,6 +108,14 @@
       "present": false,
       "bytes": 0
     },
+    "02-loaded": {
+      "present": false,
+      "bytes": 0
+    },
+    "03-refreshed": {
+      "present": false,
+      "bytes": 0
+    },
     "04-after-back": {
       "present": false,
       "bytes": 0
@@ -168,31 +127,11 @@
     "06-portrait": {
       "present": false,
       "bytes": 0
-    },
-    "02-loaded": {
-      "present": false,
-      "bytes": 0
-    },
-    "tab-1": {
-      "present": false,
-      "bytes": 0
-    },
-    "tab-2": {
-      "present": false,
-      "bytes": 0
-    },
-    "tab-3": {
-      "present": false,
-      "bytes": 0
-    },
-    "tab-4": {
-      "present": false,
-      "bytes": 0
     }
   },
   "brightness": {},
   "single_colour_pct": {},
   "diff_launch_to_loaded": null,
   "video_bytes": 0,
-  "package": "com.appmint.nativedemo"
+  "package": ""
 }
