@@ -19,6 +19,7 @@
 
 const SETTINGS_TABS = [
   ['general', 'General'],
+  ['backend', 'Backend'],
   ['signing', 'Signing'],
   ['permissions', 'Permissions'],
   ['engine', 'Build Engine'],
@@ -170,6 +171,88 @@ function tabSigning(spec) {
       el('strong', {}, 'What the build actually verifies. '),
       'After compiling, the finished file is checked with apksigner and zipalign, and the signing scheme is read back off the APK rather than assumed from the configuration. The result appears in the build report.',
     ])),
+  ];
+}
+
+function tabBackend(spec) {
+  const b = spec.backend || (spec.backend = { kind: 'none' });
+  const rt = runtimeReport(spec);
+  const generated = dataRuntime(spec);
+  const tables = Array.isArray(b.tablesRequiringRls) ? b.tablesRequiringRls : [];
+
+  return [
+    section('Backend', {
+      icon: I.briefcase, open: true,
+      summary: b.kind === 'none' ? 'no backend' : `${b.kind}${b.url ? ' · ' + String(b.url).replace(/^https?:\/\//, '').slice(0, 28) : ' · no address'}`,
+      children: [
+        choose('Backend', 'Backend kind', [
+          ['none', 'None — the app has no server'],
+          ['supabase', 'Supabase'],
+          ['firebase', 'Firebase'],
+          ['custom-rest', 'Your own REST API'],
+        ], b.kind || 'none', (v) => { b.kind = v; touch(); hardUpdate(); },
+          'Choosing a backend is what makes the generated app talk to a server at all. Without it there is nothing to configure and no data runtime is emitted.'),
+
+        b.kind !== 'none'
+          ? field('Backend address', el('input', {
+              type: 'url', value: b.url || '', spellcheck: 'false', autocapitalize: 'off',
+              'aria-label': 'Backend address', placeholder: 'https://your-project.supabase.co',
+              oninput: (e) => { b.url = e.target.value.trim(); touch(); hardUpdate(); },
+            }), 'Must be https. Over plain HTTP every request, including sign-in, can be read or altered in transit.')
+          : null,
+
+        b.kind !== 'none'
+          ? field('The app requires sign-in', sw(b.requiresAuth, 'Backend requires authentication',
+              (e) => { b.requiresAuth = e.target.checked; touch(); hardUpdate(); }),
+              'With this on, the data runtime refuses to query a table that is not listed below.')
+          : null,
+      ],
+    }),
+
+    b.kind !== 'none' && b.requiresAuth
+      ? section('Tables needing row-level security', {
+          icon: I.shield, open: true,
+          summary: tables.length ? `${tables.length} declared` : 'none declared',
+          children: [
+            field('One table name per line', el('textarea', {
+              rows: '4', 'aria-label': 'Tables needing row-level security',
+              value: tables.join('\n'), spellcheck: 'false',
+              oninput: (e) => {
+                b.tablesRequiringRls = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean);
+                touch(); hardUpdate();
+              },
+            }), 'Row-level security is the only thing standing between one signed-in user and another user\'s rows. The RLS gate checks these policies on every build, and a critical finding blocks it.'),
+          ],
+        })
+      : null,
+
+    // What the app will actually be given. Shown because a configuration screen
+    // that does not say what it produces leaves a person guessing whether the
+    // backend they picked did anything.
+    b.kind !== 'none'
+      ? section('What the app is given', {
+          icon: I.code,
+          summary: rt.generated ? 'a data runtime, generated' : 'nothing yet — see below',
+          children: [
+            generated.ok
+              ? el('div', { class: 'banner pass' }, el('div', {}, [
+                  el('strong', {}, 'The build emits one module that talks to this backend. '),
+                  `data-runtime.js, ${(rt.bytes / 1024).toFixed(1)} KB. It owns authentication, queries, mutations, retries, offline behaviour, error normalisation and rollback, and it is the only file in the app that knows the address.`,
+                ]))
+              : el('div', { class: 'banner fail' }, el('div', {}, [
+                  el('strong', {}, 'No data runtime can be generated. '),
+                  rt.errors.join(' '),
+                ])),
+            el('dl', { class: 'kv' },
+              el('dt', {}, 'Runtime generated'), el('dd', {}, rt.generated ? 'yes' : 'no'),
+              el('dt', {}, 'Requires sign-in'), el('dd', {}, rt.requiresAuth ? 'yes' : 'no'),
+              el('dt', {}, 'Tables declared'), el('dd', {}, String(rt.tables.length)),
+              el('dt', {}, 'Unsafe patterns'), el('dd', {}, String(rt.unsafe.length))),
+            el('p', { class: 'hint' },
+              'A privileged key is never written into the app, and the build fails if one appears in generated output. Entitlement is read from the server and is read-only in the runtime: there is no setter for premium status, because anything the client can write, the client can fake.'),
+          ],
+        })
+      : null,
   ];
 }
 
@@ -371,6 +454,7 @@ function viewSettings() {
   );
 
   const panel = st.tab === 'general' ? tabGeneral(spec)
+    : st.tab === 'backend' ? tabBackend(spec)
     : st.tab === 'signing' ? tabSigning(spec)
     : st.tab === 'permissions' ? tabPermissions(spec)
     : st.tab === 'engine' ? tabEngine(spec)

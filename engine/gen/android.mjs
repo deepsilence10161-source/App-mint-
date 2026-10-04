@@ -21,6 +21,7 @@ import { generateIcons } from './icon.mjs';
 import { mainActivityJava, schemeRouterJava, jsBridgeJava } from './java.mjs';
 import { generateNativeScreens } from './native.mjs';
 import { lintGeneratedJava } from './lint-java.mjs';
+import { dataRuntime } from '../backend/data-runtime.mjs';
 
 /* ------------------------------------------------------------------ *
  * Toolchain profiles — verified compatibility pairs.
@@ -445,6 +446,20 @@ public class App extends Application {
   const icons = generateIcons(spec);
   for (const f of icons.files) files.push({ path: `android/app/src/main/res/${f.path}`, data: f.data });
 
+  /* ---------------- the data runtime ----------------
+     When a backend is configured, the app gets the module that is the only
+     thing in it allowed to know the backend's address. It sits beside the
+     bundled web assets rather than among them: it is not a web asset, but it
+     belongs where the app can load it. */
+  if ((spec.backend || {}).kind && spec.backend.kind !== 'none') {
+    const rt = dataRuntime(spec);
+    if (rt.ok) {
+      files.push({ path: rt.file, data: rt.code });
+    } else {
+      errors.push(`the data runtime could not be generated: ${rt.errors.join('; ')}`);
+    }
+  }
+
   /* ---------------- bundled web assets ---------------- */
   const bundled = [];
   if (app.webview?.localAsset && webDir && fs.existsSync(webDir)) {
@@ -531,7 +546,11 @@ public class App extends Application {
     bundledAssetCount: bundled.length,
   };
 
-  return { ok: true, errors: [], files, report, meta };
+  // Every error collected on the way here is fatal — the non-fatal cases return
+  // early with their own ok:false. This used to say `errors: []`, which meant an
+  // error pushed after the early checks was dropped on the floor and the build
+  // carried on as though nothing had been reported.
+  return { ok: errors.length === 0, errors, files, report, meta };
 }
 
 /** How many components are in the design, for the build report. */

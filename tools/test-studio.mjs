@@ -222,7 +222,7 @@ async function main() {
   check('No two visible controls share an accessible name', dupes.length === 0, `duplicated: ${[...new Set(dupes)].join(', ')}`);
 
   const subtabs = await page.locator('.subtab').count();
-  check('Settings is tabbed rather than one long scroll', subtabs === 5, `found ${subtabs} tabs`);
+  check('Settings is tabbed rather than one long scroll', subtabs === 6, `found ${subtabs} tabs`);
 
   check('Advanced Mode is offered, with what it unlocks stated',
     /Unlocks the raw configuration/.test(await page.textContent('#main')), 'the toggle must say what it does');
@@ -277,6 +277,57 @@ async function main() {
 
   // Signing has a rule that blocks a build, and the screen should say so rather
   // than let a person discover it at the end of a failed run.
+  /* ── the backend the app is given ──────────────────────────────────────────
+     A backend configuration screen that does not say what it produces leaves a
+     person guessing whether picking "Supabase" did anything at all. So the check
+     is that the screen shows the runtime the build will emit, and that turning
+     on an insecure address is refused rather than warned about. */
+  await page.locator('.subtab', { hasText: 'Backend' }).click();
+  await page.waitForTimeout(300);
+
+  await page.locator('select[aria-label="Backend kind"]').selectOption('supabase');
+  await page.waitForTimeout(350);
+  await page.locator('input[aria-label="Backend address"]').fill('https://example.supabase.co');
+  await page.waitForTimeout(350);
+  await page.locator('input[role="switch"][aria-label="Backend requires authentication"]').check();
+  await page.waitForTimeout(400);
+
+  const backend = await page.evaluate(() => {
+    const h = window.__appmintHealth().categories.find((c) => c.key === 'backend');
+    return {
+      score: h.score,
+      checks: h.checks.map((c) => `${c.status}: ${c.name}`),
+      text: document.querySelector('#main').textContent,
+    };
+  });
+  check('Configuring a backend produces a data runtime, and the screen says so',
+    /data runtime/i.test(backend.text) && backend.checks.some((c) => /^pass: The app gets one controlled path/.test(c)),
+    backend.checks.join(' | ').slice(0, 200));
+  check('A configured backend is scored, where an unconfigured one was not',
+    backend.score !== null, `score was ${backend.score}`);
+
+  await page.locator('textarea[aria-label="Tables needing row-level security"]').fill('orders\nprofiles');
+  await page.waitForTimeout(400);
+  const withTables = await page.evaluate(() => {
+    const h = window.__appmintHealth().categories.find((c) => c.key === 'backend');
+    return { score: h.score, named: h.checks.find((c) => /row-level security are named/.test(c.name)) };
+  });
+  check('Naming the tables that need row-level security is reflected in the score',
+    withTables.named && withTables.named.status === 'pass',
+    JSON.stringify(withTables.named).slice(0, 160));
+
+  await page.locator('input[aria-label="Backend address"]').fill('http://example.supabase.co');
+  await page.waitForTimeout(450);
+  const insecure = await page.evaluate(() => window.__appmintBlocking());
+  check('An http backend address blocks the build rather than being quietly accepted',
+    insecure.blocked && insecure.codes.includes('E_BACKEND_NOT_HTTPS'),
+    JSON.stringify(insecure));
+
+  await page.locator('input[aria-label="Backend address"]').fill('https://example.supabase.co');
+  await page.waitForTimeout(400);
+  await page.locator('select[aria-label="Backend kind"]').selectOption('none');
+  await page.waitForTimeout(350);
+
   await page.locator('.subtab', { hasText: 'Signing' }).click();
   await page.waitForTimeout(300);
   await page.locator('select[aria-label="Signing mode"]').selectOption('secret-store');

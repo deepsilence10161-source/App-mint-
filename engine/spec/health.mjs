@@ -25,6 +25,8 @@
    know which to believe.
    ========================================================================= */
 
+import { runtimeReport } from '../backend/data-runtime.mjs';
+
 /** What a single check decided, and why. */
 function pass(name, detail) { return { name, status: 'pass', detail }; }
 function warn(name, detail) { return { name, status: 'warn', detail }; }
@@ -157,10 +159,40 @@ function backendHealth(spec) {
   const b = spec.backend;
   if (!b || !b.kind || b.kind === 'none') return [];   // nothing configured: nothing to score
   const checks = [];
+  const rt = runtimeReport(spec);
+
   checks.push(pass('A backend is configured', String(b.kind)));
-  if (b.url) checks.push(/^https:/i.test(String(b.url))
-    ? pass('The backend is reached over HTTPS', String(b.url))
-    : fail('The backend is reached over HTTPS', String(b.url)));
+
+  if (!b.url) {
+    checks.push(fail('The backend has an address', 'No backend.url, so the generated app has nothing to connect to.'));
+  } else {
+    checks.push(/^https:/i.test(String(b.url))
+      ? pass('The backend is reached over HTTPS', String(b.url))
+      : fail('The backend is reached over HTTPS',
+          `${b.url} — over plain HTTP every request, including sign-in, can be read or altered in transit.`));
+  }
+
+  // The data runtime is the only module in the generated app that knows where
+  // the backend is. If it cannot be generated, the app would be left reaching
+  // the backend from wherever it liked, which is the thing the runtime exists to
+  // prevent.
+  checks.push(rt.generated
+    ? pass('The app gets one controlled path to the backend',
+        `data-runtime.js, ${(rt.bytes / 1024).toFixed(1)} KB, generated from this specification`)
+    : fail('The app gets one controlled path to the backend', rt.errors.join('; ') || 'the runtime could not be generated'));
+
+  checks.push(rt.unsafe.length === 0
+    ? pass('The generated runtime holds no privileged credential',
+        'Checked for service-role keys, baked-in tokens, direct client creation and client-stored entitlement.')
+    : fail('The generated runtime holds no privileged credential', rt.unsafe.map((u) => u.code).join(', ')));
+
+  if (rt.requiresAuth) {
+    checks.push(rt.tables.length
+      ? pass('The tables that need row-level security are named', `${rt.tables.length}: ${rt.tables.join(', ')}`)
+      : warn('The tables that need row-level security are named',
+          'Authentication is on but no table is listed. The runtime refuses to query a table nobody declared, which is safe but will look like a bug.'));
+  }
+
   return checks;
 }
 

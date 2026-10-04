@@ -480,6 +480,22 @@ export function layer4Security(spec, out) {
       { redactedSample: String(m[0]).slice(0, 4) + '…redacted' }));
   }
 
+  // A backend that is configured but unreachable, or reached over plain HTTP,
+  // will either fail at runtime or send somebody's data where it can be read.
+  // Both are known at build time, so neither should be discovered by a user.
+  if (spec.backend && spec.backend.kind && spec.backend.kind !== 'none') {
+    const burl = String(spec.backend.url || '').trim();
+    if (!burl) {
+      out.push(issue('E_BACKEND_NO_URL', 'error', 'backend.url',
+        `The backend is set to "${spec.backend.kind}" but no address is given, so the generated app would have nothing to connect to.`,
+        { hint: 'Set backend.url to the https address of the project.' }));
+    } else if (!/^https:\/\//i.test(burl)) {
+      out.push(issue('E_BACKEND_NOT_HTTPS', 'critical', 'backend.url',
+        `The backend address is "${burl}". Over plain HTTP every request — including sign-in — can be read or altered in transit.`,
+        { fix: { kind: 'set', path: 'backend.url', value: burl.replace(/^http:\/\//i, 'https://') } }));
+    }
+  }
+
   if (spec.backend && spec.backend.kind !== 'none' && (spec.backend.tablesRequiringRls || []).length === 0 && spec.backend.requiresAuth)
     out.push(issue('W_RLS_UNSPECIFIED', 'warning', 'backend.tablesRequiringRls',
       'Authentication is on, but no tables are listed as needing row-level security. RLS is the only thing standing between one signed-in user and another user\'s rows.'));

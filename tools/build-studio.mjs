@@ -36,6 +36,9 @@ const ENGINE_MODULES = [
   'engine/capability/permissions.mjs',
   // The Health screen scores the same validateSpec and permissionReport
   // results the Build screen shows, so the browser must run the same code.
+  // The Backend settings panel and the health ring both describe the data
+  // runtime, so the browser has to be able to derive it too.
+  'engine/backend/data-runtime.mjs',
   'engine/spec/health.mjs',
   // The stepper groups the real steps of a GitHub run into stages. The same
   // code runs in the browser and in the tests, so the two cannot describe a

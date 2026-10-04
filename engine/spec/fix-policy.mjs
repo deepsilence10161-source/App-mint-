@@ -80,6 +80,10 @@ export const FIX_POLICY = {
     confidence: 'high',
     why: 'A release build with signing switched off produces a file that cannot be installed anywhere. There is no other correct answer here.',
   },
+  E_BACKEND_NOT_HTTPS: {
+    confidence: 'review',
+    why: 'Rewriting the scheme to https is the right answer almost always, and wrong in the case that matters: if the backend does not actually serve https, the app stops reaching it at all and every screen that needed data goes blank. That is a fact about their server which the engine cannot check from here, so it offers the change and lets the owner make it.',
+  },
 
   /* ── repairs forced by something you built in the app ──────────────── */
   /* These add a feature the app demonstrably needs. They can add an Android
