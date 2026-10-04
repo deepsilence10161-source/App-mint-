@@ -132,6 +132,11 @@
   --glint:      rgb(255 255 255 / 0.35);
   --glint-soft: rgb(255 255 255 / 0.22);
 
+  /* The dim behind an overlay. Its own token rather than a literal in each
+     overlay, so a dialog and the command palette cannot drift apart, and so a
+     light theme can lift it instead of leaving a black sheet over white. */
+  --scrim:      rgb(4 6 12 / 0.62);
+
   /* Spacing on an 8pt grid. A scale exists so that "how far apart" is a
      decision made once rather than re-litigated in every rule. */
   --s1: 4px;  --s2: 8px;  --s3: 12px;
@@ -239,6 +244,7 @@
   --info:         #1F6FD6;  --info-ink: #175AAE;  --info-rgb: 31 111 214;
 
   --grad-brand: linear-gradient(140deg, #5A48D8 0%, #7A68F0 100%);
+  --scrim:      rgb(16 18 26 / 0.34);
 
   --sh-1: 0 1px 2px rgb(16 18 26 / 0.06);
   --sh-2: 0 4px 12px rgb(16 18 26 / 0.08), 0 1px 2px rgb(16 18 26 / 0.04);
@@ -681,6 +687,69 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 
 /* the component tree */
 .tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* ── the command palette ──────────────────────────────────────────────────
+   One overlay, one text field, one list. It sits above everything and dims
+   what is behind it, because while it is open nothing behind it should be
+   receiving attention or taps. */
+.pal-back {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.pal {
+  position: fixed; z-index: 91;
+  left: 50%; top: 12vh; transform: translateX(-50%);
+  width: min(92vw, 560px);
+  display: flex; flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-lift);
+  overflow: hidden;
+}
+.pal-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; color: var(--fg);
+  font-size: 16px;               /* 16px so a phone does not zoom on focus */
+  outline: none;
+}
+.pal-input::placeholder { color: var(--fg-3); }
+.pal-list { max-height: 52vh; overflow-y: auto; padding: var(--s2); }
+.pal-item {
+  display: flex; align-items: baseline; gap: var(--s3);
+  width: 100%; min-height: 44px;
+  padding: 10px 12px;
+  border: 0; border-radius: var(--r);
+  background: none; color: var(--fg);
+  text-align: left; cursor: pointer;
+}
+.pal-item.on { background: var(--accent-soft); }
+.pal-label { font-size: 14.5px; font-weight: 550; }
+.pal-hint { font-size: 12px; color: var(--fg-3); margin-left: auto; text-align: right; }
+.pal-none { padding: 24px 16px; text-align: center; color: var(--fg-2); }
+.pal-none .sub { font-size: 12.5px; color: var(--fg-3); margin-top: 4px; }
+.pal-foot {
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── dragging a component in the outline ──────────────────────────────────
+   The line marking a drop is drawn on the row being hovered rather than
+   inserted into the tree, so nothing that counts the tree's rows ever sees an
+   element that is not a component. */
+.tree .node.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.tree .node.dragging { opacity: 0.45; }
+.tree .node[draggable="true"] { cursor: grab; }
+.tree .node[draggable="true"]:active { cursor: grabbing; }
+
+.d-tools { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.d-tools .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
 .tree .node {
   margin-left: calc(var(--depth, 0) * 10px);
   display: flex; align-items: center; gap: 4px;
@@ -1269,7 +1338,7 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .wv-finding .ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
 .wv-finding .ev li { word-break: break-all; }
 </style>
-<meta name="appmint-build" content="a44211e7dde59d78">
+<meta name="appmint-build" content="f7709564f3f4770d">
 </head>
 <body>
 
@@ -1280,6 +1349,7 @@ input[aria-invalid="true"] { border-color: var(--bad); }
       <div class="name" id="projname">Loading…</div>
       <span class="meta" id="projmeta">starting up</span>
     </div>
+    <button class="btn ghost sm" id="palbtn" aria-label="Search commands">Search</button>
     <button class="btn ghost sm" id="themebtn" aria-label="Switch colour mode">Dark mode</button>
     <button class="btn ghost sm" id="importproj" aria-label="Import a specification">Import</button>
     <button class="btn primary sm" id="newproj" aria-label="New project">New</button>
@@ -1300,6 +1370,10 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 </nav>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- The command palette paints itself in here. It lives outside .app so that
+     opening it cannot shift the layout of what is underneath. -->
+<div id="palette"></div>
 
 <script type="module">
 /* ═══ engine/spec/toolchain.mjs ═══ */
@@ -4455,6 +4529,146 @@ function planRewrites(site, pageRel, html) {
  */
 
 
+/* ═══ studio/src/history.js ═══ */
+/* ============================================================================
+   EDIT HISTORY — undo and redo for the screen designer
+   ----------------------------------------------------------------------------
+   The designer edits the Project Specification directly, which is what makes it
+   trustworthy: there is no second model to fall out of step. The price of that
+   is that a mistake lands straight in the project, and until now the only way
+   back was to remember what the value used to be.
+
+   Repairs made on the Build screen were already journaled and reversible.
+   Designer edits were not, which is odd — dragging a component into the wrong
+   place is far easier to do by accident than applying a repair, because the
+   repair at least asks first.
+
+   The design choice here is snapshots rather than inverse operations. An
+   inverse has to be written for every kind of edit and kept correct as new
+   edits are added, and the day one is wrong, "undo" quietly does something
+   other than what it says. A snapshot cannot be wrong about what the state was.
+   A screen is a few hundred bytes, so the cost is nothing next to the risk.
+
+   Scope: one screen, one stack, held in memory for the session. It is
+   deliberately not persisted, because an undo history that outlives the editing
+   session invites a person to undo changes they made yesterday and cannot see.
+   ========================================================================= */
+
+const HISTORY_LIMIT = 60;
+
+/* One stack, addressed by project id, so switching projects cannot offer to
+   undo another project's work. */
+const HIST = new Map();
+
+function stackFor(projectId) {
+  let s = HIST.get(projectId);
+  if (!s) { s = { undo: [], redo: [] }; HIST.set(projectId, s); }
+  return s;
+}
+
+/** A screen list that shares no structure with the original. */
+function cloneScreens(screens) {
+  return JSON.parse(JSON.stringify(Array.isArray(screens) ? screens : []));
+}
+
+/**
+ * Call this BEFORE changing anything, with the project and the screen being
+ * edited. It returns false when there is no project to record against, so a
+ * caller can tell that its edit will not be undoable rather than assuming it is.
+ */
+function beginEdit(project, screenId, label) {
+  if (!project || !project.spec) return false;
+  const s = stackFor(project.id);
+  s.undo.push({
+    screens: cloneScreens(project.spec.screens),
+    screenId: screenId || null,
+    selected: D.selected || null,
+    label: label || 'Change',
+  });
+  if (s.undo.length > HISTORY_LIMIT) s.undo.shift();
+  s.redo.length = 0;              // a new edit ends any redo branch
+  return true;
+}
+
+/**
+ * Put the previous state back. Returns a description of what was undone, or null
+ * if there was nothing to undo — the caller shows one or the other, and never
+ * claims an undo happened when it did not.
+ */
+function undoEdit(project) {
+  if (!project || !project.spec) return null;
+  const s = stackFor(project.id);
+  const entry = s.undo.pop();
+  if (!entry) return null;
+  s.redo.push({
+    screens: cloneScreens(project.spec.screens),
+    screenId: D.screen,
+    selected: D.selected,
+    label: entry.label,
+  });
+  project.spec.screens = entry.screens;
+  if (entry.screenId) D.screen = entry.screenId;
+  D.selected = entry.selected;
+  return entry.label;
+}
+
+/** The mirror of undoEdit. */
+function redoEdit(project) {
+  if (!project || !project.spec) return null;
+  const s = stackFor(project.id);
+  const entry = s.redo.pop();
+  if (!entry) return null;
+  s.undo.push({
+    screens: cloneScreens(project.spec.screens),
+    screenId: D.screen,
+    selected: D.selected,
+    label: entry.label,
+  });
+  project.spec.screens = entry.screens;
+  if (entry.screenId) D.screen = entry.screenId;
+  D.selected = entry.selected;
+  return entry.label;
+}
+
+function canUndo(project) {
+  return Boolean(project && stackFor(project.id).undo.length);
+}
+
+function canRedo(project) {
+  return Boolean(project && stackFor(project.id).redo.length);
+}
+
+/**
+ * What the next undo will do, in words. The button says this rather than just
+ * "Undo", because "Undo" on a screen full of components does not tell you which
+ * of the last sixty things you are about to lose.
+ */
+function nextUndoLabel(project) {
+  if (!project) return null;
+  const s = stackFor(project.id);
+  return s.undo.length ? s.undo[s.undo.length - 1].label : null;
+}
+
+/**
+ * Forget a project's history. Called when a project is replaced or removed, so
+ * a stack cannot outlive the thing it describes and then be applied to a
+ * different project that happens to reuse an id.
+ */
+function clearHistory(projectId) {
+  HIST.delete(projectId);
+}
+
+/**
+ * Every recorded step, newest first, for a visible history list. Reading this is
+ * how a person can see what undo will actually walk back through instead of
+ * pressing it repeatedly and watching.
+ */
+function historyOf(project) {
+  if (!project) return [];
+  return stackFor(project.id).undo.slice().reverse().map((e) => e.label);
+}
+
+
 /* ═══ studio/src/designer.js ═══ */
 /* ==================================================================== *
  * THE SCREEN DESIGNER  (M5)
@@ -4492,6 +4706,8 @@ const D = {
   group: null,      // which palette group is open
   adding: false,    // is the palette showing
   depth: 0,         // recursion guard for the preview
+  dragging: null,   // id of the component being dragged
+  dragOver: null,   // id of the component the drop line is drawn above
 };
 
 const MAX_PREVIEW_DEPTH = 12;
@@ -4534,6 +4750,11 @@ function nid(screen, prefix) {
   let n = 2;
   while (taken.has(id)) id = base + (n++);
   return id;
+}
+
+/** locate() without the side effect, for callers that only want to look. */
+function found0(screen, id) {
+  return locate(screen, id);
 }
 
 function activeScreen(spec) {
@@ -4642,6 +4863,66 @@ function outdentComponent(screen, id) {
   return true;
 }
 
+/* ── undo, and moving a component somewhere specific ─────────────────────── */
+
+/**
+ * Run a designer edit with the previous state recorded first.
+ * Every mutation in this file goes through here, so undo covers all of them
+ * rather than the ones someone remembered to wrap.
+ */
+function editScreen(screen, label, fn) {
+  beginEdit(S.active, screen.id, label);
+  const out = fn();
+  touch();
+  hardUpdate();
+  return out;
+}
+
+/**
+ * Move a component to a position in another list — which is what dragging does,
+ * and what the arrow buttons cannot express. Refuses the two moves that would
+ * corrupt the tree: dropping a container inside itself, and dropping a node
+ * exactly where it already is.
+ *
+ * Returns a string describing why it refused, or null when it moved. The caller
+ * shows that string, because a drag that silently does nothing teaches a person
+ * that dragging is broken.
+ */
+function moveNodeTo(screen, id, targetParentId, index) {
+  const found = locate(screen, id);
+  if (!found) return 'That component is no longer on this screen.';
+
+  // Walk up from the destination. If the node being dragged is on the way, the
+  // drop would put a container inside its own descendant and the preview's
+  // recursion guard would be the only thing stopping an infinite loop.
+  if (targetParentId) {
+    let cursor = locate(screen, targetParentId);
+    while (cursor) {
+      if (cursor.node.id === id) return 'A component cannot be placed inside itself.';
+      cursor = cursor.parent ? locate(screen, cursor.parent.id) : null;
+    }
+  }
+
+  const dest = targetParentId ? locate(screen, targetParentId) : null;
+  if (targetParentId && !dest) return 'That destination no longer exists.';
+  if (dest && !(COMPONENTS[dest.node.type] || {}).container) {
+    return `${(COMPONENTS[dest.node.type] || {}).label || dest.node.type} cannot contain other components.`;
+  }
+
+  const list = dest ? dest.node.children : screen.components;
+  if (!Array.isArray(list)) return 'That destination cannot hold components.';
+
+  const sameList = list === found.list;
+  const at = Math.max(0, Math.min(list.length, Number.isFinite(index) ? index : list.length));
+  if (sameList && (at === found.index || at === found.index + 1)) return null; // already there
+
+  found.list.splice(found.index, 1);
+  // Removing first shifts the destination index down when moving within one list.
+  const insertAt = sameList && at > found.index ? at - 1 : at;
+  list.splice(Math.max(0, Math.min(list.length, insertAt)), 0, found.node);
+  return null;
+}
+
 /* ── the tab ────────────────────────────────────────────────────────────── */
 
 /**
@@ -4690,11 +4971,39 @@ function screenDesignerView() {
     el('div', { class: 'd-cell' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Contents of ${screen.name}`),
-        el('button', {
-          class: 'btn small' + (D.adding ? ' primary' : ''),
-          onclick: () => { D.adding = !D.adding; hardUpdate(); },
-          'aria-expanded': D.adding ? 'true' : 'false',
-        }, D.adding ? 'Close' : '+ Add'),
+        el('div', { class: 'd-tools' }, [
+          /* Undo says what it will undo. On a screen full of components a
+             button labelled only "Undo" does not tell you which of the last
+             sixty edits you are about to lose. */
+          el('button', {
+            class: 'btn small',
+            id: 'undo-edit',
+            disabled: !canUndo(S.active),
+            title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+            'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+            onclick: () => {
+              const what = undoEdit(S.active);
+              touch(); hardUpdate();
+              toast(what ? `Undid: ${what}` : 'Nothing to undo.');
+            },
+          }, 'Undo'),
+          el('button', {
+            class: 'btn small',
+            id: 'redo-edit',
+            disabled: !canRedo(S.active),
+            'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
+            onclick: () => {
+              const what = redoEdit(S.active);
+              touch(); hardUpdate();
+              toast(what ? `Redid: ${what}` : 'Nothing to redo.');
+            },
+          }, 'Redo'),
+          el('button', {
+            class: 'btn small' + (D.adding ? ' primary' : ''),
+            onclick: () => { D.adding = !D.adding; hardUpdate(); },
+            'aria-expanded': D.adding ? 'true' : 'false',
+          }, D.adding ? 'Close' : '+ Add'),
+        ]),
       ]),
       D.adding ? palette(screen) : outline(screen),
     ]),
@@ -4778,7 +5087,57 @@ function outline(screen) {
       if (!node) continue;
       const def = COMPONENTS[node.type] || {};
       const on = node.id === D.selected;
-      const row = el('li', { class: 'node' + (on ? ' on' : ''), style: `--depth:${depth}` }, [
+      /* Dragging is the fast path; the arrow buttons stay, because a drag on a
+         touchscreen is not something everyone can do and the buttons are the
+         same operation with a label. The drop line is drawn with a class rather
+         than an inserted element: a stray node in the tree would be read as a
+         component by anything that counts them. */
+      const row = el('li', {
+        class: 'node' + (on ? ' on' : '') + (D.dragOver === node.id ? ' drop-before' : ''),
+        style: `--depth:${depth}`,
+        draggable: 'true',
+        'data-node': node.id,
+        ondragstart: (e) => {
+          D.dragging = node.id;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', node.id); } catch { /* older browsers */ }
+          row.classList.add('dragging');
+        },
+        ondragend: () => {
+          D.dragging = null; D.dragOver = null;
+          row.classList.remove('dragging');
+          $$('.tree .node.drop-before').forEach((n) => n.classList.remove('drop-before'));
+        },
+        ondragover: (e) => {
+          if (!D.dragging || D.dragging === node.id) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (D.dragOver !== node.id) {
+            D.dragOver = node.id;
+            $$('.tree .node.drop-before').forEach((n) => n.classList.remove('drop-before'));
+            row.classList.add('drop-before');
+          }
+        },
+        ondragleave: () => {
+          if (D.dragOver === node.id) { D.dragOver = null; row.classList.remove('drop-before'); }
+        },
+        ondrop: (e) => {
+          e.preventDefault();
+          const dragged = D.dragging;
+          D.dragging = null; D.dragOver = null;
+          if (!dragged || dragged === node.id) return;
+          /* The destination is worked out before anything is recorded, then the
+             move happens inside editScreen so the previous state is captured
+             first. Doing it the other way round would leave an undo step for an
+             edit that never happened. */
+          const target = found0(screen, node.id);
+          if (!target) return;
+          const parentId = target.parent ? target.parent.id : null;
+          let reason = 'That move was not possible.';
+          editScreen(screen, 'Reorder', () => { reason = moveNodeTo(screen, dragged, parentId, target.index); });
+          if (reason) toast(reason);
+        },
+      }, [
         el('button', {
           class: 'node-main',
           role: 'treeitem',
@@ -4790,11 +5149,11 @@ function outline(screen) {
         ]),
       ]);
       const acts = el('div', { class: 'node-acts' }, [
-        iconBtn('↑', 'Move up', () => { moveComponent(screen, node.id, -1); touch(); hardUpdate(); }),
-        iconBtn('↓', 'Move down', () => { moveComponent(screen, node.id, 1); touch(); hardUpdate(); }),
-        def.container && depth > 0 ? iconBtn('←', 'Move out one level', () => { outdentComponent(screen, node.id); touch(); hardUpdate(); }) : null,
-        iconBtn('⧉', 'Duplicate', () => { duplicateComponent(screen, node.id); touch(); hardUpdate(); }),
-        iconBtn('✕', 'Delete', () => { removeComponent(screen, node.id); touch(); hardUpdate(); }),
+        iconBtn('↑', 'Move up', () => editScreen(screen, 'Move up', () => moveComponent(screen, node.id, -1))),
+        iconBtn('↓', 'Move down', () => editScreen(screen, 'Move down', () => moveComponent(screen, node.id, 1))),
+        def.container && depth > 0 ? iconBtn('←', 'Move out one level', () => editScreen(screen, 'Move out one level', () => outdentComponent(screen, node.id))) : null,
+        iconBtn('⧉', 'Duplicate', () => editScreen(screen, `Duplicate ${def.label || node.type}`, () => duplicateComponent(screen, node.id))),
+        iconBtn('✕', 'Delete', () => editScreen(screen, `Delete ${def.label || node.type}`, () => removeComponent(screen, node.id))),
       ]);
       row.append(acts);
       rows.push(row);
@@ -4838,7 +5197,10 @@ function palette(screen) {
   for (const c of items) {
     grid.append(el('button', {
       class: 'pitem',
-      onclick: () => { addComponent(screen, c.name); touch(); hardUpdate(); toast(`${c.label} added.`); },
+      onclick: () => {
+        editScreen(screen, `Add ${c.label}`, () => addComponent(screen, c.name));
+        toast(`${c.label} added.`);
+      },
     }, [
       el('span', { class: 'pitem-name' }, c.label),
       el('span', { class: 'pitem-sub' }, c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role)),
@@ -6626,14 +6988,22 @@ const darken = (hex) => {
 };
 
 /* ── rendering ─────────────────────────────────────────────────────────── */
+/* The section list, declared once. The command palette offers "go to" for
+   every entry, and it used to carry its own copy of these ids — in which
+   Features was written as 'features' rather than the real 'caps', so running
+   that command set a tab that does not exist and the Studio quietly fell back
+   to the Design section. A command that says "Go to Features" and shows you
+   Design is worse than no command at all. */
+const TAB_DEFS = [
+  ['design', 'Design', I.design, 'identity, colours, architecture, content source'],
+  ['screens', 'Screens', I.layers, 'screen designer, components, layout'],
+  ['caps', 'Features', I.caps, 'capabilities and the permissions they need'],
+  ['preview', 'Preview', I.eye, 'the app drawn in your theme'],
+  ['build', 'Build', I.build, 'validation findings, repairs, start a build'],
+];
+
 function renderTabs() {
-  const defs = [
-    ['design', 'Design', I.design],
-    ['screens', 'Screens', I.layers],
-    ['caps', 'Features', I.caps],
-    ['preview', 'Preview', I.eye],
-    ['build', 'Build', I.build],
-  ];
+  const defs = TAB_DEFS;
   const inner = $('.tabbar .inner');
   inner.replaceChildren(...defs.map(([id, label, icon]) =>
     el('button', {
@@ -6909,6 +7279,21 @@ async function boot(templatesData) {
   $('#newproj').addEventListener('click', () => { renderPicker(); });
   $('#importproj').addEventListener('click', importSpec);
   $('#themebtn').addEventListener('click', cycleTheme);
+  $('#palbtn').addEventListener('click', togglePalette);
+
+  /* Ctrl+K is the convention people arrive expecting, and Escape is the one
+     that must never trap anyone inside an overlay. The palette also has a
+     button, because on a phone, which is how this is mostly used, there is no
+     keyboard to press. */
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+      e.preventDefault();
+      togglePalette();
+    } else if (e.key === 'Escape' && PAL.open) {
+      e.preventDefault();
+      closePalette();
+    }
+  });
 
   // Follow the system until the person says otherwise, then remember what they
   // said — including across a reload, which is when an unremembered preference
@@ -7209,6 +7594,241 @@ function undoAll(ctx) {
   ctx.onSay(failed
     ? `Undid ${undone}. ${failed} could not be undone — those fields have changed since.`
     : `Undid every repair (${undone}). The project is back to how it was before them.`);
+}
+
+
+/* ═══ studio/src/palette.js ═══ */
+/* ============================================================================
+   COMMAND PALETTE — every action in one place, reachable by typing
+   ----------------------------------------------------------------------------
+   The Studio is organised into five sections, which is the right shape for
+   browsing and the wrong shape for acting. To rename the app you have to
+   remember that identity lives under Design; to see why a build is blocked you
+   have to remember that findings live under Build. On a phone that is a lot of
+   tapping to reach something you already know the name of.
+
+   So there is one list of everything the Studio can do, and typing into it
+   filters that list. It is the same actions the buttons run — it calls the same
+   functions rather than reimplementing them, which is the only reason it can be
+   added without creating a second place where behaviour is defined.
+
+   It is keyboard-first (Ctrl+K or Cmd+K) and also a button in the top bar,
+   because the primary way anyone holds this tool is a phone, where there is no
+   Ctrl key. An affordance that only exists for a keyboard is an affordance most
+   of the people using this will never find.
+   ========================================================================= */
+
+const PAL = {
+  open: false,
+  query: '',
+  cursor: 0,
+  items: [],
+};
+
+/**
+ * Subsequence match, not substring: "pkg" finds "Package name". That is the
+ * behaviour people expect from a command palette, and it is four lines.
+ * Returns a score where lower is better, or null when the query does not match,
+ * so results can be ordered by how tightly they match rather than listed in
+ * whatever order they were collected in.
+ */
+function fuzzyScore(query, text) {
+  const q = query.toLowerCase().trim();
+  const t = text.toLowerCase();
+  if (!q) return 0;
+  if (t.startsWith(q)) return -100;          // prefix beats everything
+  const at = t.indexOf(q);
+  if (at >= 0) return at;                    // then a plain substring, by position
+  let ti = 0;
+  let spread = 0;
+  for (const ch of q) {
+    const hit = t.indexOf(ch, ti);
+    if (hit < 0) return null;                // a character is missing: no match
+    spread += hit - ti;
+    ti = hit + 1;
+  }
+  return 1000 + spread;                      // subsequence, penalised by how scattered
+}
+
+/**
+ * Everything the palette can run. Built fresh on each open so it reflects the
+ * project that is actually loaded: with no project there is nothing to build,
+ * and listing "Start build" anyway would be offering something that cannot work.
+ */
+function paletteActions() {
+  const acts = [];
+  const go = (tab) => () => { S.tab = tab; PAL.open = false; hardUpdate(); };
+
+  // Read from the same list the tab bar is built from. Carrying a second copy of
+  // these ids is how this palette came to offer a command that did not work.
+  for (const [id, label, , hint] of TAB_DEFS) {
+    acts.push({ label: `Go to ${label}`, hint, run: go(id) });
+  }
+
+  const hasProject = Boolean(S.active);
+
+  if (hasProject) {
+    for (const s of (S.active.spec.screens || [])) {
+      acts.push({
+        label: `Open screen: ${s.name || s.id}`,
+        hint: 'screen designer',
+        run: () => { D.screen = s.id; D.selected = null; D.adding = false; S.tab = 'screens'; PAL.open = false; hardUpdate(); },
+      });
+    }
+
+    const checks = check();
+    acts.push({
+      label: 'Validate the specification',
+      hint: checks.blocked
+        ? `${checks.blocking.length} problem(s) blocking the build`
+        : 'no blocking problems',
+      run: () => { S.tab = 'build'; PAL.open = false; hardUpdate(); },
+    });
+
+    if (!checks.blocked) {
+      acts.push({ label: 'Start a build', hint: 'commits the spec and runs CI', run: () => { PAL.open = false; startBuild(); } });
+    }
+
+    if (canUndo(S.active)) {
+      acts.push({ label: `Undo: ${nextUndoLabel(S.active)}`, hint: 'screen designer', run: () => { PAL.open = false; undoDesignerEdit(); } });
+    }
+    if (canRedo(S.active)) {
+      acts.push({ label: 'Redo', hint: 'screen designer', run: () => { PAL.open = false; redoDesignerEdit(); } });
+    }
+
+    acts.push({ label: 'Download the specification', hint: 'spec.json', run: () => { PAL.open = false; downloadSpec(); } });
+    acts.push({ label: 'Copy the specification', hint: 'to the clipboard', run: () => { PAL.open = false; copySpec(); } });
+  }
+
+  acts.push({ label: 'New project', hint: 'start from a template', run: () => { PAL.open = false; renderPicker(); } });
+  acts.push({ label: 'Import a specification', hint: 'from a spec.json file', run: () => { PAL.open = false; importSpec(); } });
+
+  const themeNow = document.documentElement.getAttribute('data-theme');
+  acts.push({
+    label: themeNow === 'light' ? 'Switch to dark mode' : 'Switch to light mode',
+    hint: 'the choice is remembered',
+    run: () => { PAL.open = false; cycleTheme(); },
+  });
+
+  return acts;
+}
+
+/** Filter and rank. An empty query lists everything, which is the useful case. */
+function paletteResults() {
+  const all = paletteActions();
+  if (!PAL.query.trim()) return all;
+  return all
+    .map((a) => ({ a, score: Math.min(
+      fuzzyScore(PAL.query, a.label) ?? Infinity,
+      fuzzyScore(PAL.query, a.hint || '') ?? Infinity,
+    ) }))
+    .filter((x) => Number.isFinite(x.score))
+    .sort((x, y) => x.score - y.score)
+    .map((x) => x.a);
+}
+
+/** Undo/redo from the palette, so it can say what happened like the buttons do. */
+function undoDesignerEdit() {
+  const what = undoEdit(S.active);
+  touch(); hardUpdate();
+  toast(what ? `Undid: ${what}` : 'Nothing to undo.');
+}
+
+function redoDesignerEdit() {
+  const what = redoEdit(S.active);
+  touch(); hardUpdate();
+  toast(what ? `Redid: ${what}` : 'Nothing to redo.');
+}
+
+function openPalette() {
+  PAL.open = true;
+  PAL.query = '';
+  PAL.cursor = 0;
+  PAL.items = paletteResults();
+  paintPalette();
+  const input = document.getElementById('pal-input');
+  if (input) input.focus();
+}
+
+function closePalette() {
+  PAL.open = false;
+  const host = document.getElementById('palette');
+  if (host) host.replaceChildren();
+}
+
+function togglePalette() {
+  if (PAL.open) closePalette(); else openPalette();
+}
+
+function paintPalette() {
+  const host = document.getElementById('palette');
+  if (!host) return;
+  host.replaceChildren();
+  if (!PAL.open) return;
+
+  PAL.items = paletteResults();
+  if (PAL.cursor >= PAL.items.length) PAL.cursor = Math.max(0, PAL.items.length - 1);
+
+  const list = el('div', { class: 'pal-list', role: 'listbox', 'aria-label': 'Commands' });
+  if (!PAL.items.length) {
+    list.append(el('div', { class: 'pal-none' }, [
+      el('p', {}, `Nothing matches “${PAL.query}”.`),
+      el('p', { class: 'sub' }, 'Try the name of a section, a screen, or something you want to do.'),
+    ]));
+  } else {
+    PAL.items.forEach((a, i) => {
+      list.append(el('button', {
+        class: 'pal-item' + (i === PAL.cursor ? ' on' : ''),
+        role: 'option',
+        'aria-selected': i === PAL.cursor ? 'true' : 'false',
+        onmousemove: () => { if (PAL.cursor !== i) { PAL.cursor = i; paintPalette(); } },
+        onclick: () => { const run = a.run; closePalette(); run(); },
+      }, [
+        el('span', { class: 'pal-label' }, a.label),
+        a.hint ? el('span', { class: 'pal-hint' }, a.hint) : null,
+      ]));
+    });
+  }
+
+  host.append(el('div', { class: 'pal-back', onclick: closePalette }),
+    el('div', { class: 'pal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Command palette' }, [
+      el('input', {
+        id: 'pal-input',
+        class: 'pal-input',
+        type: 'text',
+        value: PAL.query,
+        placeholder: 'Type a command, a screen, or a section…',
+        'aria-label': 'Search commands',
+        autocomplete: 'off',
+        spellcheck: 'false',
+        role: 'combobox',
+        'aria-expanded': 'true',
+        'aria-controls': 'pal-list',
+        oninput: (e) => { PAL.query = e.target.value; PAL.cursor = 0; paintPalette(); refocus(); },
+        onkeydown: (e) => {
+          if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); PAL.cursor = Math.min(PAL.items.length - 1, PAL.cursor + 1); paintPalette(); refocus(); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); PAL.cursor = Math.max(0, PAL.cursor - 1); paintPalette(); refocus(); }
+          else if (e.key === 'Enter') {
+            e.preventDefault();
+            const chosen = PAL.items[PAL.cursor];
+            if (chosen) { const run = chosen.run; closePalette(); run(); }
+          }
+        },
+      }),
+      list,
+      el('div', { class: 'pal-foot' }, '↑ ↓ to choose · Enter to run · Esc to close'),
+    ]));
+
+  list.id = 'pal-list';
+  const on = list.querySelector('.pal-item.on');
+  if (on) on.scrollIntoView({ block: 'nearest' });
+}
+
+/** Repainting rebuilds the input, so the caret has to be given back. */
+function refocus() {
+  const input = document.getElementById('pal-input');
+  if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
 }
 
 /* templates are inlined as data, not fetched */

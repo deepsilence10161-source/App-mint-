@@ -807,14 +807,22 @@ const darken = (hex) => {
 };
 
 /* ── rendering ─────────────────────────────────────────────────────────── */
+/* The section list, declared once. The command palette offers "go to" for
+   every entry, and it used to carry its own copy of these ids — in which
+   Features was written as 'features' rather than the real 'caps', so running
+   that command set a tab that does not exist and the Studio quietly fell back
+   to the Design section. A command that says "Go to Features" and shows you
+   Design is worse than no command at all. */
+const TAB_DEFS = [
+  ['design', 'Design', I.design, 'identity, colours, architecture, content source'],
+  ['screens', 'Screens', I.layers, 'screen designer, components, layout'],
+  ['caps', 'Features', I.caps, 'capabilities and the permissions they need'],
+  ['preview', 'Preview', I.eye, 'the app drawn in your theme'],
+  ['build', 'Build', I.build, 'validation findings, repairs, start a build'],
+];
+
 function renderTabs() {
-  const defs = [
-    ['design', 'Design', I.design],
-    ['screens', 'Screens', I.layers],
-    ['caps', 'Features', I.caps],
-    ['preview', 'Preview', I.eye],
-    ['build', 'Build', I.build],
-  ];
+  const defs = TAB_DEFS;
   const inner = $('.tabbar .inner');
   inner.replaceChildren(...defs.map(([id, label, icon]) =>
     el('button', {
@@ -1090,6 +1098,21 @@ async function boot(templatesData) {
   $('#newproj').addEventListener('click', () => { renderPicker(); });
   $('#importproj').addEventListener('click', importSpec);
   $('#themebtn').addEventListener('click', cycleTheme);
+  $('#palbtn').addEventListener('click', togglePalette);
+
+  /* Ctrl+K is the convention people arrive expecting, and Escape is the one
+     that must never trap anyone inside an overlay. The palette also has a
+     button, because on a phone, which is how this is mostly used, there is no
+     keyboard to press. */
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 'k') {
+      e.preventDefault();
+      togglePalette();
+    } else if (e.key === 'Escape' && PAL.open) {
+      e.preventDefault();
+      closePalette();
+    }
+  });
 
   // Follow the system until the person says otherwise, then remember what they
   // said — including across a reload, which is when an unremembered preference

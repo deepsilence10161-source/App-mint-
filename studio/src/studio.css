@@ -123,6 +123,11 @@
   --glint:      rgb(255 255 255 / 0.35);
   --glint-soft: rgb(255 255 255 / 0.22);
 
+  /* The dim behind an overlay. Its own token rather than a literal in each
+     overlay, so a dialog and the command palette cannot drift apart, and so a
+     light theme can lift it instead of leaving a black sheet over white. */
+  --scrim:      rgb(4 6 12 / 0.62);
+
   /* Spacing on an 8pt grid. A scale exists so that "how far apart" is a
      decision made once rather than re-litigated in every rule. */
   --s1: 4px;  --s2: 8px;  --s3: 12px;
@@ -230,6 +235,7 @@
   --info:         #1F6FD6;  --info-ink: #175AAE;  --info-rgb: 31 111 214;
 
   --grad-brand: linear-gradient(140deg, #5A48D8 0%, #7A68F0 100%);
+  --scrim:      rgb(16 18 26 / 0.34);
 
   --sh-1: 0 1px 2px rgb(16 18 26 / 0.06);
   --sh-2: 0 4px 12px rgb(16 18 26 / 0.08), 0 1px 2px rgb(16 18 26 / 0.04);
@@ -672,6 +678,69 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 
 /* the component tree */
 .tree { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* ── the command palette ──────────────────────────────────────────────────
+   One overlay, one text field, one list. It sits above everything and dims
+   what is behind it, because while it is open nothing behind it should be
+   receiving attention or taps. */
+.pal-back {
+  position: fixed; inset: 0; z-index: 90;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.pal {
+  position: fixed; z-index: 91;
+  left: 50%; top: 12vh; transform: translateX(-50%);
+  width: min(92vw, 560px);
+  display: flex; flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-lift);
+  overflow: hidden;
+}
+.pal-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 0; border-bottom: 1px solid var(--line);
+  background: transparent; color: var(--fg);
+  font-size: 16px;               /* 16px so a phone does not zoom on focus */
+  outline: none;
+}
+.pal-input::placeholder { color: var(--fg-3); }
+.pal-list { max-height: 52vh; overflow-y: auto; padding: var(--s2); }
+.pal-item {
+  display: flex; align-items: baseline; gap: var(--s3);
+  width: 100%; min-height: 44px;
+  padding: 10px 12px;
+  border: 0; border-radius: var(--r);
+  background: none; color: var(--fg);
+  text-align: left; cursor: pointer;
+}
+.pal-item.on { background: var(--accent-soft); }
+.pal-label { font-size: 14.5px; font-weight: 550; }
+.pal-hint { font-size: 12px; color: var(--fg-3); margin-left: auto; text-align: right; }
+.pal-none { padding: 24px 16px; text-align: center; color: var(--fg-2); }
+.pal-none .sub { font-size: 12.5px; color: var(--fg-3); margin-top: 4px; }
+.pal-foot {
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── dragging a component in the outline ──────────────────────────────────
+   The line marking a drop is drawn on the row being hovered rather than
+   inserted into the tree, so nothing that counts the tree's rows ever sees an
+   element that is not a component. */
+.tree .node.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+.tree .node.dragging { opacity: 0.45; }
+.tree .node[draggable="true"] { cursor: grab; }
+.tree .node[draggable="true"]:active { cursor: grabbing; }
+
+.d-tools { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.d-tools .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
 .tree .node {
   margin-left: calc(var(--depth, 0) * 10px);
   display: flex; align-items: center; gap: 4px;

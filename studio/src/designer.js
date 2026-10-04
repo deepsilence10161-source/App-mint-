@@ -34,6 +34,8 @@ const D = {
   group: null,      // which palette group is open
   adding: false,    // is the palette showing
   depth: 0,         // recursion guard for the preview
+  dragging: null,   // id of the component being dragged
+  dragOver: null,   // id of the component the drop line is drawn above
 };
 
 const MAX_PREVIEW_DEPTH = 12;
@@ -76,6 +78,11 @@ function nid(screen, prefix) {
   let n = 2;
   while (taken.has(id)) id = base + (n++);
   return id;
+}
+
+/** locate() without the side effect, for callers that only want to look. */
+function found0(screen, id) {
+  return locate(screen, id);
 }
 
 function activeScreen(spec) {
@@ -184,6 +191,66 @@ function outdentComponent(screen, id) {
   return true;
 }
 
+/* ── undo, and moving a component somewhere specific ─────────────────────── */
+
+/**
+ * Run a designer edit with the previous state recorded first.
+ * Every mutation in this file goes through here, so undo covers all of them
+ * rather than the ones someone remembered to wrap.
+ */
+function editScreen(screen, label, fn) {
+  beginEdit(S.active, screen.id, label);
+  const out = fn();
+  touch();
+  hardUpdate();
+  return out;
+}
+
+/**
+ * Move a component to a position in another list — which is what dragging does,
+ * and what the arrow buttons cannot express. Refuses the two moves that would
+ * corrupt the tree: dropping a container inside itself, and dropping a node
+ * exactly where it already is.
+ *
+ * Returns a string describing why it refused, or null when it moved. The caller
+ * shows that string, because a drag that silently does nothing teaches a person
+ * that dragging is broken.
+ */
+function moveNodeTo(screen, id, targetParentId, index) {
+  const found = locate(screen, id);
+  if (!found) return 'That component is no longer on this screen.';
+
+  // Walk up from the destination. If the node being dragged is on the way, the
+  // drop would put a container inside its own descendant and the preview's
+  // recursion guard would be the only thing stopping an infinite loop.
+  if (targetParentId) {
+    let cursor = locate(screen, targetParentId);
+    while (cursor) {
+      if (cursor.node.id === id) return 'A component cannot be placed inside itself.';
+      cursor = cursor.parent ? locate(screen, cursor.parent.id) : null;
+    }
+  }
+
+  const dest = targetParentId ? locate(screen, targetParentId) : null;
+  if (targetParentId && !dest) return 'That destination no longer exists.';
+  if (dest && !(COMPONENTS[dest.node.type] || {}).container) {
+    return `${(COMPONENTS[dest.node.type] || {}).label || dest.node.type} cannot contain other components.`;
+  }
+
+  const list = dest ? dest.node.children : screen.components;
+  if (!Array.isArray(list)) return 'That destination cannot hold components.';
+
+  const sameList = list === found.list;
+  const at = Math.max(0, Math.min(list.length, Number.isFinite(index) ? index : list.length));
+  if (sameList && (at === found.index || at === found.index + 1)) return null; // already there
+
+  found.list.splice(found.index, 1);
+  // Removing first shifts the destination index down when moving within one list.
+  const insertAt = sameList && at > found.index ? at - 1 : at;
+  list.splice(Math.max(0, Math.min(list.length, insertAt)), 0, found.node);
+  return null;
+}
+
 /* ── the tab ────────────────────────────────────────────────────────────── */
 
 /**
@@ -232,11 +299,39 @@ function screenDesignerView() {
     el('div', { class: 'd-cell' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Contents of ${screen.name}`),
-        el('button', {
-          class: 'btn small' + (D.adding ? ' primary' : ''),
-          onclick: () => { D.adding = !D.adding; hardUpdate(); },
-          'aria-expanded': D.adding ? 'true' : 'false',
-        }, D.adding ? 'Close' : '+ Add'),
+        el('div', { class: 'd-tools' }, [
+          /* Undo says what it will undo. On a screen full of components a
+             button labelled only "Undo" does not tell you which of the last
+             sixty edits you are about to lose. */
+          el('button', {
+            class: 'btn small',
+            id: 'undo-edit',
+            disabled: !canUndo(S.active),
+            title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+            'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+            onclick: () => {
+              const what = undoEdit(S.active);
+              touch(); hardUpdate();
+              toast(what ? `Undid: ${what}` : 'Nothing to undo.');
+            },
+          }, 'Undo'),
+          el('button', {
+            class: 'btn small',
+            id: 'redo-edit',
+            disabled: !canRedo(S.active),
+            'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
+            onclick: () => {
+              const what = redoEdit(S.active);
+              touch(); hardUpdate();
+              toast(what ? `Redid: ${what}` : 'Nothing to redo.');
+            },
+          }, 'Redo'),
+          el('button', {
+            class: 'btn small' + (D.adding ? ' primary' : ''),
+            onclick: () => { D.adding = !D.adding; hardUpdate(); },
+            'aria-expanded': D.adding ? 'true' : 'false',
+          }, D.adding ? 'Close' : '+ Add'),
+        ]),
       ]),
       D.adding ? palette(screen) : outline(screen),
     ]),
@@ -320,7 +415,57 @@ function outline(screen) {
       if (!node) continue;
       const def = COMPONENTS[node.type] || {};
       const on = node.id === D.selected;
-      const row = el('li', { class: 'node' + (on ? ' on' : ''), style: `--depth:${depth}` }, [
+      /* Dragging is the fast path; the arrow buttons stay, because a drag on a
+         touchscreen is not something everyone can do and the buttons are the
+         same operation with a label. The drop line is drawn with a class rather
+         than an inserted element: a stray node in the tree would be read as a
+         component by anything that counts them. */
+      const row = el('li', {
+        class: 'node' + (on ? ' on' : '') + (D.dragOver === node.id ? ' drop-before' : ''),
+        style: `--depth:${depth}`,
+        draggable: 'true',
+        'data-node': node.id,
+        ondragstart: (e) => {
+          D.dragging = node.id;
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', node.id); } catch { /* older browsers */ }
+          row.classList.add('dragging');
+        },
+        ondragend: () => {
+          D.dragging = null; D.dragOver = null;
+          row.classList.remove('dragging');
+          $$('.tree .node.drop-before').forEach((n) => n.classList.remove('drop-before'));
+        },
+        ondragover: (e) => {
+          if (!D.dragging || D.dragging === node.id) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (D.dragOver !== node.id) {
+            D.dragOver = node.id;
+            $$('.tree .node.drop-before').forEach((n) => n.classList.remove('drop-before'));
+            row.classList.add('drop-before');
+          }
+        },
+        ondragleave: () => {
+          if (D.dragOver === node.id) { D.dragOver = null; row.classList.remove('drop-before'); }
+        },
+        ondrop: (e) => {
+          e.preventDefault();
+          const dragged = D.dragging;
+          D.dragging = null; D.dragOver = null;
+          if (!dragged || dragged === node.id) return;
+          /* The destination is worked out before anything is recorded, then the
+             move happens inside editScreen so the previous state is captured
+             first. Doing it the other way round would leave an undo step for an
+             edit that never happened. */
+          const target = found0(screen, node.id);
+          if (!target) return;
+          const parentId = target.parent ? target.parent.id : null;
+          let reason = 'That move was not possible.';
+          editScreen(screen, 'Reorder', () => { reason = moveNodeTo(screen, dragged, parentId, target.index); });
+          if (reason) toast(reason);
+        },
+      }, [
         el('button', {
           class: 'node-main',
           role: 'treeitem',
@@ -332,11 +477,11 @@ function outline(screen) {
         ]),
       ]);
       const acts = el('div', { class: 'node-acts' }, [
-        iconBtn('↑', 'Move up', () => { moveComponent(screen, node.id, -1); touch(); hardUpdate(); }),
-        iconBtn('↓', 'Move down', () => { moveComponent(screen, node.id, 1); touch(); hardUpdate(); }),
-        def.container && depth > 0 ? iconBtn('←', 'Move out one level', () => { outdentComponent(screen, node.id); touch(); hardUpdate(); }) : null,
-        iconBtn('⧉', 'Duplicate', () => { duplicateComponent(screen, node.id); touch(); hardUpdate(); }),
-        iconBtn('✕', 'Delete', () => { removeComponent(screen, node.id); touch(); hardUpdate(); }),
+        iconBtn('↑', 'Move up', () => editScreen(screen, 'Move up', () => moveComponent(screen, node.id, -1))),
+        iconBtn('↓', 'Move down', () => editScreen(screen, 'Move down', () => moveComponent(screen, node.id, 1))),
+        def.container && depth > 0 ? iconBtn('←', 'Move out one level', () => editScreen(screen, 'Move out one level', () => outdentComponent(screen, node.id))) : null,
+        iconBtn('⧉', 'Duplicate', () => editScreen(screen, `Duplicate ${def.label || node.type}`, () => duplicateComponent(screen, node.id))),
+        iconBtn('✕', 'Delete', () => editScreen(screen, `Delete ${def.label || node.type}`, () => removeComponent(screen, node.id))),
       ]);
       row.append(acts);
       rows.push(row);
@@ -380,7 +525,10 @@ function palette(screen) {
   for (const c of items) {
     grid.append(el('button', {
       class: 'pitem',
-      onclick: () => { addComponent(screen, c.name); touch(); hardUpdate(); toast(`${c.label} added.`); },
+      onclick: () => {
+        editScreen(screen, `Add ${c.label}`, () => addComponent(screen, c.name));
+        toast(`${c.label} added.`);
+      },
     }, [
       el('span', { class: 'pitem-name' }, c.label),
       el('span', { class: 'pitem-sub' }, c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role)),

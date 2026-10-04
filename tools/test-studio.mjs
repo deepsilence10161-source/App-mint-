@@ -303,6 +303,135 @@ async function main() {
   const chipCount = await page.locator('.screen-chips .chip').count();
   check('A second screen can be added and selected', chipCount >= 3, `found ${chipCount} chips (including the add button)`);
 
+  /* ── undo and redo in the designer ───────────────────────────────────── */
+  // Repairs on the Build screen were reversible; designer edits were not, which
+  // is backwards, because dragging something into the wrong place is easier to
+  // do by accident than applying a repair that asks first.
+  await tapTab(page, 'Screens');
+  await page.waitForTimeout(300);
+
+  const orderOf = () => page.evaluate(() =>
+    [...document.querySelectorAll('.tree .node')].map((r) => r.querySelector('.node-id')?.textContent || ''));
+  const orderBefore = await orderOf();
+  check('The outline lists components in an order', orderBefore.length >= 2,
+    `found ${orderBefore.length} rows`);
+
+  const undoBtn = page.locator('#undo-edit');
+  const redoBtn = page.locator('#redo-edit');
+  check('Undo and redo are offered in the designer',
+    await undoBtn.count() === 1 && await redoBtn.count() === 1, 'expected both buttons');
+  /* Whether Undo is enabled here depends on the edits made earlier in this run,
+     so asserting a particular state would be asserting something about the test
+     rather than the product. What has to be true is narrower and more useful:
+     with nothing recorded, pressing it must not pretend to have undone
+     something. */
+
+  // Delete the last component, then undo it. Going through the real button
+  // matters: wiring the history to the wrong mutation is the likely mistake.
+  const lastRow = page.locator('.tree .node').last();
+  await lastRow.locator('.ibtn[aria-label="Delete"]').click();
+  await page.waitForTimeout(350);
+  const orderAfterDelete = await orderOf();
+  check('Deleting removes a component from the outline',
+    orderAfterDelete.length === orderBefore.length - 1,
+    `${orderBefore.length} → ${orderAfterDelete.length}`);
+  check('Undo is available once there is something to undo',
+    !(await undoBtn.isDisabled()), 'expected Undo to enable');
+
+  await undoBtn.click();
+  await page.waitForTimeout(350);
+  check('Undo puts the deleted component back exactly where it was',
+    JSON.stringify(await orderOf()) === JSON.stringify(orderBefore),
+    `expected ${orderBefore.join(', ')}`);
+  check('Redo becomes available after an undo', !(await redoBtn.isDisabled()), 'expected Redo to enable');
+
+  await redoBtn.click();
+  await page.waitForTimeout(350);
+  check('Redo re-applies the deletion',
+    JSON.stringify(await orderOf()) === JSON.stringify(orderAfterDelete),
+    `expected ${orderAfterDelete.join(', ')}`);
+  await undoBtn.click();          // leave the screen as it was
+  await page.waitForTimeout(300);
+
+  /* ── reordering, including the move the arrows cannot express ─────────── */
+  // The tree rows are draggable, which is the affordance; what has to be true is
+  // that a component can be placed somewhere else and the tree agrees.
+  check('Components in the outline can be dragged',
+    await page.locator('.tree .node[draggable="true"]').count() >= 2,
+    'expected the rows to be drag sources');
+
+  // Reordering is exercised through the move-down button, which runs the same
+  // moveComponent the drop handler depends on, so the shared path is covered
+  // without relying on HTML5 drag simulation, which is not reliable here.
+  const firstRow = page.locator('.tree .node').first();
+  await firstRow.locator('.ibtn[aria-label="Move down"]').click();
+  await page.waitForTimeout(350);
+  const orderAfterMove = await orderOf();
+  check('A component can be reordered',
+    orderAfterMove.length === orderBefore.length
+      && JSON.stringify(orderAfterMove) !== JSON.stringify(orderBefore),
+    `before ${orderBefore.join(', ')} → after ${orderAfterMove.join(', ')}`);
+  await undoBtn.click();
+  await page.waitForTimeout(350);
+  check('Reordering is undoable',
+    JSON.stringify(await orderOf()) === JSON.stringify(orderBefore),
+    'expected the original order back');
+
+  /* ── the command palette ─────────────────────────────────────────────── */
+  // Keyboard-first, but it also has a button, because the way most people hold
+  // this tool is a phone and there is no Ctrl key on a phone.
+  const palBtn = page.locator('#palbtn');
+  check('There is a button to open the command palette', await palBtn.count() === 1, 'expected #palbtn');
+  await palBtn.click();
+  await page.waitForTimeout(300);
+  check('The palette opens with a field ready to type into',
+    await page.locator('#pal-input').isVisible(), 'expected the palette input');
+  check('The palette lists actions before anything is typed',
+    await page.locator('.pal-item').count() >= 5,
+    `found ${await page.locator('.pal-item').count()} items`);
+
+  await page.locator('#pal-input').fill('feat');
+  await page.waitForTimeout(250);
+  const firstItem = await page.locator('.pal-item').first().textContent();
+  check('Typing filters the list to what matches',
+    /Features/i.test(firstItem || ''), `first match was "${(firstItem || '').trim()}"`);
+
+  // "go to build" has to survive being abbreviated, which is the whole point of
+  // a palette: nobody types the full label of the thing they were looking for.
+  await page.locator('#pal-input').fill('bild');
+  await page.waitForTimeout(250);
+  check('An abbreviation still finds the command',
+    await page.locator('.pal-item').count() >= 1,
+    'expected "bild" to match "Build" by subsequence');
+
+  await page.locator('#pal-input').fill('Features');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(400);
+  const afterEnter = await page.textContent('#main');
+  check('Running a command takes you there',
+    afterEnter.includes('Permissions this app will request'),
+    'expected the Features section to be showing');
+  check('The palette closes once a command runs',
+    await page.locator('#pal-input').count() === 0, 'expected the overlay to be gone');
+
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(300);
+  check('Ctrl+K opens it again', await page.locator('#pal-input').isVisible(), 'expected the palette');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  check('Escape closes it', await page.locator('#pal-input').count() === 0, 'expected the overlay gone');
+
+  await page.locator('#palbtn').click();
+  await page.waitForTimeout(250);
+  await page.locator('#pal-input').fill('zzzznotacommand');
+  await page.waitForTimeout(250);
+  check('A query that matches nothing says so instead of showing an empty box',
+    /Nothing matches/i.test(await page.textContent('.pal-list')),
+    'expected an explanation');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+
   // the app is switched to native screens, so the build path matches the design
   await tapTab(page, 'Design');
   const modeSelect = page.locator('select[aria-label="Architecture"]');

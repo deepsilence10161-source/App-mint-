@@ -48,10 +48,20 @@ const ENGINE_MODULES = [
    reads; everything it borrows from the shell it only touches once a person
    has tapped something. */
 const APP_MODULES = [
+  // The history module is first because the designer calls into it the moment a
+  // person moves something, and it reads the designer's selection state when it
+  // records a step. Both are in one scope once bundled, but listing it first
+  // keeps the dependency readable rather than something you have to trace.
+  'studio/src/history.js',
   'studio/src/designer.js',
   'studio/src/website.js',
   'studio/src/studio.js',
   'studio/src/repairs.js',
+  // The palette is last because it calls into everything above it: the views,
+  // the build, the repair history and the theme. Bundled into one scope the
+  // order would not matter at call time, but listing it last says plainly that
+  // it is a caller and nothing calls it.
+  'studio/src/palette.js',
 ];
 
 /**

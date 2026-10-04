@@ -18,6 +18,7 @@
       <div class="name" id="projname">Loading…</div>
       <span class="meta" id="projmeta">starting up</span>
     </div>
+    <button class="btn ghost sm" id="palbtn" aria-label="Search commands">Search</button>
     <button class="btn ghost sm" id="themebtn" aria-label="Switch colour mode">Dark mode</button>
     <button class="btn ghost sm" id="importproj" aria-label="Import a specification">Import</button>
     <button class="btn primary sm" id="newproj" aria-label="New project">New</button>
@@ -38,6 +39,10 @@
 </nav>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- The command palette paints itself in here. It lives outside .app so that
+     opening it cannot shift the layout of what is underneath. -->
+<div id="palette"></div>
 
 <script type="module">
 /*__ENGINE__*/
