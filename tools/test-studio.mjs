@@ -1336,6 +1336,70 @@ a { color: #6B3A1F; }</style></head>
 
   fs.rmSync(siteRoot, { recursive: true, force: true });
 
+  /* ── the icon rail ─────────────────────────────────────────────────────────
+     The design prompt asks for a collapsible icon-rail sidebar. On a phone the
+     sections are a bottom bar, where a thumb already is; the rail is what the
+     same markup becomes on a wide screen. It is the same markup, because two
+     navigations listing the sections separately would eventually disagree about
+     what the sections are. */
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.waitForTimeout(350);
+
+  const rail = await page.evaluate(() => {
+    const bar = document.querySelector('.tabbar').getBoundingClientRect();
+    return {
+      barW: Math.round(bar.width),
+      barTop: Math.round(bar.top),
+      onLeft: Math.round(bar.left) === 0 && bar.height > 400,
+      label: getComputedStyle(document.querySelector('.tab > span:last-child')).opacity,
+      pinShown: getComputedStyle(document.querySelector('#railpin')).display !== 'none',
+      tabs: document.querySelectorAll('.tabbar .tab').length,
+    };
+  });
+  check('On a wide screen the section bar becomes a rail down the left edge',
+    rail.onLeft && rail.barW < 120 && rail.tabs === 7,
+    `width ${rail.barW}, top ${rail.barTop}, tabs ${rail.tabs}`);
+  check('The collapsed rail shows icons without their labels',
+    rail.label === '0', `label opacity ${rail.label}`);
+  check('The rail can be pinned open', rail.pinShown, 'the pin control was not visible');
+
+  await page.hover('.tabbar');
+  await page.waitForTimeout(350);
+  const railOpened = await page.evaluate(() => ({
+    barW: Math.round(document.querySelector('.tabbar').getBoundingClientRect().width),
+    label: getComputedStyle(document.querySelector('.tab > span:last-child')).opacity,
+  }));
+  check('Hovering the rail opens it and reveals the labels',
+    railOpened.barW > 180 && railOpened.label === '1', `width ${railOpened.barW}, label ${railOpened.label}`);
+
+  await page.mouse.move(900, 500);
+  await page.waitForTimeout(300);
+  await page.click('#railpin');
+  await page.waitForTimeout(350);
+  const pinned = await page.evaluate(() => ({
+    barW: Math.round(document.querySelector('.tabbar').getBoundingClientRect().width),
+    pressed: document.querySelector('#railpin').getAttribute('aria-pressed'),
+    label: getComputedStyle(document.querySelector('.tab > span:last-child')).opacity,
+  }));
+  check('Pinning holds the rail open without the pointer being on it',
+    pinned.barW > 180 && pinned.pressed === 'true' && pinned.label === '1',
+    JSON.stringify(pinned));
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(350);
+  const narrow = await page.evaluate(() => {
+    const bar = document.querySelector('.tabbar').getBoundingClientRect();
+    return {
+      atBottom: bar.top > 400,
+      full: Math.round(bar.width) > 350,
+      pin: getComputedStyle(document.querySelector('#railpin')).display,
+      label: getComputedStyle(document.querySelector('.tab > span:last-child')).opacity,
+    };
+  });
+  check('On a phone the same markup is a bottom bar, and the pin goes away',
+    narrow.atBottom && narrow.full && narrow.pin === 'none' && narrow.label === '1',
+    JSON.stringify(narrow));
+
   if (!process.argv.includes('--keep')) await browser.close();
 
   const failed = results.filter((r) => !r.ok);

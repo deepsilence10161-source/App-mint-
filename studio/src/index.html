@@ -45,7 +45,11 @@
   </main>
 </div>
 
-<nav class="tabbar" role="tablist" aria-label="Sections">
+<nav class="tabbar" role="tablist" aria-label="Sections" data-pinned="0">
+  <!-- On a wide screen this bar is the icon rail; the pin holds it open.
+       It is display:none below 900px, where the bar is at the bottom. -->
+  <button class="railpin" id="railpin" type="button" aria-pressed="false"
+          aria-label="Keep the section rail open" title="Keep the section rail open"></button>
   <div class="inner"></div>
 </nav>
 

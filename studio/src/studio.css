@@ -193,6 +193,9 @@
   --device-bezel: #05070E;
 
   --tabbar-h: 74px;
+  /* The section rail on a wide screen: icons only, until it is opened. */
+  --rail-w:      68px;
+  --rail-w-open: 224px;
 }
 
 /* ── light mode ────────────────────────────────────────────────────────────
@@ -1690,4 +1693,105 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 
 @media (prefers-reduced-motion: reduce) {
   .subtab { transition: none; }
+}
+
+/* ── the icon rail ──────────────────────────────────────────────────────────
+   On a phone the sections live in a bottom tab bar, which is where a thumb
+   already is. On a wide screen the same bar becomes a rail down the left edge:
+   collapsed to icons, expanding on hover or keyboard focus, and pinnable open.
+
+   It is the same markup in both places. Two navigations that list the sections
+   separately would eventually disagree about what the sections are, and the
+   command palette reads the same list again — so there is one list, and the
+   width of the screen decides how it is drawn.
+
+   The labels are collapsed with a grid-template-columns transition rather than
+   display:none, because display cannot be animated and a label that appears
+   instantly next to a rail that is still widening reads as a glitch.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (min-width: 900px) {
+  .tabbar {
+    left: 0; right: auto; top: 0; bottom: 0;
+    width: var(--rail-w);
+    padding: var(--s4) var(--s2);
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    transition: width var(--d-base) var(--ease-out);
+  }
+  .tabbar .inner {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: none;
+    margin: 0;
+    gap: 2px;
+  }
+  .tab {
+    flex: 0 0 auto;
+    min-height: 44px;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: var(--s3);
+    padding: var(--s2) var(--s3);
+    font-size: 13px;
+    border-radius: var(--r-sm);
+    grid-template-columns: 22px 0fr;
+    display: grid;
+    align-items: center;
+    overflow: hidden;
+  }
+  .tab > span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--d-fast) var(--ease-out);
+  }
+  .tab svg { width: 20px; height: 20px; }
+  .tab:active { background: var(--surface-2); }
+
+  /* hover, and keyboard focus anywhere inside the rail, both open it */
+  .tabbar:hover,
+  .tabbar:focus-within,
+  .tabbar[data-pinned="1"] { width: var(--rail-w-open); }
+  .tabbar:hover .tab,
+  .tabbar:focus-within .tab,
+  .tabbar[data-pinned="1"] .tab { grid-template-columns: 22px 1fr; }
+  .tabbar:hover .tab > span:last-child,
+  .tabbar:focus-within .tab > span:last-child,
+  .tabbar[data-pinned="1"] .tab > span:last-child { opacity: 1; }
+
+
+  /* the content moves over; it no longer needs room at the bottom */
+  main {
+    padding: var(--s5) var(--s6) var(--s6) calc(var(--rail-w) + var(--s6));
+    scroll-padding-bottom: 0;
+    max-width: 1120px;
+  }
+}
+
+.railpin {
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  margin: var(--s2) auto 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease-out), border-color var(--d-fast) var(--ease-out);
+}
+.railpin:hover { color: var(--fg); border-color: var(--line-2); }
+.railpin[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent-line); background: var(--accent-soft); }
+.railpin svg { width: 18px; height: 18px; transform: rotate(90deg); }
+.railpin[aria-pressed="true"] svg { transform: rotate(-90deg); }
+
+/* Below the rail breakpoint the sections are a bottom bar and there is nothing
+   to pin, so the control goes away. Stated as its own condition on purpose: an
+   earlier version left this to cascade order between two rules of equal
+   specificity, which is the kind of thing that silently stops working. */
+@media (max-width: 899.98px) {
+  .railpin { display: none; }
 }

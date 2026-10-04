@@ -85,6 +85,7 @@ const I = {
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
   gauge: '<path d="M20 15a8 8 0 1 0-16 0"/><path d="m12 15 3.5-4.5"/><circle cx="12" cy="15" r="1.4"/>',
+  pin: '<path d="M9 3h6l-1 6 4 4H6l4-4z"/><path d="M12 13v8"/>',
   build: '<path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
   briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/>',
@@ -1204,6 +1205,24 @@ async function boot(templatesData) {
     } catch { /* older browsers: the initial read still applies */ }
   }
 }
+
+  // The rail pin. Below 900px the control is display:none, so this simply never
+  // runs into anything; above it, it holds the rail open for people who would
+  // rather not hover.
+  const railpin = $('#railpin');
+  if (railpin) {
+    railpin.innerHTML = svg(I.pin);
+    const set = (on) => {
+      railpin.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const bar = $('.tabbar');
+      if (bar) bar.dataset.pinned = on ? '1' : '0';
+      try { localStorage.setItem('appmint.rail.v1', on ? '1' : '0'); } catch { /* ignore */ }
+    };
+    let pinned = false;
+    try { pinned = localStorage.getItem('appmint.rail.v1') === '1'; } catch { /* ignore */ }
+    set(pinned);
+    railpin.addEventListener('click', () => set(railpin.getAttribute('aria-pressed') !== 'true'));
+  }
 
 window.__appmintBoot = boot;
 
