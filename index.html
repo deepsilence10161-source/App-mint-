@@ -1444,8 +1444,110 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (prefers-reduced-motion: reduce) {
   .ring-arc, .why-box > summary::before { transition: none; }
 }
+
+/* ── build pipeline stepper ─────────────────────────────────────────────────
+   Drawn from the steps GitHub reported for the run, grouped by
+   engine/spec/pipeline.mjs. A stage's colour is the status of its real steps;
+   nothing here advances on a timer, and the only motion is the marker of a
+   stage that is genuinely running.
+   ─────────────────────────────────────────────────────────────────────────── */
+.phead { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+.pipeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pstep {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  position: relative;
+}
+/* The connector between stages. It stops at the last stage rather than running
+   off the end of the list. */
+.pstep:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 44px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--line);
+}
+.pstep.s-done:not(:last-child)::before { background: var(--ok-line); }
+
+.pmark {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--line-2);
+  color: var(--fg-3);
+  background: var(--surface-2);
+  z-index: 1;
+}
+.pmark svg { width: 15px; height: 15px; }
+.pstep.s-done .pmark { color: var(--ok-ink); border-color: var(--ok-line); background: var(--ok-soft); }
+.pstep.s-failed .pmark { color: var(--bad-ink); border-color: var(--bad-line); background: var(--bad-soft); }
+.pstep.s-cancelled .pmark { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-soft); }
+.pstep.s-running .pmark { color: var(--info-ink); border-color: var(--info-line); background: var(--info-soft); }
+.pstep.s-running .pmark svg { animation: pipe-spin 1.1s linear infinite; }
+@keyframes pipe-spin { to { transform: rotate(360deg); } }
+
+.pstep-main { min-width: 0; }
+.pstep-name { font: 500 14.5px/1.4 var(--font-ui); color: var(--fg); }
+.pstep.s-waiting .pstep-name { color: var(--fg-3); }
+.pstep-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
+.pstep.s-failed .pstep-detail { color: var(--bad-ink); }
+
+.pstep-steps { list-style: none; margin: var(--s2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pstep-steps li {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: var(--s2);
+  align-items: center;
+  font: var(--t-label);
+  color: var(--fg-2);
+  padding: 2px 0;
+}
+.pdot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; opacity: 0.55; }
+.pstep-steps li.s-done .pdot { background: var(--ok); opacity: 1; }
+.pstep-steps li.s-failed { color: var(--bad-ink); }
+.pstep-steps li.s-failed .pdot { background: var(--bad); opacity: 1; }
+.pstep-steps li.s-running { color: var(--info-ink); }
+.pstep-steps li.s-running .pdot { background: var(--info); opacity: 1; }
+.pstep-steps li.s-skipped { opacity: 0.6; }
+.pstate { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; }
+
+.pother { border-top: 1px solid var(--line); padding-top: var(--s2); }
+.pother > summary { font: var(--t-label); color: var(--fg-2); cursor: pointer; padding: var(--s2) 0; min-height: 32px; }
+.pother > summary:hover { color: var(--fg); }
+
+/* ── skeletons ──────────────────────────────────────────────────────────────
+   A skeleton is only honest where there is a real wait. There are two: parsing
+   the bundle before boot(), and the first poll of a build that has not appeared
+   in the run list yet. Both use the same three shapes, so a person learns one
+   vocabulary for "not here yet".
+   ─────────────────────────────────────────────────────────────────────────── */
+.skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 45%, var(--surface-2) 90%);
+  background-size: 220% 100%;
+  border-radius: var(--r-sm);
+  animation: skel-slide 1.4s var(--ease-in-out) infinite;
+}
+@keyframes skel-slide { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+.skel-line { height: 12px; width: 100%; max-width: 420px; }
+.skel-title { height: 26px; width: 240px; margin-bottom: var(--s4); }
+.skel-card { height: 104px; border-radius: var(--r-2); }
+.skel-grid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-top: var(--s4); }
+
+.booting { padding: var(--s6) var(--s5); }
+.booting-note { font: var(--t-label); color: var(--fg-3); margin: var(--s5) 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+  .pstep.s-running .pmark svg { animation: none; }
+}
 </style>
-<meta name="appmint-build" content="bf62812d6fd33f7e">
+<meta name="appmint-build" content="b84f35db27d7d610">
 </head>
 <body>
 
@@ -1465,9 +1567,20 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   <div class="health" id="health" role="status" aria-live="polite"></div>
 
   <main id="main">
-    <div class="empty">
-      <div class="big">Starting up…</div>
-      <p>If this message stays, the browser blocked the scripts.</p>
+    <!-- Skeleton, shown until the bundle has parsed and booted. The bundle is
+         several hundred kilobytes of inline script, so on a phone this is a
+         real wait rather than a decorative one; boot() replaces the whole
+         element. If it is still here after a few seconds, the browser blocked
+         the scripts. -->
+    <div class="booting" aria-busy="true" aria-live="polite">
+      <div class="skel skel-title"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel-grid">
+        <div class="skel skel-card"></div>
+        <div class="skel skel-card"></div>
+        <div class="skel skel-card"></div>
+      </div>
+      <p class="booting-note">Starting up… If this stays, the browser blocked the scripts.</p>
     </div>
   </main>
 </div>
@@ -3717,6 +3830,161 @@ function projectHealth(spec, validation, report) {
     measured: scored.length,
     unmeasured: categories.length - scored.length,
   };
+}
+
+
+/* ═══ engine/spec/pipeline.mjs ═══ */
+/* ============================================================================
+   BUILD PIPELINE — a stepper that reports a build, rather than performing one
+   ----------------------------------------------------------------------------
+   The design prompt asks for a pipeline stepper: Guards → Security →
+   Dependencies → Build → Sign → Validate → Smoke Test → Done. Those are the
+   stages a build conceptually passes through, and they are worth showing.
+
+   What would not be worth showing is a stepper that animates through those
+   words on a timer while nothing is happening. That is the most common way this
+   feature gets built and it is a lie with a progress bar. So the stages here are
+   only ever a grouping of the steps GitHub Actions actually reported for the run
+   the Studio started, read from the run's jobs API. A stage is done when its
+   real steps are done; it is running when one of them is running; it failed
+   because a named step failed, and the name is on the screen.
+
+   Two rules fall out of that, and both exist because the obvious alternative is
+   quietly dishonest:
+
+     · a step no rule matched is listed under "Other steps" instead of being
+       dropped. A stepper that only shows the stages it knows how to draw will
+       look perfectly green through a build that is failing somewhere it never
+       learned to look.
+
+     · a stage the workflow never had is not drawn. "Sign" is a real stage in the
+       build pipeline because Gradle signs the APK as it builds, and the signing
+       scheme is verified against the finished file. It is deliberately absent
+       from the device pipeline, which installs an already-signed APK and has no
+       signing step of its own. The prompt lists the stages; it does not require
+       inventing one to match the list.
+   ========================================================================= */
+
+const BUILD_STAGES = [
+  { key: 'guards',  label: 'Guards',       icon: 'shield', rules: [/validate specification/i, /pick specification/i, /engine self-tests/i, /check the committed bundle/i] },
+  { key: 'security', label: 'Security',    icon: 'lock',   rules: [/row level security/i, /permission table/i, /secret/i] },
+  { key: 'deps',    label: 'Dependencies', icon: 'package', rules: [/set up (node|jdk|gradle)/i, /prepare android sdk/i, /install a browser/i, /build the studio bundle/i, /build the single-file studio/i] },
+  { key: 'build',   label: 'Build',        icon: 'build',  rules: [/generate android project/i, /build (debug|both apps|release)/i, /assemble/i, /restore the build cache/i, /work out the build keys/i] },
+  { key: 'sign',    label: 'Sign',         icon: 'sign',   rules: [/sign/i] },
+  { key: 'verify',  label: 'Validate',     icon: 'check',  rules: [/validate the real artifact/i, /locate artifact/i, /stage (both )?apks?/i, /upload (apk|build report)/i, /analyse a website/i] },
+  { key: 'done',    label: 'Done',         icon: 'flag',   rules: [] },
+];
+
+// The device workflow builds an APK and then runs it on an emulator. There is no
+// signing step of its own, so no Sign stage is claimed here.
+const DEVICE_STAGES = [
+  { key: 'guards',  label: 'Guards',      icon: 'shield',  rules: [/validate (both )?specifications?/i, /work out the build keys/i, /enable kvm/i] },
+  { key: 'deps',    label: 'Dependencies', icon: 'package', rules: [/set up (node|jdk|gradle)/i, /prepare android sdk/i, /restore the build cache/i] },
+  { key: 'build',   label: 'Build',       icon: 'build',   rules: [/build both apps/i, /stage (both )?apks?/i, /report what the cache did/i] },
+  { key: 'smoke',   label: 'Smoke Test',  icon: 'phone',   rules: [/run the app on the emulator/i] },
+  { key: 'verify',  label: 'Validate',    icon: 'check',   rules: [/judge the evidence/i, /build a report/i, /publish the report/i, /upload evidence/i, /verdict/i] },
+  { key: 'done',    label: 'Done',        icon: 'flag',    rules: [] },
+];
+
+/** Which stage list a workflow's steps should be read against. */
+function stagesFor(workflowName) {
+  return /device|emulator/i.test(workflowName || '') ? DEVICE_STAGES : BUILD_STAGES;
+}
+
+const ACTIVE = new Set(['queued', 'in_progress', 'waiting', 'pending', 'requested']);
+
+/** A step's status, collapsed to what a stepper can show. */
+function buildStepStatus(step) {
+  const c = step && step.conclusion;
+  if (c === 'failure' || c === 'timed_out') return 'failed';
+  if (c === 'cancelled') return 'cancelled';
+  if (c === 'skipped') return 'skipped';
+  if (c === 'success') return 'done';
+  if (c) return 'done';                       // neutral, action_required: it finished
+  if (step && ACTIVE.has(step.status)) return 'running';
+  return 'waiting';
+}
+
+/** One stage's status, from the statuses of the steps that landed in it. */
+function stageStatus(steps) {
+  const s = steps.map(buildStepStatus);
+  if (s.includes('failed')) return 'failed';
+  if (s.includes('cancelled')) return 'cancelled';
+  if (s.includes('running')) return 'running';
+  const real = s.filter((x) => x !== 'skipped');
+  if (!real.length) return 'waiting';
+  return real.every((x) => x === 'done') ? 'done' : 'waiting';
+}
+
+/**
+ * Group the real steps of a run into stages.
+ *
+ * `steps` is the flat list of steps across the run's jobs, in the order GitHub
+ * returned them. Steps that no rule matches are returned under `other` rather
+ * than discarded — see the note at the top of this file.
+ */
+function pipelineStages(steps, stageDefs, run) {
+  const list = Array.isArray(steps) ? steps : [];
+  const stages = stageDefs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, steps: [] }));
+  const other = [];
+  const used = new Set();
+
+  for (const step of list) {
+    const name = (step && step.name) || '(unnamed step)';
+    let placed = false;
+    for (const stage of stages) {
+      const def = stageDefs.find((d) => d.key === stage.key);
+      if (def.rules.some((re) => re.test(name))) {
+        stage.steps.push(step);
+        used.add(stage.key);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) other.push(step);
+  }
+
+  // "Done" is not something a workflow step announces; it is whether the run
+  // itself finished, and how. It is drawn last and always, so a stepper never
+  // looks complete while the run is still going.
+  const done = stages.find((s) => s.key === 'done');
+  if (done) {
+    const conclusion = run && run.conclusion;
+    done.status = conclusion === 'success' ? 'done'
+      : (conclusion === 'failure' || conclusion === 'timed_out') ? 'failed'
+      : conclusion === 'cancelled' ? 'cancelled'
+      : (run && ACTIVE.has(run.status)) ? 'running'
+      : 'waiting';
+    done.detail = conclusion ? `run ${conclusion}` : (run && run.status) ? `run ${run.status}` : 'not started';
+  }
+
+  const shown = stages.filter((s) => s.key === 'done' || used.has(s.key));
+  for (const s of shown) {
+    if (s.key === 'done') continue;
+    s.status = stageStatus(s.steps);
+    const failed = s.steps.find((x) => buildStepStatus(x) === 'failed');
+    s.detail = failed
+      ? `failed at “${failed.name}”`
+      : `${s.steps.filter((x) => buildStepStatus(x) !== 'skipped').length} of ${s.steps.length} steps done`;
+  }
+
+  return {
+    stages: shown,
+    other,
+    // Every stage that exists in the definition but never matched a step, named
+    // so a reader can tell "not reached yet" from "this pipeline has no such
+    // stage" without guessing.
+    absent: stages.filter((s) => s.key !== 'done' && !used.has(s.key)).map((s) => s.label),
+  };
+}
+
+/** Flatten the steps out of a GitHub jobs response, keeping their order. */
+function stepsFromJobs(jobs) {
+  const out = [];
+  for (const job of (jobs && jobs.jobs) || []) {
+    for (const step of job.steps || []) out.push({ ...step, job: job.name });
+  }
+  return out;
 }
 
 
@@ -6629,6 +6897,17 @@ const I = {
 };
 const svg = (d, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 
+/* Status glyphs for the pipeline stepper. They live beside the other icons so
+   there is one place that draws anything, and so the stepper cannot end up
+   loading an image from somewhere. */
+const PIPE_ICONS = {
+  check: '<path d="m5 13 4 4L19 7"/>',
+  cross: '<path d="M6 6l12 12M18 6 6 18"/>',
+  minus: '<path d="M6 12h12"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+  spin: '<path d="M12 3a9 9 0 0 1 9 9"/><path d="M21 12a9 9 0 0 1-9 9"/>',
+};
+
 /* ── storage ───────────────────────────────────────────────────────────── */
 const LS_PROJECTS = 'appmint.projects.v1';
 const LS_ACTIVE = 'appmint.active.v1';
@@ -6693,6 +6972,9 @@ const S = {
   tab: 'design',
   preview: { orientation: 'portrait', theme: 'auto' },
   lastRun: null,
+  // The run the Studio started, plus the real steps GitHub has reported for
+  // it. The stepper is drawn from this and from nothing else.
+  pipeline: { run: null, steps: [], polling: false, error: null },
   dirty: false,
 };
 
@@ -7128,6 +7410,10 @@ function viewBuild() {
   });
 
   return [
+    // The stepper comes first when there is a run to report: "what is my build
+    // doing" is the question the Build screen exists to answer.
+    ...viewPipeline(),
+
     card('Validation layers', [statusBanner, ...layers], null),
 
     ...repairs,
@@ -7590,20 +7876,68 @@ async function startBuild() {
 
     toast('Committed. The build is starting…');
 
-    // Watch the run so the screen shows something real instead of a static claim.
-    const since = Date.now() - 5000;
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r2) => setTimeout(r2, 3000));
-      const runs = await fetch(
-        `https://api.github.com/repos/${repo}/actions/runs?per_page=5&event=push`,
-        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } },
-      ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-      const run = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
-      if (run) { S.lastRun = run; hardUpdate(); break; }
-    }
+    S.pipeline = { run: null, steps: [], polling: true, error: null };
+    hardUpdate();
+    // Watch the run so the stepper shows what is actually happening instead
+    // of a static claim. pollPipeline stops itself once the run concludes.
+    pollPipeline(Date.now() - 5000);
   } catch (e) {
     toast(e.message || 'Could not reach GitHub.', 5000);
   }
+}
+
+/**
+ * Follow the run the Studio just started, and keep the stepper honest.
+ *
+ * It stops on its own when the run reaches a conclusion, and it records a failed
+ * check in S.pipeline.error rather than giving up quietly — a stepper that stops
+ * updating without saying why is indistinguishable from a build that stopped.
+ */
+async function pollPipeline(since) {
+  if (S.pipeline._watching) return;   // one watcher at a time
+  const token = store.token();
+  const repo = store.repo() || 'deepsilence10161-source/App-mint-';
+  if (!token) { S.pipeline.polling = false; return; }
+  S.pipeline._watching = true;
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+
+  for (let i = 0; i < 120; i += 1) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      if (!S.pipeline.run) {
+        const runs = await fetch(
+          `https://api.github.com/repos/${repo}/actions/runs?per_page=10&event=push`,
+          { headers },
+        ).then((x) => (x.ok ? x.json() : null));
+        const found = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
+        if (found) { S.pipeline.run = found; S.lastRun = found; }
+        else S.pipeline.error = 'the run has not appeared yet';
+      } else {
+        const id = S.pipeline.run.id;
+        const [run, jobs] = await Promise.all([
+          fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}`, { headers }).then((x) => (x.ok ? x.json() : null)),
+          fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}/jobs?per_page=50`, { headers }).then((x) => (x.ok ? x.json() : null)),
+        ]);
+        if (run) { S.pipeline.run = run; S.lastRun = run; }
+        if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
+        S.pipeline.error = null;
+        if (run && run.status === 'completed') {
+          S.pipeline.polling = false;
+          S.pipeline._watching = false;
+          hardUpdate();
+          return;
+        }
+      }
+    } catch (e) {
+      S.pipeline.error = e.message || 'could not reach GitHub';
+    }
+    // Only the Build screen draws the stepper, so nothing else is redrawn while
+    // somebody is typing somewhere else.
+    if (S.tab === 'build' && S.active) renderActive();
+  }
+  S.pipeline.polling = false;
+  S.pipeline._watching = false;
+  if (S.tab === 'build' && S.active) renderActive();
 }
 
 /* ── boot ──────────────────────────────────────────────────────────────── */
@@ -7666,6 +8000,16 @@ window.__appmintBoot = boot;
 // behind the rings are exposed here — the same way boot is. Without this the
 // only available test is "a number was printed", which passes just as happily
 // once the UI and the engine have quietly drifted apart.
+// The stepper draws whatever S.pipeline holds, which in use is populated by
+// pollPipeline from GitHub's own API. A verification cannot start a real build
+// to see the stepper move, so the state is settable here — a stepper that only
+// ever renders "waiting" would pass every test that could otherwise be written
+// for it, including the ones that matter most.
+window.__appmintPipeline = (next) => {
+  S.pipeline = next ? { polling: false, error: null, ...next } : { run: null, steps: [], polling: false, error: null };
+  renderActive();
+};
+
 window.__appmintHealth = () => {
   const spec = S.active ? S.active.spec : {};
   return projectHealth(spec, check(), permissionReport(spec));
@@ -8094,6 +8438,102 @@ function viewHealth() {
   }
 
   return out;
+}
+
+
+/* ═══ studio/src/viewPipeline.js ═══ */
+/* ============================================================================
+   PIPELINE — the stepper, drawn from the run that is actually happening
+   ----------------------------------------------------------------------------
+   engine/spec/pipeline.mjs turns the steps GitHub Actions reported into stages.
+   This file draws them, and adds the two things a stepper most often gets wrong:
+
+     · it never advances on a timer. A stage moves because a step moved.
+     · it never claims "Done" while the run is still going, and it says
+       "cancelled" when that is what happened, which is neither a pass nor a
+       failure and should not be dressed up as one.
+
+   Steps that belong to no stage are listed underneath rather than dropped, and
+   stages this workflow never had are named as absent. A stepper that only shows
+   what it expects will look green all the way through a build that is failing
+   somewhere it never learned to look.
+   ========================================================================= */
+
+/** Status marker for one stage. */
+function stageMark(status) {
+  const glyph = { done: 'check', running: 'spin', failed: 'cross', cancelled: 'minus', waiting: 'dot' }[status] || 'dot';
+  return el('span', { class: `pmark s-${status}`, 'aria-hidden': 'true', html: svg(PIPE_ICONS[glyph]) });
+}
+
+function stageNode(stage, index) {
+  const label = stage.key === 'done' ? 'Done' : `${index + 1}. ${stage.label}`;
+  return el('li', { class: `pstep s-${stage.status}`, 'data-stage': stage.key },
+    stageMark(stage.status),
+    el('div', { class: 'pstep-main' },
+      el('span', { class: 'pstep-name' }, label),
+      stage.detail ? el('span', { class: 'pstep-detail' }, stage.detail) : null,
+      stage.steps && stage.steps.length
+        ? el('ul', { class: 'pstep-steps' },
+            ...stage.steps.map((s) => el('li', { class: `s-${buildStepStatus(s)}` },
+              el('span', { class: 'pdot', 'aria-hidden': 'true' }),
+              el('span', { class: 'pname' }, s.name),
+              el('span', { class: 'pstate' }, buildStepStatus(s)),
+            )))
+        : null,
+    ),
+  );
+}
+
+/**
+ * The Build pipeline section. Returns [] when there is nothing to report, so the
+ * Build screen does not grow an empty box around a build nobody started.
+ */
+function viewPipeline() {
+  const P = S.pipeline;
+  if (!P || (!P.run && !P.polling)) return [];
+
+  const run = P.run;
+  const stages = pipelineStages(P.steps || [], stagesFor(run ? run.name : ''), run);
+
+  const head = el('div', { class: 'phead' },
+    el('span', { class: 'pill ' + (run && run.conclusion === 'success' ? 'pass' : (run && run.conclusion && run.conclusion !== 'success' ? 'fail' : 'warn')) },
+      run ? `${(run.conclusion || run.status || 'starting').toUpperCase()}` : 'STARTING'),
+    run && run.run_number ? el('span', { class: 'val' }, `Run #${run.run_number}`) : null,
+    run && run.html_url
+      ? el('a', { class: 'btn ghost small', href: run.html_url, target: '_blank', rel: 'noopener' }, 'Open the run')
+      : null,
+  );
+
+  const body = [
+    el('ol', { class: 'pipeline' }, ...stages.stages.map(stageNode)),
+  ];
+
+  if (stages.other.length) {
+    body.push(el('details', { class: 'pother' },
+      el('summary', {}, `${stages.other.length} step${stages.other.length === 1 ? '' : 's'} outside these stages`),
+      el('ul', { class: 'pstep-steps' },
+        ...stages.other.map((s) => el('li', { class: `s-${buildStepStatus(s)}` },
+          el('span', { class: 'pdot', 'aria-hidden': 'true' }),
+          el('span', { class: 'pname' }, s.name),
+          el('span', { class: 'pstate' }, buildStepStatus(s)),
+        ))),
+    ));
+  }
+
+  if (stages.absent.length) {
+    body.push(el('p', { class: 'hint' },
+      `Not part of this pipeline: ${stages.absent.join(', ')}. These stages exist in other workflows, not this one.`));
+  }
+
+  if (P.polling && (!run || run.status !== 'completed')) {
+    body.push(el('div', { class: 'skel skel-line', 'aria-hidden': 'true' }));
+    body.push(el('p', { class: 'hint' }, P.error
+      ? `Still waiting, but the last check failed: ${P.error}`
+      : 'Watching the run. Each stage moves when its real steps move.'));
+  }
+
+  return [card('Build pipeline', [head, ...body],
+    'The stages are the steps this workflow reported, grouped. Nothing here advances on a timer.')];
 }
 
 
