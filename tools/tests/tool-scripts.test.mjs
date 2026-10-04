@@ -432,16 +432,29 @@ test('no source lives in a directory that tools treat as generated output', () =
   const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
     .split('\n').filter(Boolean);
 
-  const offenders = [];
-  for (const file of tracked) {
-    // Output directories are allowed to be excluded from git rather than to
-    // appear in it: a file tracked under one of these names is the problem.
-    const parts = file.split('/');
-    const dirs = parts.slice(0, -1);
-    for (const d of dirs) {
-      if (FORBIDDEN.has(d)) offenders.push(`${file} (directory "${d}")`);
+    const offenders = [];
+    for (const file of tracked) {
+      // Output directories are allowed to be excluded from git rather than to
+      // appear in it: a file tracked under one of these names is the problem.
+      const parts = file.split('/');
+      const dirs = parts.slice(0, -1);
+      for (const d of dirs) {
+        if (FORBIDDEN.has(d)) offenders.push(`${file} (directory "${d}")`);
+      }
+      /* The top level is checked too, and that is not pedantry. `node_modules`
+         was committed as a symlink pointing at a directory inside one
+         developer's sandbox, and it slipped past this rule twice over: the
+         pattern in .gitignore had a trailing slash, which does not match a
+         symlink, and this loop only ever looked at the directories a path is
+         nested in — a root-level entry has none. The result was a repository
+         that hands every fresh clone a dangling symlink and makes the browser
+         test fail with "Cannot find package 'playwright-core'", which reads
+         like a missing dependency and is really a committed pointer to a
+         machine that does not exist. */
+      if (parts.length === 1 && FORBIDDEN.has(parts[0])) {
+        offenders.push(`${file} (top-level "${parts[0]}")`);
+      }
     }
-  }
   assert.deepEqual(offenders, [],
     `source tracked under a generated-output directory name:\n${offenders.join('\n')}`);
 });
