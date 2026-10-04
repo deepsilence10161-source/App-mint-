@@ -176,6 +176,9 @@ const S = {
   // The run the Studio started, plus the real steps GitHub has reported for
   // it. The stepper is drawn from this and from nothing else.
   pipeline: { run: null, steps: [], artifacts: [], polling: false, error: null },
+  // Which settings tab is open, and whether Advanced Mode is on. Kept for the
+  // life of the page rather than saved: it is a view state, not a decision.
+  settings: { tab: 'general', advanced: false },
   dirty: false,
 };
 
@@ -838,6 +841,7 @@ const TAB_DEFS = [
   ['caps', 'Features', I.caps, 'capabilities and the permissions they need'],
   ['preview', 'Preview', I.eye, 'the app drawn in your theme'],
   ['health', 'Health', I.gauge, 'score rings, and the checks behind each one'],
+  ['settings', 'Settings', I.sliders, 'raw configuration, signing, toolchain, diagnostics'],
   ['build', 'Build', I.build, 'validation findings, repairs, start a build'],
 ];
 
@@ -898,7 +902,7 @@ function projectMeta(spec) {
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
   $('#projmeta').textContent = projectMeta(S.active.spec);
-  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, health: viewHealth, build: viewBuild };
+  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, health: viewHealth, settings: viewSettings, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
   renderTabs();
@@ -1216,6 +1220,16 @@ window.__appmintBoot = boot;
 window.__appmintPipeline = (next) => {
   S.pipeline = next ? { artifacts: [], polling: false, error: null, ...next } : { run: null, steps: [], artifacts: [], polling: false, error: null };
   renderActive();
+};
+
+// The specification as the app holds it, so a verification can compare what a
+// screen displays against the object the build would read.
+window.__appmintSpec = () => JSON.parse(JSON.stringify(S.active ? S.active.spec : {}));
+
+// What is currently stopping a build, as the validator sees it.
+window.__appmintBlocking = () => {
+  const r = check();
+  return { blocked: r.blocked, codes: r.blocking.map((i) => i.code) };
 };
 
 window.__appmintHealth = () => {

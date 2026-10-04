@@ -66,6 +66,7 @@ const APP_MODULES = [
   'studio/src/repairs.js',
   'studio/src/viewHealth.js',
   'studio/src/viewPipeline.js',
+  'studio/src/viewSettings.js',
   // The palette is last because it calls into everything above it: the views,
   // the build, the repair history and the theme. Bundled into one scope the
   // order would not matter at call time, but listing it last says plainly that

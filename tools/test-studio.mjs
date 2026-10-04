@@ -95,13 +95,13 @@ async function main() {
   await page.waitForTimeout(250);
 
   const tabs = await page.locator('.tabbar .tab').count();
-  check('Opening a template reveals the six sections', tabs === 6, `found ${tabs} tabs`);
+  check('Opening a template reveals the seven sections', tabs === 7, `found ${tabs} tabs`);
 
   const health = (await page.textContent('#health')) || '';
   check('Health strip reports a verdict', /Valid|Blocked|Ready/.test(health), `health="${health.trim()}"`);
 
   /* ── every section renders ──────────────────────────────────────────── */
-  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Health', 'Project health'], ['Build', 'Validation']]) {
+  for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Health', 'Project health'], ['Settings', 'Advanced Mode'], ['Build', 'Validation']]) {
     await tapTab(page, label);
     const text = await page.textContent('#main');
     check(`Section "${label}" renders its content`, text.includes(expect), `looking for "${expect}"`);
@@ -201,6 +201,101 @@ async function main() {
       bannerText.includes('not measured') && unmeasured.every((n) => bannerText.includes(n)),
       `unmeasured: ${unmeasured.join(', ')}`);
   }
+
+  /* ── settings: raw configuration that is really the configuration ────────
+     The point of an Advanced Mode is that what it shows is what the build reads.
+     So the assertion is not that a panel appears; it is that the specification
+     in the panel is the project's specification, and that changing something
+     here changes what the validator says. */
+  await tapTab(page, 'Settings');
+
+  // Two screens can offer the same setting. When they do, the controls must not
+  // share an accessible name, or nothing - neither a person using a screen
+  // reader nor a test - can say which one it is addressing.
+  const dupes = await page.evaluate(() => {
+    const vis = [...document.querySelectorAll('input,select')]
+      .filter((n) => n.offsetParent !== null)
+      .map((n) => n.getAttribute('aria-label'))
+      .filter(Boolean);
+    return vis.filter((v, i) => vis.indexOf(v) !== i);
+  });
+  check('No two visible controls share an accessible name', dupes.length === 0, `duplicated: ${[...new Set(dupes)].join(', ')}`);
+
+  const subtabs = await page.locator('.subtab').count();
+  check('Settings is tabbed rather than one long scroll', subtabs === 5, `found ${subtabs} tabs`);
+
+  check('Advanced Mode is offered, with what it unlocks stated',
+    /Unlocks the raw configuration/.test(await page.textContent('#main')), 'the toggle must say what it does');
+
+  const advSwitch = page.locator('input[role="switch"][aria-label="Advanced Mode"]');
+  await advSwitch.check();
+  await page.waitForTimeout(350);
+
+  const raw = await page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('.rawbox')];
+    const spec = boxes.find((b) => /spec\.json/.test(b.querySelector('.rawname').textContent));
+    const manifest = boxes.find((b) => /AndroidManifest/.test(b.querySelector('.rawname').textContent));
+    return {
+      n: boxes.length,
+      parsed: spec ? JSON.parse(spec.querySelector('.raw').textContent) : null,
+      real: window.__appmintSpec(),
+      manifest: manifest ? manifest.querySelector('.raw').textContent : '',
+      gradle: boxes.some((b) => /gradle/i.test(b.querySelector('.rawname').textContent) && !/resolveToolchain/.test(b.querySelector('.rawname').textContent)),
+    };
+  });
+  check('Advanced Mode shows the specification the build actually reads',
+    raw.parsed && JSON.stringify(raw.parsed) === JSON.stringify(raw.real),
+    'the panel must be the project spec, not a summary of it');
+  check('The manifest permissions shown are derived, and match the capabilities enabled',
+    /uses-permission/.test(raw.manifest) || /no permissions/.test(raw.manifest),
+    raw.manifest.slice(0, 90));
+  check('No Gradle file is invented for the browser to show',
+    raw.gradle === false,
+    'the generator cannot run in a page, so an approximation would be a document that looks like the build without being it');
+
+  // Changing something here has to move the validator, or the screen is a form
+  // that goes nowhere.
+  await tapTab(page, 'Settings');
+  const sdkBefore = await page.evaluate(() => window.__appmintHealth().categories.find((c) => c.key === 'build').score);
+  // The section folds away closed, and its contents stay in the document while
+  // closed - hidden, not removed. So the control has to be opened before it can
+  // be typed into, exactly as a person would have to.
+  await page.locator('button.sec-head', { hasText: 'Android' }).click();
+  await page.waitForTimeout(250);
+  await page.locator('input[aria-label="Target Android version"]').fill('33');
+  await page.waitForTimeout(350);
+  const sdkAfter = await page.evaluate(() => {
+    const h = window.__appmintHealth();
+    const build = h.categories.find((c) => c.key === 'build');
+    return { score: build.score, play: build.checks.find((c) => /Play requirement/.test(c.name)).status };
+  });
+  check('Editing the target SDK in Settings is reported by the validator',
+    sdkAfter.play === 'warn' && sdkAfter.score < sdkBefore,
+    `build score ${sdkBefore} → ${sdkAfter.score}, Play check "${sdkAfter.play}"`);
+  await page.locator('input[aria-label="Target Android version"]').fill('36');
+  await page.waitForTimeout(300);
+
+  // Signing has a rule that blocks a build, and the screen should say so rather
+  // than let a person discover it at the end of a failed run.
+  await page.locator('.subtab', { hasText: 'Signing' }).click();
+  await page.waitForTimeout(300);
+  await page.locator('select[aria-label="Signing mode"]').selectOption('secret-store');
+  await page.waitForTimeout(300);
+  await page.locator('input[role="switch"][aria-label="Refuse to build if the keystore is missing"]').uncheck();
+  await page.waitForTimeout(400);
+  const signingWarned = await page.evaluate(() => ({
+    text: document.querySelector('#main').textContent,
+    ...window.__appmintBlocking(),
+    code: (window.__appmintBlocking().codes.find((c) => /SIGNING/.test(c)) || ''),
+  }));
+  check('A signing combination that blocks the build is explained on the screen',
+    signingWarned.blocked && /SIGNING/.test(signingWarned.code) && /blocked/i.test(signingWarned.text),
+    `blocked=${signingWarned.blocked} code=${signingWarned.code}`);
+
+  await page.locator('input[role="switch"][aria-label="Refuse to build if the keystore is missing"]').check();
+  await page.waitForTimeout(300);
+  await page.locator('select[aria-label="Signing mode"]').selectOption('debug');
+  await page.waitForTimeout(300);
 
   /* ── the build pipeline stepper ──────────────────────────────────────────
      A stepper is the easiest thing in the app to fake: eight words on a timer

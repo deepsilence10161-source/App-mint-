@@ -1602,3 +1602,92 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (prefers-reduced-motion: reduce) {
   .outcome-mark.ok .om-ring, .outcome-mark.ok .om-tick { animation: none; stroke-dashoffset: 0; }
 }
+
+/* ── settings ───────────────────────────────────────────────────────────────
+   A tabbed page rather than one long scroll, because on a phone a settings page
+   that opens everything at once puts whatever you came for below the fold.
+   ─────────────────────────────────────────────────────────────────────────── */
+.settingshead { display: flex; flex-direction: column; gap: var(--s3); }
+
+.subtabs { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.subtab {
+  flex: none;
+  min-height: 44px;
+  padding: 0 var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font: var(--t-label);
+  cursor: pointer;
+  transition: color var(--d-fast) var(--ease-out), border-color var(--d-fast) var(--ease-out), background var(--d-fast) var(--ease-out);
+}
+.subtab:hover { color: var(--fg); border-color: var(--line-2); }
+.subtab.on { color: var(--brand-ink, var(--fg)); border-color: var(--accent-line, var(--line-2)); background: var(--surface-3); font-weight: 600; }
+
+.advbar {
+  display: flex; align-items: center; gap: var(--s4); justify-content: space-between;
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.advtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.advtext strong { font: 500 14.5px/1.4 var(--font-ui); color: var(--fg); }
+.advtext span { font: var(--t-label); color: var(--fg-2); }
+
+.optlist { display: flex; flex-direction: column; gap: var(--s2); }
+
+.ptable { width: 100%; border-collapse: collapse; font: var(--t-label); }
+.ptable th {
+  text-align: left; font-weight: 600; color: var(--fg-2);
+  padding: var(--s2) var(--s3) var(--s2) 0;
+  border-bottom: 1px solid var(--line-2);
+  text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px;
+}
+.ptable td { padding: var(--s2) var(--s3) var(--s2) 0; border-bottom: 1px solid var(--line); color: var(--fg-2); vertical-align: top; }
+.ptable td code { font: var(--t-code); color: var(--fg); }
+
+.dropped { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); font: var(--t-label); color: var(--fg-2); }
+.dropped code { font: var(--t-code); color: var(--fg); }
+
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) var(--s4); margin: 0; font: var(--t-label); }
+.kv dt { color: var(--fg-2); }
+.kv dd { margin: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.diag { list-style: none; margin: var(--s3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.diag li {
+  display: grid; grid-template-columns: auto auto 1fr; gap: var(--s3); align-items: baseline;
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid var(--line-2);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: var(--surface-2);
+  font: var(--t-label);
+}
+.diag li code { font: var(--t-code); }
+.diag li .dpath { color: var(--fg-3); }
+.diag li .dmsg { color: var(--fg-2); }
+.diag li.s-critical, .diag li.s-error { border-left-color: var(--bad); }
+.diag li.s-warning { border-left-color: var(--warn); }
+.diag li.s-info { border-left-color: var(--info); }
+
+/* Advanced Mode: something computed, shown as it is. */
+.rawbox { border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); overflow: hidden; }
+.rawhead {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.rawname { font: 500 13.5px/1.4 var(--font-ui); color: var(--fg); min-width: 0; }
+.rawbox .hint { padding: var(--s3) var(--s4) 0; }
+.raw {
+  margin: 0; padding: var(--s4);
+  max-height: 340px; overflow: auto;
+  font: var(--t-code); font-size: 12px;
+  color: var(--fg-2);
+  white-space: pre; tab-size: 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtab { transition: none; }
+}
