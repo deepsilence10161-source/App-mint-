@@ -1337,8 +1337,115 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 .wv-finding .ev { margin-top: 6px; font-size: .85rem; color: var(--fg-3); }
 .wv-finding .ev ul { margin: 6px 0 0; padding-left: 1.1rem; }
 .wv-finding .ev li { word-break: break-all; }
+
+/* ── health: score rings ────────────────────────────────────────────────────
+   The arc is the score and the list under "Why this score?" is the reason for
+   it. Both are drawn from engine/spec/health.mjs, so a ring cannot disagree
+   with the findings on the Build screen. Nothing here hardcodes a colour: the
+   band classes only pick between tokens, which is also why the light theme
+   needs no separate rules.
+   ─────────────────────────────────────────────────────────────────────────── */
+.rings {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.ringcard { gap: var(--s4); }
+.ringcard.band-good  { border-color: var(--ok-line); }
+.ringcard.band-fair  { border-color: var(--warn-line); }
+.ringcard.band-poor  { border-color: var(--bad-line); }
+
+.ringhead { display: flex; align-items: center; gap: var(--s4); }
+
+.ring { position: relative; display: grid; place-items: center; width: 64px; height: 64px; flex: none; }
+.ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: var(--surface-3); stroke-width: 6; }
+.ring-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--d-slow) var(--ease-out);
+}
+.ring-num { font: 600 17px/1 var(--font-ui); font-variant-numeric: tabular-nums; color: var(--fg); }
+
+.ring.band-good { color: var(--ok); }
+.ring.band-fair { color: var(--warn); }
+.ring.band-poor { color: var(--bad); }
+.ring.band-none { color: var(--fg-3); }
+.ring.band-none .ring-num { color: var(--fg-3); }
+
+.ringmeta { min-width: 0; }
+.ringname { font: var(--t-h3); margin: 0 0 2px; }
+.ringsub { font: var(--t-label); color: var(--fg-2); margin: 0; }
+
+.overall { display: flex; align-items: center; gap: var(--s5); }
+.overall .ring { width: 96px; height: 96px; }
+.overall .ring-num { font-size: 26px; }
+.overall .ringname { font: var(--t-h2); }
+
+/* "Why this score?" — the point of the whole screen. */
+.why-box { border-top: 1px solid var(--line); padding-top: var(--s3); }
+.why-box > summary {
+  font: var(--t-label);
+  color: var(--fg-2);
+  cursor: pointer;
+  list-style: none;
+  padding: var(--s2) 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.why-box > summary::-webkit-details-marker { display: none; }
+.why-box > summary::before {
+  content: '';
+  width: 6px; height: 6px;
+  margin-right: var(--s2);
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--d-fast) var(--ease-out);
+}
+.why-box[open] > summary::before { transform: rotate(45deg); }
+.why-box > summary:hover { color: var(--fg); }
+
+.why { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+.why-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: var(--s3);
+  align-items: start;
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--line);
+}
+.why-mark { width: 8px; height: 8px; margin-top: 6px; border-radius: var(--r-full); background: currentColor; }
+.why-row.s-pass { color: var(--ok); }
+.why-row.s-warn { color: var(--warn); }
+.why-row.s-fail { color: var(--bad); }
+.why-main { min-width: 0; color: var(--fg); }
+.why-name { display: block; font: var(--t-body); }
+.why-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
+.why-tag {
+  font: var(--t-label);
+  color: currentColor;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px var(--s2);
+  border: 1px solid currentColor;
+  border-radius: var(--r-full);
+  opacity: 0.85;
+}
+.why-none { font: var(--t-body); color: var(--fg-2); margin: 0; padding-top: var(--s2); }
+
+.banner.info { border-color: var(--info-line); background: var(--info-soft); }
+.banner.info strong { color: var(--info-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-arc, .why-box > summary::before { transition: none; }
+}
 </style>
-<meta name="appmint-build" content="f7709564f3f4770d">
+<meta name="appmint-build" content="bf62812d6fd33f7e">
 </head>
 <body>
 
@@ -3366,6 +3473,249 @@ function permissionReport(spec) {
     dropped,
     total: rows.length,
     prompts: rows.filter((r) => r.prompt === 'Yes').length,
+  };
+}
+
+
+/* ═══ engine/spec/health.mjs ═══ */
+/* ============================================================================
+   PROJECT HEALTH — a score that can be argued with
+   ----------------------------------------------------------------------------
+   The design prompt asks for a health dashboard and then says the thing that
+   makes it worth building: "Do not invent arbitrary scores. Every score must be
+   calculated from measurable checks," and a person must be able to open "Why
+   this score?" and see the exact checks.
+
+   So a score here is not a number that was chosen. It is the outcome of a list
+   of named checks, each of which passes, warns or fails for a stated reason, and
+   the score is derived from that list by one rule that applies to every category
+   alike. Two consequences follow, and both are the point:
+
+     · a score can always be explained, because the checks are the explanation;
+     · a score can be disagreed with, because the checks are visible and a person
+       who thinks a check is wrong can say which one.
+
+   And where there is nothing to measure, the category says so and scores
+   nothing. A dashboard full of confident numbers, several of which were made up
+   to fill the grid, teaches people to ignore all of them.
+
+   Inputs are the specification and the result of validateSpec — the same call
+   the CLI, CI and the Studio already make. Nothing here re-validates, because a
+   second validator would eventually disagree with the first and nobody would
+   know which to believe.
+   ========================================================================= */
+
+/** What a single check decided, and why. */
+function pass(name, detail) { return { name, status: 'pass', detail }; }
+function warn(name, detail) { return { name, status: 'warn', detail }; }
+function fail(name, detail) { return { name, status: 'fail', detail }; }
+
+/** Findings belonging to one validation layer. */
+function layerIssues(result, n) {
+  return (result.byLayer && result.byLayer[n] && result.byLayer[n].issues) || [];
+}
+
+function blockingIn(result, n) {
+  return layerIssues(result, n).filter((i) => i.severity === 'critical' || i.severity === 'error');
+}
+
+/* ── categories ──────────────────────────────────────────────────────────────
+   Each returns a list of checks. A category with no checks scores null, and the
+   interface shows "nothing to measure" rather than a reassuring 100.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+function buildHealth(spec, result) {
+  const checks = [];
+  const a = spec.android || {};
+
+  checks.push(result.blocked
+    ? fail('The specification validates',
+        `${result.blocking.length} blocking problem(s): ${result.blocking.slice(0, 3).map((i) => i.code).join(', ')}`)
+    : pass('The specification validates', 'All five validation layers passed.'));
+
+  if (Number.isFinite(a.minSdk) && Number.isFinite(a.targetSdk)) {
+    checks.push(a.minSdk <= a.targetSdk
+      ? pass('Minimum SDK is not above the target', `minSdk ${a.minSdk} ≤ targetSdk ${a.targetSdk}`)
+      : fail('Minimum SDK is not above the target', `minSdk ${a.minSdk} > targetSdk ${a.targetSdk} — no device can install this`));
+  }
+
+  // Google Play has required API 36 for new apps and updates since 31 Aug 2026.
+  if (Number.isFinite(a.targetSdk)) {
+    checks.push(a.targetSdk >= 36
+      ? pass('Target SDK meets the Play requirement', `targetSdk ${a.targetSdk}`)
+      : warn('Target SDK meets the Play requirement',
+          `targetSdk ${a.targetSdk} is below the API 36 that Play requires for new apps and updates`));
+  }
+
+  if (spec.identity && spec.identity.packageName) {
+    checks.push(pass('Package name is present', spec.identity.packageName));
+  } else {
+    checks.push(fail('Package name is present', 'No package name is set.'));
+  }
+
+  const mode = (spec.app || {}).mode;
+  if (mode) checks.push(pass('Architecture is chosen', mode));
+
+  return checks;
+}
+
+function securityHealth(spec, result) {
+  const checks = [];
+  const a = spec.android || {};
+  const wv = ((spec.app || {}).webview) || {};
+
+  // Layer 4 is the security layer: unsafe schemes, signing that is not
+  // fail-closed, secrets committed into the specification.
+  const sec = blockingIn(result, 4);
+  checks.push(sec.length
+    ? fail('The security layer found nothing blocking', sec.map((i) => i.code).join(', '))
+    : pass('The security layer found nothing blocking', 'No unsafe scheme, no fail-open signing, no secret in the specification.'));
+
+  checks.push(a.cleartextTraffic
+    ? fail('Cleartext HTTP is off', 'Cleartext traffic is enabled, so traffic can be read or altered in transit.')
+    : pass('Cleartext HTTP is off', 'Traffic is required to be encrypted.'));
+
+  checks.push(a.allowBackup
+    ? warn('App data is not backed up', 'allowBackup is on: app data can be extracted with adb on a device with USB debugging.')
+    : pass('App data is not backed up', 'allowBackup is off.'));
+
+  // The JavaScript bridge is the widest surface in a WebView app, so it is only
+  // acceptable when something needs it.
+  if (wv.javascriptEnabled) {
+    checks.push(warn('The JavaScript bridge is off unless needed',
+      'JavaScript is enabled in the WebView. Every method exposed to a page is attack surface.'));
+  } else {
+    checks.push(pass('The JavaScript bridge is off unless needed', 'JavaScript is disabled.'));
+  }
+
+  const hosts = wv.allowedHosts;
+  if ((spec.app || {}).mode === 'webview' || (spec.app || {}).mode === 'hybrid') {
+    checks.push(Array.isArray(hosts) && hosts.length
+      ? pass('Navigation is limited to named hosts', `${hosts.length} host(s) allowlisted`)
+      : warn('Navigation is limited to named hosts', 'No allowlist, so any host the app reaches can be loaded.'));
+  }
+
+  return checks;
+}
+
+function dependencyHealth(spec, result) {
+  const checks = [];
+  const dep = blockingIn(result, 3);
+  checks.push(dep.length
+    ? fail('Nothing references a capability or screen that is not there', dep.map((i) => i.code).join(', '))
+    : pass('Nothing references a capability or screen that is not there', 'Every capability, screen and navigation target exists.'));
+
+  const caps = Array.isArray(spec.capabilities) ? spec.capabilities : [];
+  checks.push(pass('Capabilities are declared', caps.length ? `${caps.length}: ${caps.join(', ')}` : 'none enabled'));
+  return checks;
+}
+
+function permissionHealth(spec, report) {
+  const checks = [];
+  if (!report) return checks;
+
+  checks.push(report.total === 0
+    ? warn('The app declares the permissions it needs', 'No permissions at all — unusual unless the app does nothing.')
+    : pass('The app declares the permissions it needs', `${report.total} permission(s), each traced to a capability.`));
+
+  // Every permission that is not requested is a smaller attack surface, and the
+  // engine reports those deliberately rather than staying quiet about them.
+  const dropped = Array.isArray(report.dropped) ? report.dropped.length : 0;
+  checks.push(dropped
+    ? pass('Unneeded permissions are refused', `${dropped} permission(s) deliberately not requested`)
+    : warn('Unneeded permissions are refused', 'Nothing was refused — check that capabilities are not over-enabled.'));
+
+  checks.push(report.prompts === 0
+    ? pass('No runtime prompt is needed at first launch', 'Nothing is requested at runtime.')
+    : warn('No runtime prompt is needed at first launch',
+        `${report.prompts} permission(s) prompt the user, and a refusal has to be handled`));
+
+  return checks;
+}
+
+function backendHealth(spec) {
+  const b = spec.backend;
+  if (!b || !b.kind || b.kind === 'none') return [];   // nothing configured: nothing to score
+  const checks = [];
+  checks.push(pass('A backend is configured', String(b.kind)));
+  if (b.url) checks.push(/^https:/i.test(String(b.url))
+    ? pass('The backend is reached over HTTPS', String(b.url))
+    : fail('The backend is reached over HTTPS', String(b.url)));
+  return checks;
+}
+
+/* ── scoring ───────────────────────────────────────────────────────────────── */
+
+/**
+ * One rule for every category, so a score means the same thing everywhere.
+ *
+ * A failing check dominates, and deliberately so: a category with one failure
+ * lands in the "poor" band however many things passed. The first version of this
+ * scaled failures gently by how many checks there were, which let a category
+ * with a blocking failure among nine passed checks read as 65 — "fair" — and
+ * that is a dashboard telling you something untrue. What passed is not
+ * consolation for the one thing that will stop the build.
+ */
+function scoreChecks(checks) {
+  if (!checks || !checks.length) return null;
+  const failed = checks.filter((c) => c.status === 'fail').length;
+  const warned = checks.filter((c) => c.status === 'warn').length;
+  if (failed) return Math.max(0, Math.round(100 * (1 - failed / checks.length) * 0.4));
+  if (warned) return Math.round(100 - 60 * (warned / checks.length));
+  return 100;
+}
+
+function bandOf(score) {
+  if (score === null) return 'none';
+  if (score >= 85) return 'good';
+  if (score >= 60) return 'fair';
+  return 'poor';
+}
+
+/**
+ * The whole dashboard. `validation` is the result of validateSpec and `report`
+ * the result of permissionReport; both are already computed by every caller, so
+ * nothing is validated twice and the numbers cannot disagree with the Build
+ * screen.
+ */
+function projectHealth(spec, validation, report) {
+  const s = spec || {};
+  const categories = [
+    { key: 'build',      label: 'Build',      checks: buildHealth(s, validation) },
+    { key: 'security',   label: 'Security',   checks: securityHealth(s, validation) },
+    { key: 'dependency', label: 'Dependency', checks: dependencyHealth(s, validation) },
+    { key: 'permission', label: 'Permission', checks: permissionHealth(s, report) },
+    { key: 'backend',    label: 'Backend',    checks: backendHealth(s) },
+  ];
+
+  for (const c of categories) {
+    c.score = scoreChecks(c.checks);
+    c.band = bandOf(c.score);
+    c.failing = c.checks.filter((x) => x.status === 'fail').length;
+    c.warning = c.checks.filter((x) => x.status === 'warn').length;
+  }
+
+  const scored = categories.filter((c) => c.score !== null);
+  return {
+    categories,
+    // An overall number is the weakest measured category, not the average of
+    // them. The first version averaged, and a blank specification — build
+    // scoring 0 because it has no package name and will not compile — reported
+    // an overall of 65, "fair", because four other categories were happy. A
+    // dashboard that can describe a project which cannot build as fair is worse
+    // than no dashboard: it has been read and believed.
+    //
+    // Taking the minimum is also the only rule here that invents nothing. Any
+    // weighted average needs weights, and there is no measurement that says
+    // security is worth 30% and permissions 10%. The minimum needs no opinion,
+    // and it matches the rule already used inside a category, where one failing
+    // check dominates the rest.
+    overall: scored.length ? Math.min(...scored.map((c) => c.score)) : null,
+    weakest: scored.length
+      ? scored.reduce((worst, c) => (c.score < worst.score ? c : worst), scored[0]).key
+      : null,
+    measured: scored.length,
+    unmeasured: categories.length - scored.length,
   };
 }
 
@@ -6265,6 +6615,7 @@ const I = {
   design: '<path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/>',
   caps: '<path d="M12 3l8 4v6c0 4-3.4 6.6-8 8-4.6-1.4-8-4-8-8V7z"/>',
   eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/>',
+  gauge: '<path d="M20 15a8 8 0 1 0-16 0"/><path d="m12 15 3.5-4.5"/><circle cx="12" cy="15" r="1.4"/>',
   build: '<path d="M12 3v11"/><path d="M7.5 9.5L12 14l4.5-4.5"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
   briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2"/>',
@@ -6999,6 +7350,7 @@ const TAB_DEFS = [
   ['screens', 'Screens', I.layers, 'screen designer, components, layout'],
   ['caps', 'Features', I.caps, 'capabilities and the permissions they need'],
   ['preview', 'Preview', I.eye, 'the app drawn in your theme'],
+  ['health', 'Health', I.gauge, 'score rings, and the checks behind each one'],
   ['build', 'Build', I.build, 'validation findings, repairs, start a build'],
 ];
 
@@ -7059,7 +7411,7 @@ function projectMeta(spec) {
 function renderActive() {
   $('#projname').textContent = S.active.spec.identity.appName || 'Untitled';
   $('#projmeta').textContent = projectMeta(S.active.spec);
-  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, build: viewBuild };
+  const pages = { design: viewDesign, screens: viewScreens, caps: viewCaps, preview: viewPreview, health: viewHealth, build: viewBuild };
   const page = pages[S.tab] || viewDesign;
   main.replaceChildren(el('div', { class: 'tabpage on' }, ...page().filter(Boolean)));
   renderTabs();
@@ -7308,6 +7660,16 @@ async function boot(templatesData) {
 }
 
 window.__appmintBoot = boot;
+
+// The Health screen prints a score for every category. A test can only check
+// those numbers against the engine if it can reach the engine, so the functions
+// behind the rings are exposed here — the same way boot is. Without this the
+// only available test is "a number was printed", which passes just as happily
+// once the UI and the engine have quietly drifted apart.
+window.__appmintHealth = () => {
+  const spec = S.active ? S.active.spec : {};
+  return projectHealth(spec, check(), permissionReport(spec));
+};
 
 
 /* ═══ studio/src/repairs.js ═══ */
@@ -7594,6 +7956,144 @@ function undoAll(ctx) {
   ctx.onSay(failed
     ? `Undid ${undone}. ${failed} could not be undone — those fields have changed since.`
     : `Undid every repair (${undone}). The project is back to how it was before them.`);
+}
+
+
+/* ═══ studio/src/viewHealth.js ═══ */
+/* ============================================================================
+   HEALTH — score rings, and the answer to "why?"
+   ----------------------------------------------------------------------------
+   The design prompt asks for score rings and then adds the part that decides
+   whether they are worth anything: a person has to be able to open "Why this
+   score?" and see the checks. A ring with no explanation is decoration, and a
+   room full of decorative numbers teaches people to ignore all of them.
+
+   So every ring here is drawn from engine/spec/health.mjs, which derives its
+   scores from validateSpec and permissionReport — the same two calls the Build
+   screen, the CLI and CI already make. Nothing is calculated twice, which means
+   the number on this screen cannot drift from the one in the build report, and
+   each ring expands into the exact list of checks, each with the reason it
+   passed, warned or failed.
+
+   A category with nothing to measure shows a dash and says so. It does not show
+   a reassuring 100 for a thing nobody configured.
+   ========================================================================= */
+
+const RING_R = 26;
+const RING_C = 2 * Math.PI * RING_R;
+
+/** A score as a ring. The arc length is the score; nothing else is implied. */
+function scoreRing(score, band) {
+  const frac = score === null ? 0 : Math.max(0, Math.min(100, score)) / 100;
+  const dash = RING_C * frac;
+  return el('span', { class: `ring band-${band}`, role: 'img', 'aria-label': score === null ? 'Nothing to measure' : `Score ${score} of 100` },
+    el('span', {
+      html: `<svg viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="ring-track" cx="32" cy="32" r="${RING_R}"/>
+        <circle class="ring-arc" cx="32" cy="32" r="${RING_R}"
+          stroke-dasharray="${dash.toFixed(2)} ${(RING_C - dash).toFixed(2)}"/>
+      </svg>`,
+    }),
+    el('span', { class: 'ring-num' }, score === null ? '—' : String(score)),
+  );
+}
+
+/** The list behind "Why this score?" — one row per check, with its reason. */
+function whyList(category) {
+  if (!category.checks.length) {
+    return el('p', { class: 'why-none' },
+      'Nothing to measure. This category scores no number at all rather than a score invented to fill the grid.');
+  }
+  return el('ul', { class: 'why' },
+    ...category.checks.map((c) => el('li', { class: `why-row s-${c.status}` },
+      el('span', { class: 'why-mark', 'aria-hidden': 'true' }),
+      el('span', { class: 'why-main' },
+        el('span', { class: 'why-name' }, c.name),
+        el('span', { class: 'why-detail' }, c.detail),
+      ),
+      el('span', { class: 'why-tag' }, c.status),
+    )));
+}
+
+function ringCard(category) {
+  const counts = [];
+  if (category.failing) counts.push(`${category.failing} failing`);
+  if (category.warning) counts.push(`${category.warning} warning${category.warning === 1 ? '' : 's'}`);
+  if (!counts.length && category.checks.length) counts.push(`${category.checks.length} checks passed`);
+  if (!category.checks.length) counts.push('not configured');
+
+  return el('article', { class: `card ringcard band-${category.band}` },
+    el('div', { class: 'ringhead' },
+      scoreRing(category.score, category.band),
+      el('div', { class: 'ringmeta' },
+        el('h3', { class: 'ringname' }, category.label),
+        el('p', { class: 'ringsub' }, counts.join(' · ')),
+      ),
+    ),
+    el('details', { class: 'why-box' },
+      el('summary', {}, 'Why this score?'),
+      whyList(category),
+    ),
+  );
+}
+
+/** The Health section. */
+function viewHealth() {
+  const spec = S.active ? S.active.spec : {};
+  const validation = check();
+  const report = permissionReport(spec);
+  const health = projectHealth(spec, validation, report);
+
+  const weakest = health.categories.find((c) => c.key === health.weakest);
+
+  const overallText = health.overall === null
+    ? 'Nothing is measurable yet, so there is no overall number to show.'
+    : `The weakest of the ${health.measured} measured categor${health.measured === 1 ? 'y' : 'ies'}` +
+      (weakest ? `, which is ${weakest.label}` : '') +
+      '. Not an average — an average hides the one thing that will stop the build.';
+
+  const out = [
+    section('Project health', {
+      icon: I.gauge,
+      open: true,
+      summary: `${health.measured} measured · ${health.unmeasured} not measured`,
+      children: [
+        el('div', { class: 'rings' }, ...health.categories.map(ringCard)),
+      ],
+    }),
+
+    // The overall number is the weakest measured category, not an average of
+    // them. An average let a specification that cannot build report a
+    // comfortable score because four other categories were content with it.
+    section('The overall number', {
+      icon: I.spark,
+      open: true,
+      summary: overallText,
+      children: [
+        el('div', { class: 'overall' },
+          scoreRing(health.overall, bandOf(health.overall)),
+          el('div', { class: 'ringmeta' },
+            el('h3', { class: 'ringname' }, health.overall === null ? 'No score' : `${health.overall} / 100`),
+            el('p', { class: 'ringsub' },
+              health.overall === null
+                ? 'Configure something measurable first.'
+                : `${health.measured} measured · ${health.unmeasured} not measured` +
+                  (weakest ? ` · weakest: ${weakest.label} at ${weakest.score}` : '')),
+          ),
+        ),
+      ],
+    }),
+  ];
+
+  if (health.unmeasured) {
+    const names = health.categories.filter((c) => c.score === null).map((c) => c.label);
+    out.push(el('div', { class: 'banner info' }, el('div', {}, [
+      el('strong', {}, `${health.unmeasured} categor${health.unmeasured === 1 ? 'y' : 'ies'} not measured: ${names.join(', ')}. `),
+      'Left blank on purpose. A score with nothing behind it is worse than no score, because it gets read and believed.',
+    ])));
+  }
+
+  return out;
 }
 
 
