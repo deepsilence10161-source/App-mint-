@@ -629,18 +629,27 @@ async function main() {
     } catch (e) { return false; }
   }, null, { timeout: 5000 });
 
+  /**
+   * Reload and wait for boot() to finish, rather than for a fixed delay.
+   *
+   * The header says "Loading…" until the bundle has parsed, so reading anything
+   * before then reads the markup rather than the app. Three checks lost that
+   * race on the slower CI runner; the bundle has only got bigger since, so the
+   * delays are gone and this is what every reload waits for.
+   */
+  async function reloadAndWait() {
+    await page.reload({ waitUntil: 'load' });
+    await page.waitForFunction(
+      () => {
+        const t = ((document.querySelector('#projname') || {}).textContent || '');
+        return t.length > 0 && !/Loading/i.test(t);
+      },
+      null, { timeout: 20000 },
+    );
+  }
+
   /* ── persistence ────────────────────────────────────────────────────── */
-  await page.reload({ waitUntil: 'load' });
-  // Wait for the header to actually carry the name rather than for a fixed
-  // delay. It still says "Loading…" until boot() has parsed the bundle, and a
-  // guess at how long that takes passed here and failed on the slower CI runner
-  // with an empty header - blaming the product for the test's own timing. The
-  // question this check asks is whether the work survived, not how fast the
-  // bundle parses, so it waits for the answer instead of racing for it.
-  await page.waitForFunction(
-    () => ((document.querySelector('#projname') || {}).textContent || '').includes('Phone Test App'),
-    null, { timeout: 20000 },
-  ).catch(() => { /* the assertion below reports it, with the header as it stood */ });
+  await reloadAndWait();
   const afterReload = await page.textContent('#projname');
   check('Work survives a reload', afterReload.includes('Phone Test App'), `header="${afterReload}"`);
 
@@ -1061,8 +1070,7 @@ const external = [];
     `bg ${flipped.bg} vs text ${flipped.fg}`);
 
   // A preference that is forgotten on reload is not a preference.
-  await page.reload({ waitUntil: 'load' });
-  await page.waitForTimeout(400);
+  await reloadAndWait();
   const afterReloadTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
   check('The colour mode survives a reload', afterReloadTheme === flipped.attr,
     `was ${flipped.attr}, came back as ${afterReloadTheme}`);
@@ -1191,8 +1199,7 @@ const external = [];
       localStorage.setItem('appmint.projects.v1', JSON.stringify(list));
       localStorage.setItem('appmint.active.v1', p.id);
     });
-    await page.reload();
-    await page.waitForTimeout(500);
+    await reloadAndWait();
     await tapTab(page, 'Build');
   }
 
