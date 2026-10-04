@@ -631,7 +631,16 @@ async function main() {
 
   /* ── persistence ────────────────────────────────────────────────────── */
   await page.reload({ waitUntil: 'load' });
-  await page.waitForTimeout(400);
+  // Wait for the header to actually carry the name rather than for a fixed
+  // delay. It still says "Loading…" until boot() has parsed the bundle, and a
+  // guess at how long that takes passed here and failed on the slower CI runner
+  // with an empty header - blaming the product for the test's own timing. The
+  // question this check asks is whether the work survived, not how fast the
+  // bundle parses, so it waits for the answer instead of racing for it.
+  await page.waitForFunction(
+    () => ((document.querySelector('#projname') || {}).textContent || '').includes('Phone Test App'),
+    null, { timeout: 20000 },
+  ).catch(() => { /* the assertion below reports it, with the header as it stood */ });
   const afterReload = await page.textContent('#projname');
   check('Work survives a reload', afterReload.includes('Phone Test App'), `header="${afterReload}"`);
 
