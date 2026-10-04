@@ -35,9 +35,13 @@ What you can do in it:
 | Section | What it does |
 |---|---|
 | **Design** | Name, package, colours, website address or bundled page |
+| **Screens** | Build screens from the component library: a palette, a tree, properties, and a preview drawn from the same metrics the Android renderer uses |
 | **Features** | Turn native capabilities on and off; the permission table updates itself |
 | **Preview** | Portrait/landscape and light/dark, drawn from your theme |
 | **Build** | Run the five validation layers, see every finding with the exact field, fix what can be fixed safely, and start a build |
+
+Dark mode is the default and light mode is one tap away in the top bar; the
+Studio follows your system setting until you say otherwise.
 
 There is only ever **one** project state. The Studio edits the Project
 Specification directly — the same object the CLI and CI read — so the editor and
@@ -169,15 +173,21 @@ compile SDK 36. So the toolchain is a compliance question, not a preference.
 
 ## Honest limitations
 
-- The Studio edits the app as a whole (identity, theme, capabilities, content
-  source). It does **not** yet have a drag-and-drop screen designer or the
-  component library — `native-screens` mode is still schema-only.
-- The Studio can create a project and change it, but there is no screen-by-screen
-  builder yet, so a native-screens app cannot be assembled visually.
+- The screen designer is tap-driven, not drag-driven. You add a component from
+  the palette and edit it in the tree; there is no drag-and-drop reordering, no
+  snapping guides, and no undo/redo inside the designer. Repairs made on the
+  Build screen *are* journaled and undoable — the designer is not.
+- There is no command palette (`Ctrl+K`) and no build pipeline stepper or live log
+  console; the Build screen reports findings and the state of a run, and stops
+  there.
+- Light mode is a complete set of token overrides with a control in the top bar
+  that remembers your choice. It passes the contrast gate in both themes, but it
+  has not been reviewed by a person, and token parity is necessary rather than
+  sufficient: a palette that measures well can still look unfinished.
 - No emulator can run inside the development sandbox used to build this (no KVM),
   so device testing happens on GitHub Actions or on a real phone.
-- `native-screens` mode is defined in the schema but the component library behind
-  it is not implemented yet. WebView, PWA and hybrid modes are.
+- There are no performance measurements anywhere in this repository. Until there
+  are, no claim about speed is made here and none should be believed.
 - Local build toolchains are not preserved between sessions; they reinstall in
   about 25 seconds.
 - Backend integration is specified but not yet generated: `backend.kind` is

@@ -102,6 +102,7 @@ const LS_PROJECTS = 'appmint.projects.v1';
 const LS_ACTIVE = 'appmint.active.v1';
 const LS_TOKEN = 'appmint.token.v1';       // lives only in this browser
 const LS_REPO = 'appmint.repo.v1';
+const LS_THEME = 'appmint.theme.v1';      // 'auto' | 'dark' | 'light'
 
 const store = {
   load() {
@@ -115,7 +116,42 @@ const store = {
   setToken(t) { try { t ? localStorage.setItem(LS_TOKEN, t) : localStorage.removeItem(LS_TOKEN); } catch { /* ignore */ } },
   repo() { try { return localStorage.getItem(LS_REPO) || ''; } catch { return ''; } },
   setRepo(r) { try { localStorage.setItem(LS_REPO, r); } catch { /* ignore */ } },
+  theme() { try { return localStorage.getItem(LS_THEME) || 'auto'; } catch { return 'auto'; } },
+  setTheme(t) { try { localStorage.setItem(LS_THEME, t); } catch { /* ignore */ } },
 };
+
+/* ── theme ───────────────────────────────────────────────────────────────
+   The whole palette is a set of tokens, so switching theme is one attribute on
+   the root element and nothing else — no second stylesheet, no redraw, no
+   component that has to be told.
+
+   The default is the system setting rather than a house preference: someone who
+   has their phone in light mode should not have to find a toggle to stop this
+   tool glaring at them, and someone in dark mode should not get a white screen
+   at night. The override exists because a preference is not a prediction. */
+const systemTheme = () => (
+  window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+);
+
+function applyTheme(choice) {
+  const resolved = choice === 'auto' ? systemTheme() : choice;
+  document.documentElement.setAttribute('data-theme', resolved);
+  document.documentElement.style.colorScheme = resolved;
+  const btn = document.getElementById('themebtn');
+  if (btn) {
+    const next = resolved === 'light' ? 'dark' : 'light';
+    btn.setAttribute('aria-label', `Switch to ${next} mode`);
+    btn.textContent = next === 'light' ? 'Light mode' : 'Dark mode';
+  }
+  return resolved;
+}
+
+function cycleTheme() {
+  const now = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+  store.setTheme(now);
+  applyTheme(now);
+  toast(now === 'light' ? 'Light mode' : 'Dark mode');
+}
 
 /* ── application state ─────────────────────────────────────────────────── */
 const S = {
@@ -421,7 +457,10 @@ function viewPreview() {
   const bg = isDark ? th.background : lighten(th.background);
   const fg = isDark ? th.onSurface : darken(th.onSurface);
 
-  const screen = el('div', { class: 'screen' }, [
+  /* `app-screen` is what separates this frame — which is standing in for YOUR
+     app and must wear its colours — from `.screen` elsewhere in the Studio,
+     which is a panel of the tool itself and must not. */
+  const screen = el('div', { class: 'screen app-screen' }, [
     el('div', { class: 'sbar' },
       el('span', {}, '9:41'),
       el('span', { class: 'icons' }, [
@@ -457,6 +496,15 @@ function viewPreview() {
   screen.style.setProperty('--pv-primary', th.primary);
   screen.style.setProperty('--pv-onprimary', th.onPrimary || '#fff');
   screen.style.setProperty('--pv-sb', isDark ? bg : '#111');
+  /* The frame has to be dressed in the APP's palette, not this tool's. These
+     were already being set, but no rule read them, so the preview drew the
+     tool's grey surfaces inside a frame that was supposed to be showing your
+     app — the one screen where that mistake is most expensive, because the
+     whole point of it is to show what you chose. */
+  screen.style.setProperty('--pv-surface', th.surface || '#F9FAFB');
+  screen.style.setProperty('--pv-line', withAlpha(fg, 0.14));
+  screen.style.setProperty('--pv-muted', withAlpha(fg, 0.62));
+  screen.style.setProperty('--pv-wash', withAlpha(fg, 0.08));
 
   const device = el('div', {
     class: 'device' + (S.preview.orientation === 'landscape' ? ' landscape' : ''),
@@ -1041,6 +1089,18 @@ async function boot(templatesData) {
 
   $('#newproj').addEventListener('click', () => { renderPicker(); });
   $('#importproj').addEventListener('click', importSpec);
+  $('#themebtn').addEventListener('click', cycleTheme);
+
+  // Follow the system until the person says otherwise, then remember what they
+  // said — including across a reload, which is when an unremembered preference
+  // is most annoying.
+  applyTheme(store.theme());
+  if (window.matchMedia) {
+    try {
+      window.matchMedia('(prefers-color-scheme: light)')
+        .addEventListener('change', () => { if (store.theme() === 'auto') applyTheme('auto'); });
+    } catch { /* older browsers: the initial read still applies */ }
+  }
 }
 
 window.__appmintBoot = boot;

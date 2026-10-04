@@ -339,11 +339,130 @@ async function main() {
   await page.waitForTimeout(300);
   const frameCount = await page.locator('.device').count();
   check('Preview draws a device frame', frameCount === 1, `found ${frameCount} .device elements`);
-  const screenBg = await page.evaluate(() => {
-    const el = document.querySelector('.screen');
-    return el ? getComputedStyle(el).backgroundColor : null;
+
+  /* The frame has to be wearing the APP's colours, not the Studio's.
+
+     The previous version of this check asked only whether the background was
+     non-transparent, which the tool's own grey satisfies — so it passed for as
+     long as the preview was being drawn in the Studio's palette. That is why
+     it is rewritten rather than extended: it now sets a colour nothing else in
+     the interface uses, and fails unless the frame, a card inside it and a
+     caption inside that card are all dressed in it. */
+  const toRgb = (hex) => {
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+  };
+  const themeBg = '#0B3D2E';       // deliberately unlike any Studio surface
+  const themeSurface = '#12503C';
+  const themeText = '#E8F5EE';
+  const themePrimary = '#F2A93B';
+
+  const previewColours = async () => page.evaluate(() => {
+    const pick = (sel) => {
+      const n = document.querySelector(sel);
+      if (!n) return null;
+      const c = getComputedStyle(n);
+      return { bg: c.backgroundColor, fg: c.color, border: c.borderTopColor };
+    };
+    return {
+      frame: pick('.screen.app-screen'),
+      card: pick('.screen.app-screen .pv-card'),
+      caption: pick('.screen.app-screen .pv-card .d'),
+      action: pick('.screen.app-screen .pv-btn:not(.ghost)'),
+    };
   });
-  check('Preview applies the project theme colours', !!screenBg && screenBg !== 'rgba(0, 0, 0, 0)', `screen background ${screenBg}`);
+
+  // Set the theme through the real Design screen rather than by poking state,
+  // so the check covers the path a person actually takes. Each control is
+  // addressed by its accessible label, because the order of the colour fields
+  // is a layout detail and the label is the contract.
+  await page.locator('.tabbar .tab', { hasText: 'Design' }).click();
+  await page.waitForTimeout(200);
+  const colourInputs = await page.locator('input[type="color"]').count();
+  check('The theme offers colour controls to change', colourInputs >= 2, `found ${colourInputs} colour inputs`);
+  for (const [label, value] of [
+    ['Background', themeBg], ['Surface', themeSurface],
+    ['Text on surface', themeText], ['Primary', themePrimary],
+  ]) {
+    await page.locator(`input[type="color"][aria-label="${label}"]`).evaluate((n, v) => {
+      n.value = v;
+      n.dispatchEvent(new Event('input', { bubbles: true }));
+      n.dispatchEvent(new Event('change', { bubbles: true }));
+    }, value);
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(400);
+
+  await page.locator('.tabbar .tab', { hasText: 'Preview' }).click();
+  await page.waitForTimeout(400);
+  const drawn = await previewColours();
+
+  check('Preview applies the project theme colours',
+    drawn.frame && drawn.frame.bg === toRgb(themeBg),
+    `frame background ${drawn.frame && drawn.frame.bg}, expected ${toRgb(themeBg)}`);
+  check('A card inside the preview is dressed in the app theme, not the tool palette',
+    drawn.card && drawn.card.bg === toRgb(themeSurface),
+    `card bg ${drawn.card && drawn.card.bg}, expected ${toRgb(themeSurface)}`);
+  // Muted text is a dimmed copy of the app's own text colour, not a grey from
+  // the Studio, so the check is that the same RGB comes back with alpha below
+  // 1 — which is what "derived from your theme" can honestly mean.
+  const t = toRgb(themeText).match(/\d+/g).map(Number);
+  const isDimmedThemeText = (c) => {
+    const m = /rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/.exec(c || '');
+    if (!m) return false;
+    const [r, g, b] = [m[1], m[2], m[3]].map(Number);
+    const a = m[4] === undefined ? 1 : Number(m[4]);
+    return r === t[0] && g === t[1] && b === t[2] && a > 0 && a < 1;
+  };
+  check('Text inside the preview is derived from the app theme',
+    drawn.caption && isDimmedThemeText(drawn.caption.fg),
+    `caption ${drawn.caption && drawn.caption.fg}, expected ${toRgb(themeText)} at reduced alpha`);
+  check('The primary action in the preview uses the app accent',
+    drawn.action && drawn.action.bg === toRgb(themePrimary),
+    `action bg ${drawn.action && drawn.action.bg}, expected ${toRgb(themePrimary)}`);
+
+  /* ── light mode is reachable, real, and remembered ───────────────────── */
+  // A palette defined in tokens but with no way to turn it on is not a light
+  // mode, so the control is driven the way a person drives it, and the result
+  // is read off the page rather than assumed.
+  const themeBtn = page.locator('#themebtn');
+  check('There is a control to change colour mode', await themeBtn.count() === 1, 'expected #themebtn');
+  const startTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+  await themeBtn.click();
+  await page.waitForTimeout(250);
+  const flipped = await page.evaluate(() => ({
+    attr: document.documentElement.getAttribute('data-theme'),
+    bg: getComputedStyle(document.body).backgroundColor,
+    fg: getComputedStyle(document.body).color,
+  }));
+  check('The control switches the whole interface to the other theme',
+    flipped.attr !== startTheme && /light|dark/.test(flipped.attr || ''),
+    `${startTheme} → ${flipped.attr}`);
+  // Light mode must be an actual light surface, not the dark one relabelled.
+  const isLight = flipped.attr === 'light';
+  const channel = (rgb) => Number((/(\d+)/.exec(rgb) || [])[1] ?? 0);
+  check('The switched theme really repaints the surface',
+    isLight ? channel(flipped.bg) > 200 : channel(flipped.bg) < 60,
+    `body background is ${flipped.bg} in ${flipped.attr} mode`);
+  check('Text and surface stay far enough apart to read',
+    Math.abs(channel(flipped.bg) - channel(flipped.fg)) > 120,
+    `bg ${flipped.bg} vs text ${flipped.fg}`);
+
+  // A preference that is forgotten on reload is not a preference.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(400);
+  const afterReloadTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+  check('The colour mode survives a reload', afterReloadTheme === flipped.attr,
+    `was ${flipped.attr}, came back as ${afterReloadTheme}`);
+
+  // Put it back so the remaining checks run against the theme they expect.
+  await page.locator('#themebtn').click();
+  await page.waitForTimeout(250);
+  check('It switches back', 
+    await page.evaluate(() => document.documentElement.getAttribute('data-theme')) === startTheme,
+    'expected the original theme back');
 
   /* ── nothing on screen may ever read as broken ─────────────────────── */
   // "undefined", "NaN" and "[object Object]" are how a program tells the user
