@@ -98,6 +98,17 @@ const I = {
 };
 const svg = (d, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 
+/* Status glyphs for the pipeline stepper. They live beside the other icons so
+   there is one place that draws anything, and so the stepper cannot end up
+   loading an image from somewhere. */
+const PIPE_ICONS = {
+  check: '<path d="m5 13 4 4L19 7"/>',
+  cross: '<path d="M6 6l12 12M18 6 6 18"/>',
+  minus: '<path d="M6 12h12"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+  spin: '<path d="M12 3a9 9 0 0 1 9 9"/><path d="M21 12a9 9 0 0 1-9 9"/>',
+};
+
 /* ── storage ───────────────────────────────────────────────────────────── */
 const LS_PROJECTS = 'appmint.projects.v1';
 const LS_ACTIVE = 'appmint.active.v1';
@@ -162,6 +173,9 @@ const S = {
   tab: 'design',
   preview: { orientation: 'portrait', theme: 'auto' },
   lastRun: null,
+  // The run the Studio started, plus the real steps GitHub has reported for
+  // it. The stepper is drawn from this and from nothing else.
+  pipeline: { run: null, steps: [], polling: false, error: null },
   dirty: false,
 };
 
@@ -597,6 +611,10 @@ function viewBuild() {
   });
 
   return [
+    // The stepper comes first when there is a run to report: "what is my build
+    // doing" is the question the Build screen exists to answer.
+    ...viewPipeline(),
+
     card('Validation layers', [statusBanner, ...layers], null),
 
     ...repairs,
@@ -1059,20 +1077,68 @@ async function startBuild() {
 
     toast('Committed. The build is starting…');
 
-    // Watch the run so the screen shows something real instead of a static claim.
-    const since = Date.now() - 5000;
-    for (let i = 0; i < 40; i++) {
-      await new Promise((r2) => setTimeout(r2, 3000));
-      const runs = await fetch(
-        `https://api.github.com/repos/${repo}/actions/runs?per_page=5&event=push`,
-        { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } },
-      ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
-      const run = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
-      if (run) { S.lastRun = run; hardUpdate(); break; }
-    }
+    S.pipeline = { run: null, steps: [], polling: true, error: null };
+    hardUpdate();
+    // Watch the run so the stepper shows what is actually happening instead
+    // of a static claim. pollPipeline stops itself once the run concludes.
+    pollPipeline(Date.now() - 5000);
   } catch (e) {
     toast(e.message || 'Could not reach GitHub.', 5000);
   }
+}
+
+/**
+ * Follow the run the Studio just started, and keep the stepper honest.
+ *
+ * It stops on its own when the run reaches a conclusion, and it records a failed
+ * check in S.pipeline.error rather than giving up quietly — a stepper that stops
+ * updating without saying why is indistinguishable from a build that stopped.
+ */
+async function pollPipeline(since) {
+  if (S.pipeline._watching) return;   // one watcher at a time
+  const token = store.token();
+  const repo = store.repo() || 'deepsilence10161-source/App-mint-';
+  if (!token) { S.pipeline.polling = false; return; }
+  S.pipeline._watching = true;
+  const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+
+  for (let i = 0; i < 120; i += 1) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      if (!S.pipeline.run) {
+        const runs = await fetch(
+          `https://api.github.com/repos/${repo}/actions/runs?per_page=10&event=push`,
+          { headers },
+        ).then((x) => (x.ok ? x.json() : null));
+        const found = runs?.workflow_runs?.find((x) => new Date(x.created_at).getTime() > since);
+        if (found) { S.pipeline.run = found; S.lastRun = found; }
+        else S.pipeline.error = 'the run has not appeared yet';
+      } else {
+        const id = S.pipeline.run.id;
+        const [run, jobs] = await Promise.all([
+          fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}`, { headers }).then((x) => (x.ok ? x.json() : null)),
+          fetch(`https://api.github.com/repos/${repo}/actions/runs/${id}/jobs?per_page=50`, { headers }).then((x) => (x.ok ? x.json() : null)),
+        ]);
+        if (run) { S.pipeline.run = run; S.lastRun = run; }
+        if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
+        S.pipeline.error = null;
+        if (run && run.status === 'completed') {
+          S.pipeline.polling = false;
+          S.pipeline._watching = false;
+          hardUpdate();
+          return;
+        }
+      }
+    } catch (e) {
+      S.pipeline.error = e.message || 'could not reach GitHub';
+    }
+    // Only the Build screen draws the stepper, so nothing else is redrawn while
+    // somebody is typing somewhere else.
+    if (S.tab === 'build' && S.active) renderActive();
+  }
+  S.pipeline.polling = false;
+  S.pipeline._watching = false;
+  if (S.tab === 'build' && S.active) renderActive();
 }
 
 /* ── boot ──────────────────────────────────────────────────────────────── */
@@ -1135,6 +1201,16 @@ window.__appmintBoot = boot;
 // behind the rings are exposed here — the same way boot is. Without this the
 // only available test is "a number was printed", which passes just as happily
 // once the UI and the engine have quietly drifted apart.
+// The stepper draws whatever S.pipeline holds, which in use is populated by
+// pollPipeline from GitHub's own API. A verification cannot start a real build
+// to see the stepper move, so the state is settable here — a stepper that only
+// ever renders "waiting" would pass every test that could otherwise be written
+// for it, including the ones that matter most.
+window.__appmintPipeline = (next) => {
+  S.pipeline = next ? { polling: false, error: null, ...next } : { run: null, steps: [], polling: false, error: null };
+  renderActive();
+};
+
 window.__appmintHealth = () => {
   const spec = S.active ? S.active.spec : {};
   return projectHealth(spec, check(), permissionReport(spec));

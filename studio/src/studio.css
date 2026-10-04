@@ -1435,3 +1435,105 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (prefers-reduced-motion: reduce) {
   .ring-arc, .why-box > summary::before { transition: none; }
 }
+
+/* ── build pipeline stepper ─────────────────────────────────────────────────
+   Drawn from the steps GitHub reported for the run, grouped by
+   engine/spec/pipeline.mjs. A stage's colour is the status of its real steps;
+   nothing here advances on a timer, and the only motion is the marker of a
+   stage that is genuinely running.
+   ─────────────────────────────────────────────────────────────────────────── */
+.phead { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+.pipeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pstep {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  position: relative;
+}
+/* The connector between stages. It stops at the last stage rather than running
+   off the end of the list. */
+.pstep:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 44px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--line);
+}
+.pstep.s-done:not(:last-child)::before { background: var(--ok-line); }
+
+.pmark {
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--line-2);
+  color: var(--fg-3);
+  background: var(--surface-2);
+  z-index: 1;
+}
+.pmark svg { width: 15px; height: 15px; }
+.pstep.s-done .pmark { color: var(--ok-ink); border-color: var(--ok-line); background: var(--ok-soft); }
+.pstep.s-failed .pmark { color: var(--bad-ink); border-color: var(--bad-line); background: var(--bad-soft); }
+.pstep.s-cancelled .pmark { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-soft); }
+.pstep.s-running .pmark { color: var(--info-ink); border-color: var(--info-line); background: var(--info-soft); }
+.pstep.s-running .pmark svg { animation: pipe-spin 1.1s linear infinite; }
+@keyframes pipe-spin { to { transform: rotate(360deg); } }
+
+.pstep-main { min-width: 0; }
+.pstep-name { font: 500 14.5px/1.4 var(--font-ui); color: var(--fg); }
+.pstep.s-waiting .pstep-name { color: var(--fg-3); }
+.pstep-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
+.pstep.s-failed .pstep-detail { color: var(--bad-ink); }
+
+.pstep-steps { list-style: none; margin: var(--s2) 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.pstep-steps li {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: var(--s2);
+  align-items: center;
+  font: var(--t-label);
+  color: var(--fg-2);
+  padding: 2px 0;
+}
+.pdot { width: 6px; height: 6px; border-radius: var(--r-full); background: currentColor; opacity: 0.55; }
+.pstep-steps li.s-done .pdot { background: var(--ok); opacity: 1; }
+.pstep-steps li.s-failed { color: var(--bad-ink); }
+.pstep-steps li.s-failed .pdot { background: var(--bad); opacity: 1; }
+.pstep-steps li.s-running { color: var(--info-ink); }
+.pstep-steps li.s-running .pdot { background: var(--info); opacity: 1; }
+.pstep-steps li.s-skipped { opacity: 0.6; }
+.pstate { text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px; }
+
+.pother { border-top: 1px solid var(--line); padding-top: var(--s2); }
+.pother > summary { font: var(--t-label); color: var(--fg-2); cursor: pointer; padding: var(--s2) 0; min-height: 32px; }
+.pother > summary:hover { color: var(--fg); }
+
+/* ── skeletons ──────────────────────────────────────────────────────────────
+   A skeleton is only honest where there is a real wait. There are two: parsing
+   the bundle before boot(), and the first poll of a build that has not appeared
+   in the run list yet. Both use the same three shapes, so a person learns one
+   vocabulary for "not here yet".
+   ─────────────────────────────────────────────────────────────────────────── */
+.skel {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 45%, var(--surface-2) 90%);
+  background-size: 220% 100%;
+  border-radius: var(--r-sm);
+  animation: skel-slide 1.4s var(--ease-in-out) infinite;
+}
+@keyframes skel-slide { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+.skel-line { height: 12px; width: 100%; max-width: 420px; }
+.skel-title { height: 26px; width: 240px; margin-bottom: var(--s4); }
+.skel-card { height: 104px; border-radius: var(--r-2); }
+.skel-grid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); margin-top: var(--s4); }
+
+.booting { padding: var(--s6) var(--s5); }
+.booting-note { font: var(--t-label); color: var(--fg-3); margin: var(--s5) 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skel { animation: none; }
+  .pstep.s-running .pmark svg { animation: none; }
+}

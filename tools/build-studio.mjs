@@ -37,6 +37,10 @@ const ENGINE_MODULES = [
   // The Health screen scores the same validateSpec and permissionReport
   // results the Build screen shows, so the browser must run the same code.
   'engine/spec/health.mjs',
+  // The stepper groups the real steps of a GitHub run into stages. The same
+  // code runs in the browser and in the tests, so the two cannot describe a
+  // build differently.
+  'engine/spec/pipeline.mjs',
   // The website analyser: pure by construction — no filesystem, no network — so
   // it runs in a browser unchanged. It is inlined rather than copied, because a
   // second implementation of "what does this site become" would drift from the
@@ -61,6 +65,7 @@ const APP_MODULES = [
   'studio/src/studio.js',
   'studio/src/repairs.js',
   'studio/src/viewHealth.js',
+  'studio/src/viewPipeline.js',
   // The palette is last because it calls into everything above it: the views,
   // the build, the repair history and the theme. Bundled into one scope the
   // order would not matter at call time, but listing it last says plainly that

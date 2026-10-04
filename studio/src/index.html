@@ -27,9 +27,20 @@
   <div class="health" id="health" role="status" aria-live="polite"></div>
 
   <main id="main">
-    <div class="empty">
-      <div class="big">Starting up…</div>
-      <p>If this message stays, the browser blocked the scripts.</p>
+    <!-- Skeleton, shown until the bundle has parsed and booted. The bundle is
+         several hundred kilobytes of inline script, so on a phone this is a
+         real wait rather than a decorative one; boot() replaces the whole
+         element. If it is still here after a few seconds, the browser blocked
+         the scripts. -->
+    <div class="booting" aria-busy="true" aria-live="polite">
+      <div class="skel skel-title"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel-grid">
+        <div class="skel skel-card"></div>
+        <div class="skel skel-card"></div>
+        <div class="skel skel-card"></div>
+      </div>
+      <p class="booting-note">Starting up… If this stays, the browser blocked the scripts.</p>
     </div>
   </main>
 </div>

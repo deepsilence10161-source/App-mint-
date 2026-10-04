@@ -202,6 +202,129 @@ async function main() {
       `unmeasured: ${unmeasured.join(', ')}`);
   }
 
+  /* ── the build pipeline stepper ──────────────────────────────────────────
+     A stepper is the easiest thing in the app to fake: eight words on a timer
+     and a tick at the end. These assertions feed in the steps a real GitHub run
+     reports and check that what is drawn describes them — including that Done
+     is not claimed early, and that a step belonging to no stage is still listed
+     rather than quietly dropped. */
+  const STEPS_OK = [
+    ['Checkout', 'completed', 'success'],
+    ['Set up Node', 'completed', 'success'],
+    ['Pick specification', 'completed', 'success'],
+    ['Validate specification (layers 1-5)', 'completed', 'success'],
+    ['Engine self-tests', 'completed', 'success'],
+    ['Build the Studio bundle', 'completed', 'success'],
+    ['Row level security gate', 'completed', 'success'],
+    ['Generate Android project', 'completed', 'success'],
+    ['Show permission table', 'completed', 'success'],
+    ['Set up JDK 17', 'completed', 'success'],
+    ['Set up Gradle', 'completed', 'success'],
+    ['Prepare Android SDK', 'completed', 'success'],
+    ['Build debug APK', 'completed', 'success'],
+    ['Locate artifact', 'completed', 'success'],
+    ['Validate the real artifact', 'completed', 'success'],
+    ['Upload APK', 'completed', 'success'],
+    ['Upload build report', 'completed', 'success'],
+  ].map(([name, status, conclusion]) => ({ name, status, conclusion }));
+
+  const setPipeline = (run, steps) => page.evaluate(([r, st]) => {
+    window.__appmintPipeline({ run: r, steps: st, polling: false, error: null });
+  }, [run, steps]);
+
+  await tapTab(page, 'Build');
+  await setPipeline(null, []);
+  await page.waitForTimeout(200);
+  check('No build pipeline is drawn before a build is started',
+    (await page.locator('.pipeline').count()) === 0,
+    'an empty stepper would be decoration');
+
+  await setPipeline({ id: 1, run_number: 42, name: 'Generate, build and validate', status: 'completed', conclusion: 'success', html_url: 'https://example.invalid/run/1' }, STEPS_OK);
+  await page.waitForTimeout(250);
+
+  const drawnStages = await page.evaluate(() => ({
+    stages: [...document.querySelectorAll('.pstep')].map((n) => ({
+      key: n.dataset.stage,
+      status: [...n.classList].find((c) => c.startsWith('s-')),
+      name: n.querySelector('.pstep-name').textContent.trim(),
+      detail: n.querySelector('.pstep-detail') ? n.querySelector('.pstep-detail').textContent.trim() : '',
+      steps: [...n.querySelectorAll('.pstep-steps .pname')].map((x) => x.textContent.trim()),
+    })),
+    other: [...document.querySelectorAll('.pother .pname')].map((x) => x.textContent.trim()),
+    absent: (document.querySelector('.pipeline + details + .hint, .pother + .hint') || {}).textContent || '',
+    text: document.querySelector('.card .pipeline').closest('.card').textContent,
+  }));
+
+  const labels = drawnStages.stages.map((s) => s.name.replace(/^\d+\.\s*/, ''));
+  check('The stepper groups the real steps into the real stages',
+    JSON.stringify(labels) === JSON.stringify(['Guards', 'Security', 'Dependencies', 'Build', 'Validate', 'Done']),
+    labels.join(' → '));
+
+  check('A successful run shows every stage done, and says Done',
+    drawnStages.stages.every((s) => s.status === 's-done'),
+    drawnStages.stages.map((s) => `${s.name}=${s.status}`).join(', '));
+
+  const flat = drawnStages.stages.flatMap((s) => s.steps);
+  check('Every step the workflow reported is on the screen somewhere',
+    ['Validate specification (layers 1-5)', 'Row level security gate', 'Build debug APK', 'Validate the real artifact']
+      .every((n) => flat.includes(n) || drawnStages.other.includes(n)),
+    `placed: ${flat.length}, other: ${drawnStages.other.join(', ')}`);
+
+  check('A step that belongs to no stage is listed, not swallowed',
+    drawnStages.other.includes('Checkout'), `other was: ${drawnStages.other.join(', ') || 'empty'}`);
+
+  check('The stages this workflow never had are named rather than drawn',
+    /Sign/.test(drawnStages.absent), `hint was "${drawnStages.absent.trim().slice(0, 90)}"`);
+
+  // The reassuring lie: every step finished, but the run has not concluded.
+  await setPipeline({ id: 2, run_number: 43, name: 'Generate, build and validate', status: 'in_progress', conclusion: null }, STEPS_OK);
+  await page.waitForTimeout(250);
+  const going = await page.evaluate(() => ({
+    done: [...document.querySelectorAll('.pstep')].find((n) => n.dataset.stage === 'done').className,
+    pill: document.querySelector('.phead .pill').textContent.trim(),
+  }));
+  check('Done is not claimed while the run is still going',
+    /s-running/.test(going.done) && !/s-done/.test(going.done), `done stage was ${going.done}`);
+
+  // A failure has to be visible, and named.
+  const failing = STEPS_OK.map((s) => (s.name === 'Row level security gate' ? { ...s, conclusion: 'failure' } : s));
+  await setPipeline({ id: 3, run_number: 44, name: 'Generate, build and validate', status: 'completed', conclusion: 'failure' }, failing);
+  await page.waitForTimeout(250);
+  const bad = await page.evaluate(() => {
+    const stages = [...document.querySelectorAll('.pstep')];
+    const sec = stages.find((n) => n.dataset.stage === 'security');
+    return {
+      security: sec.className,
+      detail: sec.querySelector('.pstep-detail').textContent.trim(),
+      done: stages.find((n) => n.dataset.stage === 'done').className,
+      guards: stages.find((n) => n.dataset.stage === 'guards').className,
+    };
+  });
+  check('A failed step fails its stage and names it',
+    /s-failed/.test(bad.security) && bad.detail.includes('Row level security gate'),
+    `${bad.security} — ${bad.detail}`);
+  check('A failed build does not reach Done, and the stages before the failure still show as done',
+    /s-failed/.test(bad.done) && /s-done/.test(bad.guards),
+    `done=${bad.done}, guards=${bad.guards}`);
+
+  // A cancelled build is neither a pass nor a failure and must not be dressed
+  // up as one.
+  await setPipeline(
+    { id: 4, run_number: 45, name: 'Generate, build and validate', status: 'completed', conclusion: 'cancelled' },
+    STEPS_OK.map((s) => ({ ...s, conclusion: 'cancelled' })),
+  );
+  await page.waitForTimeout(250);
+  const cancelled = await page.evaluate(() => ({
+    done: [...document.querySelectorAll('.pstep')].find((n) => n.dataset.stage === 'done').className,
+    anyDone: [...document.querySelectorAll('.pstep.s-done')].length,
+  }));
+  check('A cancelled run says cancelled',
+    /s-cancelled/.test(cancelled.done) && cancelled.anyDone === 0,
+    `done=${cancelled.done}, stages marked done=${cancelled.anyDone}`);
+
+  await setPipeline(null, []);
+  await page.waitForTimeout(150);
+
   /* ── editing actually changes state ─────────────────────────────────── */
   await tapTab(page, 'Design');
   const nameInput = page.locator('input[aria-label="Application name"]');
