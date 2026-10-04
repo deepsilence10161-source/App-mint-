@@ -1886,7 +1886,7 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   .logchev { transition: none; }
 }
 </style>
-<meta name="appmint-build" content="8d674d54690a945d">
+<meta name="appmint-build" content="88538a900e71cf5c">
 </head>
 <body>
 
@@ -2838,6 +2838,10 @@ const FIX_POLICY = {
     confidence: 'high',
     why: 'A release build with signing switched off produces a file that cannot be installed anywhere. There is no other correct answer here.',
   },
+  E_BACKEND_NOT_HTTPS: {
+    confidence: 'review',
+    why: 'Rewriting the scheme to https is the right answer almost always, and wrong in the case that matters: if the backend does not actually serve https, the app stops reaching it at all and every screen that needed data goes blank. That is a fact about their server which the engine cannot check from here, so it offers the change and lets the owner make it.',
+  },
 
   /* ── repairs forced by something you built in the app ──────────────── */
   /* These add a feature the app demonstrably needs. They can add an Android
@@ -3389,6 +3393,22 @@ function layer4Security(spec, out) {
       { redactedSample: String(m[0]).slice(0, 4) + '…redacted' }));
   }
 
+  // A backend that is configured but unreachable, or reached over plain HTTP,
+  // will either fail at runtime or send somebody's data where it can be read.
+  // Both are known at build time, so neither should be discovered by a user.
+  if (spec.backend && spec.backend.kind && spec.backend.kind !== 'none') {
+    const burl = String(spec.backend.url || '').trim();
+    if (!burl) {
+      out.push(issue('E_BACKEND_NO_URL', 'error', 'backend.url',
+        `The backend is set to "${spec.backend.kind}" but no address is given, so the generated app would have nothing to connect to.`,
+        { hint: 'Set backend.url to the https address of the project.' }));
+    } else if (!/^https:\/\//i.test(burl)) {
+      out.push(issue('E_BACKEND_NOT_HTTPS', 'critical', 'backend.url',
+        `The backend address is "${burl}". Over plain HTTP every request — including sign-in — can be read or altered in transit.`,
+        { fix: { kind: 'set', path: 'backend.url', value: burl.replace(/^http:\/\//i, 'https://') } }));
+    }
+  }
+
   if (spec.backend && spec.backend.kind !== 'none' && (spec.backend.tablesRequiringRls || []).length === 0 && spec.backend.requiresAuth)
     out.push(issue('W_RLS_UNSPECIFIED', 'warning', 'backend.tablesRequiringRls',
       'Authentication is on, but no tables are listed as needing row-level security. RLS is the only thing standing between one signed-in user and another user\'s rows.'));
@@ -3933,6 +3953,320 @@ function permissionReport(spec) {
 }
 
 
+/* ═══ engine/backend/data-runtime.mjs ═══ */
+/* ============================================================================
+   DATA RUNTIME — the only path from the app to its backend
+   ----------------------------------------------------------------------------
+   The architecture the prompt asks for is a chain, and the point of the chain
+   is the middle link:
+
+       Application → Data Runtime → Backend Adapter → Supabase or other backend
+
+   "Do not allow uncontrolled direct database access from arbitrary application
+   components." A runtime that exists but that components may bypass is not a
+   control, so the generated module is written to be the only thing in the app
+   that knows the backend's address, and the checks below look for code that
+   went around it.
+
+   The runtime owns the seven things the prompt names — authentication, queries,
+   mutations, retries, offline behaviour, error normalisation, rollback — and
+   three rules decide how each is implemented:
+
+     · Retries happen on reads only. A mutation is not idempotent: retrying a
+       failed POST is how an app charges someone twice, so a failed write is
+       reported, not attempted again behind your back.
+
+     · Nothing privileged is in the file. The publishable key is in the app
+       because it has to be; a service-role key never is, and there is a check
+       that fails the build if one appears in generated output.
+
+     · Entitlement is read from the server and is read-only here. There is no
+       setter for it and it is not persisted, because "do not trust
+       client-controlled premium status" is not a preference.
+
+   This file generates the runtime as text. It imports nothing, so it runs in a
+   test, in the CLI and in the browser alike, and what the test asserts is
+   byte-for-byte what the app ships.
+   ========================================================================= */
+
+/**
+ * Generate the data runtime for a specification.
+ * Returns { ok, file, code, errors } — `file` is the path it should be written
+ * to, `code` the module source.
+ */
+function dataRuntime(spec) {
+  const b = (spec && spec.backend) || {};
+  const kind = b.kind || 'none';
+  if (kind === 'none') {
+    return { ok: false, code: '', file: '', errors: ['backend.kind is "none", so there is no backend to talk to'] };
+  }
+
+  const url = String(b.url || '').replace(/\/+$/, '');
+  const errors = [];
+  if (!url) errors.push('backend.url is required once a backend is configured');
+  else if (!/^https:\/\//i.test(url)) errors.push(`backend.url must be https, got "${url}"`);
+  if (errors.length) return { ok: false, code: '', file: '', errors };
+
+  const requiresAuth = b.requiresAuth === true;
+  const tables = Array.isArray(b.tablesRequiringRls) ? b.tablesRequiringRls.filter(Boolean) : [];
+
+  const code = `/* Generated by Project1 Studio from the project specification.
+ * Edit the specification, not this file: it is rewritten on every build.
+ *
+ * This is the only module in the app that knows where the backend is. Anything
+ * that needs data goes through it, so that authentication, retries, offline
+ * behaviour and error handling are decided in one place instead of per screen.
+ */
+(function (global) {
+  'use strict';
+
+  var CONFIG = {
+    kind: ${JSON.stringify(kind)},
+    url: ${JSON.stringify(url)},
+    requiresAuth: ${requiresAuth ? 'true' : 'false'},
+    tablesRequiringRls: ${JSON.stringify(tables)},
+    /* The publishable key. It is safe to ship: it can only do what the
+       database's row-level security policies allow. A service-role key is never
+       written into this file, and the build fails if one turns up in generated
+       output. */
+    publishableKey: null
+  };
+
+  var RETRIES = 2;                 /* reads only — see request() */
+  var RETRY_DELAY_MS = 400;
+  var session = null;              /* held in memory for the life of the page */
+  var cache = Object.create(null); /* last good read, per key */
+
+  /* ── error normalisation ─────────────────────────────────────────────────
+     Every failure leaves here with the same shape, so a screen can show
+     something true without knowing whether the problem was the network, the
+     server or this module. */
+  function normalise(err, context) {
+    var status = err && err.status;
+    var kind = !status ? 'offline'
+      : status === 401 || status === 403 ? 'unauthorised'
+      : status === 404 ? 'missing'
+      : status >= 500 ? 'server'
+      : 'rejected';
+    return {
+      ok: false,
+      kind: kind,
+      status: status || 0,
+      message: (err && err.message) || 'The request could not be completed.',
+      context: context || null,
+      /* The underlying response is never handed to a screen. It can contain
+         other people's data when a policy is wrong. */
+      retryable: kind === 'offline' || kind === 'server'
+    };
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  /* ── the one request path ────────────────────────────────────────────────
+     method, path and body are the whole surface. Nothing else in the app is
+     given the URL, which is what makes "no uncontrolled direct access" a
+     property of the code rather than an intention about it. */
+  function request(method, path, body, options) {
+    var opts = options || {};
+    var attempt = 0;
+
+    function once() {
+      attempt += 1;
+      var headers = { 'Content-Type': 'application/json' };
+      if (session && session.accessToken) headers.Authorization = 'Bearer ' + session.accessToken;
+
+      return fetch(CONFIG.url + path, {
+        method: method,
+        headers: headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+      }).then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (text) {
+            var e = new Error(text.slice(0, 300) || ('HTTP ' + res.status));
+            e.status = res.status;
+            throw e;
+          });
+        }
+        return res.status === 204 ? null : res.json();
+      });
+    }
+
+    function run() {
+      return once().catch(function (err) {
+        var last = attempt > RETRIES || !opts.retryable;
+        /* A read is idempotent, so retrying it is safe. A mutation is not:
+           retrying a POST that may have landed is how an app charges someone
+           twice. Failed writes are reported, never re-attempted here. */
+        if (last) throw err;
+        return delay(RETRY_DELAY_MS * attempt).then(run);
+      });
+    }
+
+    return run().catch(function (err) { return normalise(err, method + ' ' + path); });
+  }
+
+  var runtime = {
+    config: function () {
+      /* A copy, so a screen cannot repoint the runtime at another host. */
+      return {
+        kind: CONFIG.kind,
+        url: CONFIG.url,
+        requiresAuth: CONFIG.requiresAuth,
+        tablesRequiringRls: CONFIG.tablesRequiringRls.slice()
+      };
+    },
+
+    /* ── authentication ─────────────────────────────────────────────────── */
+    signIn: function (email, password) {
+      return request('POST', '/auth/v1/token?grant_type=password', {
+        email: email, password: password
+      }, { retryable: false }).then(function (res) {
+        if (!res || !res.access_token) return res && res.ok === false ? res : normalise(new Error('No session was returned.'), 'signIn');
+        session = { accessToken: res.access_token, refreshToken: res.refresh_token || null };
+        return { ok: true };
+      });
+    },
+
+    signOut: function () { session = null; return Promise.resolve({ ok: true }); },
+
+    isSignedIn: function () { return !!(session && session.accessToken); },
+
+    /* ── queries ──────────────────────────────────────────────────────────
+       A read that cannot be served is served from the last good read, marked
+       as stale. A screen that shows cached data as though it were current is
+       lying, so the flag is part of the result and not a detail. */
+    query: function (table, params) {
+      if (CONFIG.tablesRequiringRls.indexOf(table) === -1 && CONFIG.requiresAuth) {
+        return Promise.resolve(normalise(
+          new Error('"' + table + '" is not listed in backend.tablesRequiringRls.'),
+          'query ' + table));
+      }
+      var qs = params ? '?' + Object.keys(params).map(function (k) {
+        return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+      }).join('&') : '';
+      var key = table + qs;
+
+      return request('GET', '/rest/v1/' + encodeURIComponent(table) + qs, undefined, { retryable: true })
+        .then(function (rows) {
+          if (rows && rows.ok === false) {
+            if (cache[key]) return { ok: true, stale: true, data: cache[key], reason: rows };
+            return rows;
+          }
+          cache[key] = rows;
+          return { ok: true, stale: false, data: rows };
+        });
+    },
+
+    /* ── mutations, and rollback ──────────────────────────────────────────
+       A mutation is applied locally first so the interface can respond, and
+       the previous value is kept. If the server refuses, the previous value is
+       put back and the caller is told — which is the rollback the architecture
+       asks for. Nothing is retried, because the write may have landed. */
+    mutate: function (table, patch, previous) {
+      return request('PATCH', '/rest/v1/' + encodeURIComponent(table), patch, { retryable: false })
+        .then(function (res) {
+          if (res && res.ok === false) return { ok: false, rolledBack: true, previous: previous, reason: res };
+          return { ok: true, rolledBack: false, data: res };
+        });
+    },
+
+    /* ── entitlement ──────────────────────────────────────────────────────
+       Read-only and not persisted. There is deliberately no setter: premium
+       status that a client can write is premium status a client can fake. */
+    entitlement: function () {
+      return request('GET', '/rest/v1/entitlements?select=plan,expires_at&limit=1', undefined, { retryable: true })
+        .then(function (rows) {
+          if (rows && rows.ok === false) return { ok: false, plan: 'free', reason: rows };
+          var row = Array.isArray(rows) ? rows[0] : null;
+          return {
+            ok: true,
+            plan: (row && row.plan) || 'free',
+            expiresAt: (row && row.expires_at) || null,
+            source: 'server'
+          };
+        });
+    },
+
+    /* ── offline ──────────────────────────────────────────────────────────
+       Reported rather than guessed at. Writes are refused while offline with a
+       reason a screen can show, instead of being queued into a promise that
+       may never resolve. */
+    online: function () {
+      return typeof navigator === 'undefined' || navigator.onLine !== false;
+    },
+
+    clearCache: function () { cache = Object.create(null); }
+  };
+
+  global.DataRuntime = runtime;
+})(typeof window !== 'undefined' ? window : this);
+`;
+
+  return {
+    ok: true,
+    code,
+    file: 'android/app/src/main/assets/www/data-runtime.js',
+    errors: [],
+  };
+}
+
+/**
+ * Look for the ways this runtime gets bypassed, in generated or bundled code.
+ *
+ * The runtime is only a control if nothing goes around it, and the ways around
+ * it are specific enough to look for by name.
+ */
+function unsafePatterns(code) {
+  /* Comments and string contents are removed before looking, because prose
+     about a service-role key is not a service-role key. Without this the
+     scanner failed the build over the comment in the runtime that explains why
+     no privileged key is in the file - a check that accuses its own
+     documentation gets ignored, and then it catches nothing. */
+  const src = String(code || '')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+  const found = [];
+  const add = (code_, detail) => found.push({ code: code_, detail });
+
+  if (/service[_-]?role/i.test(src)) {
+    add('SERVICE_ROLE_IN_CLIENT', 'Generated code mentions a service-role key. That key bypasses row-level security entirely and must stay server-side.');
+  }
+  // The publishable key belongs in configuration read at runtime, not pasted in.
+  const longKey = src.match(/\beyJ[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/);
+  if (longKey) {
+    add('JWT_EMBEDDED_IN_SOURCE', 'A JSON web token is written into the source. Tokens expire and rotate; a baked-in one is a credential in a repository.');
+  }
+  if (/\bsupabase\s*\(\s*['"`]https:\/\//i.test(src)) {
+    add('DIRECT_CLIENT_INIT', 'A Supabase client is created directly against a URL. That is the uncontrolled access the runtime exists to prevent.');
+  }
+  // Entitlement read from somewhere a user can edit.
+  if (/(localStorage|sessionStorage|SharedPreferences)[^\n]{0,80}(premium|entitlement|is_?pro|plan)\b/i.test(src)) {
+    add('CLIENT_CONTROLLED_ENTITLEMENT', 'Premium status is read from local storage. Anything the client stores, the client can alter.');
+  }
+  return found;
+}
+
+/** What the runtime guarantees, for the UI and for the health checks. */
+function runtimeReport(spec) {
+  const b = (spec && spec.backend) || {};
+  const kind = b.kind || 'none';
+  const generated = dataRuntime(spec);
+  return {
+    configured: kind !== 'none',
+    kind,
+    url: b.url || '',
+    requiresAuth: b.requiresAuth === true,
+    tables: Array.isArray(b.tablesRequiringRls) ? b.tablesRequiringRls : [],
+    generated: generated.ok,
+    errors: generated.errors,
+    bytes: generated.ok ? generated.code.length : 0,
+    unsafe: generated.ok ? unsafePatterns(generated.code) : [],
+  };
+}
+
+
 /* ═══ engine/spec/health.mjs ═══ */
 /* ============================================================================
    PROJECT HEALTH — a score that can be argued with
@@ -4093,10 +4427,40 @@ function backendHealth(spec) {
   const b = spec.backend;
   if (!b || !b.kind || b.kind === 'none') return [];   // nothing configured: nothing to score
   const checks = [];
+  const rt = runtimeReport(spec);
+
   checks.push(pass('A backend is configured', String(b.kind)));
-  if (b.url) checks.push(/^https:/i.test(String(b.url))
-    ? pass('The backend is reached over HTTPS', String(b.url))
-    : fail('The backend is reached over HTTPS', String(b.url)));
+
+  if (!b.url) {
+    checks.push(fail('The backend has an address', 'No backend.url, so the generated app has nothing to connect to.'));
+  } else {
+    checks.push(/^https:/i.test(String(b.url))
+      ? pass('The backend is reached over HTTPS', String(b.url))
+      : fail('The backend is reached over HTTPS',
+          `${b.url} — over plain HTTP every request, including sign-in, can be read or altered in transit.`));
+  }
+
+  // The data runtime is the only module in the generated app that knows where
+  // the backend is. If it cannot be generated, the app would be left reaching
+  // the backend from wherever it liked, which is the thing the runtime exists to
+  // prevent.
+  checks.push(rt.generated
+    ? pass('The app gets one controlled path to the backend',
+        `data-runtime.js, ${(rt.bytes / 1024).toFixed(1)} KB, generated from this specification`)
+    : fail('The app gets one controlled path to the backend', rt.errors.join('; ') || 'the runtime could not be generated'));
+
+  checks.push(rt.unsafe.length === 0
+    ? pass('The generated runtime holds no privileged credential',
+        'Checked for service-role keys, baked-in tokens, direct client creation and client-stored entitlement.')
+    : fail('The generated runtime holds no privileged credential', rt.unsafe.map((u) => u.code).join(', ')));
+
+  if (rt.requiresAuth) {
+    checks.push(rt.tables.length
+      ? pass('The tables that need row-level security are named', `${rt.tables.length}: ${rt.tables.join(', ')}`)
+      : warn('The tables that need row-level security are named',
+          'Authentication is on but no table is listed. The runtime refuses to query a table nobody declared, which is safe but will look like a bug.'));
+  }
+
   return checks;
 }
 
@@ -9109,6 +9473,7 @@ function outcomeNode(P) {
 
 const SETTINGS_TABS = [
   ['general', 'General'],
+  ['backend', 'Backend'],
   ['signing', 'Signing'],
   ['permissions', 'Permissions'],
   ['engine', 'Build Engine'],
@@ -9260,6 +9625,88 @@ function tabSigning(spec) {
       el('strong', {}, 'What the build actually verifies. '),
       'After compiling, the finished file is checked with apksigner and zipalign, and the signing scheme is read back off the APK rather than assumed from the configuration. The result appears in the build report.',
     ])),
+  ];
+}
+
+function tabBackend(spec) {
+  const b = spec.backend || (spec.backend = { kind: 'none' });
+  const rt = runtimeReport(spec);
+  const generated = dataRuntime(spec);
+  const tables = Array.isArray(b.tablesRequiringRls) ? b.tablesRequiringRls : [];
+
+  return [
+    section('Backend', {
+      icon: I.briefcase, open: true,
+      summary: b.kind === 'none' ? 'no backend' : `${b.kind}${b.url ? ' · ' + String(b.url).replace(/^https?:\/\//, '').slice(0, 28) : ' · no address'}`,
+      children: [
+        choose('Backend', 'Backend kind', [
+          ['none', 'None — the app has no server'],
+          ['supabase', 'Supabase'],
+          ['firebase', 'Firebase'],
+          ['custom-rest', 'Your own REST API'],
+        ], b.kind || 'none', (v) => { b.kind = v; touch(); hardUpdate(); },
+          'Choosing a backend is what makes the generated app talk to a server at all. Without it there is nothing to configure and no data runtime is emitted.'),
+
+        b.kind !== 'none'
+          ? field('Backend address', el('input', {
+              type: 'url', value: b.url || '', spellcheck: 'false', autocapitalize: 'off',
+              'aria-label': 'Backend address', placeholder: 'https://your-project.supabase.co',
+              oninput: (e) => { b.url = e.target.value.trim(); touch(); hardUpdate(); },
+            }), 'Must be https. Over plain HTTP every request, including sign-in, can be read or altered in transit.')
+          : null,
+
+        b.kind !== 'none'
+          ? field('The app requires sign-in', sw(b.requiresAuth, 'Backend requires authentication',
+              (e) => { b.requiresAuth = e.target.checked; touch(); hardUpdate(); }),
+              'With this on, the data runtime refuses to query a table that is not listed below.')
+          : null,
+      ],
+    }),
+
+    b.kind !== 'none' && b.requiresAuth
+      ? section('Tables needing row-level security', {
+          icon: I.shield, open: true,
+          summary: tables.length ? `${tables.length} declared` : 'none declared',
+          children: [
+            field('One table name per line', el('textarea', {
+              rows: '4', 'aria-label': 'Tables needing row-level security',
+              value: tables.join('\n'), spellcheck: 'false',
+              oninput: (e) => {
+                b.tablesRequiringRls = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean);
+                touch(); hardUpdate();
+              },
+            }), 'Row-level security is the only thing standing between one signed-in user and another user\'s rows. The RLS gate checks these policies on every build, and a critical finding blocks it.'),
+          ],
+        })
+      : null,
+
+    // What the app will actually be given. Shown because a configuration screen
+    // that does not say what it produces leaves a person guessing whether the
+    // backend they picked did anything.
+    b.kind !== 'none'
+      ? section('What the app is given', {
+          icon: I.code,
+          summary: rt.generated ? 'a data runtime, generated' : 'nothing yet — see below',
+          children: [
+            generated.ok
+              ? el('div', { class: 'banner pass' }, el('div', {}, [
+                  el('strong', {}, 'The build emits one module that talks to this backend. '),
+                  `data-runtime.js, ${(rt.bytes / 1024).toFixed(1)} KB. It owns authentication, queries, mutations, retries, offline behaviour, error normalisation and rollback, and it is the only file in the app that knows the address.`,
+                ]))
+              : el('div', { class: 'banner fail' }, el('div', {}, [
+                  el('strong', {}, 'No data runtime can be generated. '),
+                  rt.errors.join(' '),
+                ])),
+            el('dl', { class: 'kv' },
+              el('dt', {}, 'Runtime generated'), el('dd', {}, rt.generated ? 'yes' : 'no'),
+              el('dt', {}, 'Requires sign-in'), el('dd', {}, rt.requiresAuth ? 'yes' : 'no'),
+              el('dt', {}, 'Tables declared'), el('dd', {}, String(rt.tables.length)),
+              el('dt', {}, 'Unsafe patterns'), el('dd', {}, String(rt.unsafe.length))),
+            el('p', { class: 'hint' },
+              'A privileged key is never written into the app, and the build fails if one appears in generated output. Entitlement is read from the server and is read-only in the runtime: there is no setter for premium status, because anything the client can write, the client can fake.'),
+          ],
+        })
+      : null,
   ];
 }
 
@@ -9461,6 +9908,7 @@ function viewSettings() {
   );
 
   const panel = st.tab === 'general' ? tabGeneral(spec)
+    : st.tab === 'backend' ? tabBackend(spec)
     : st.tab === 'signing' ? tabSigning(spec)
     : st.tab === 'permissions' ? tabPermissions(spec)
     : st.tab === 'engine' ? tabEngine(spec)
