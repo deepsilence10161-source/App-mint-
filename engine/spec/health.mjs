@@ -164,6 +164,46 @@ function backendHealth(spec) {
   return checks;
 }
 
+function testingHealth(spec) {
+  const checks = [];
+  const mode = ((spec.app || {}).mode) || 'webview';
+
+  // The device harness judges an app by looking at what is on its screen, and a
+  // website and an app that draws its own screens share no UI code — so what can
+  // be verified differs by architecture. That is a fact about the harness, not a
+  // guess about the app's quality.
+  if (mode === 'native-screens') {
+    const n = (spec.screens || []).length;
+    checks.push(n
+      ? pass('The device harness has screens to verify', `${n} screen(s) it can find and check by name`)
+      : warn('The device harness has screens to verify', 'No screens are defined, so there is nothing on the device to verify.'));
+  } else {
+    checks.push(warn('The device harness can inspect the running app',
+      `Architecture is "${mode}": the harness can confirm it launched and stayed alive, but the content is a web page it cannot see into.`));
+    const wv = ((spec.app || {}).webview) || {};
+    checks.push(wv.localAsset
+      ? pass('The app can be tested without a network', `It opens a bundled page (${String(wv.localAsset).slice(0, 40)})`)
+      : warn('The app can be tested without a network',
+          'It opens a remote address, so a device test depends on that host being reachable at the time.'));
+  }
+  return checks;
+}
+
+/**
+ * Performance is a category the design prompt asks for, and it is the one with
+ * nothing behind it: this project has never profiled a generated app, so there is
+ * no measurement to derive a score from. It returns no checks, which makes the
+ * ring show a dash and the dashboard say so.
+ *
+ * The alternative is a number computed from things that merely correlate with
+ * slowness — permission count, screen count — and that is the invention the
+ * prompt forbids, wearing a lab coat. An empty category is the honest answer and
+ * it costs nothing: the ring is still there, and it says what it does not know.
+ */
+function performanceHealth() {
+  return [];
+}
+
 /* ── scoring ───────────────────────────────────────────────────────────────── */
 
 /**
@@ -200,12 +240,17 @@ export function bandOf(score) {
  */
 export function projectHealth(spec, validation, report) {
   const s = spec || {};
+  // The seven categories the design prompt names, in its order. Two of them may
+  // come back with nothing to measure, and that is a result rather than a gap:
+  // see performanceHealth.
   const categories = [
-    { key: 'build',      label: 'Build',      checks: buildHealth(s, validation) },
-    { key: 'security',   label: 'Security',   checks: securityHealth(s, validation) },
-    { key: 'dependency', label: 'Dependency', checks: dependencyHealth(s, validation) },
-    { key: 'permission', label: 'Permission', checks: permissionHealth(s, report) },
-    { key: 'backend',    label: 'Backend',    checks: backendHealth(s) },
+    { key: 'build',       label: 'Build',       checks: buildHealth(s, validation) },
+    { key: 'security',    label: 'Security',    checks: securityHealth(s, validation) },
+    { key: 'performance', label: 'Performance', checks: performanceHealth() },
+    { key: 'dependency',  label: 'Dependency',  checks: dependencyHealth(s, validation) },
+    { key: 'backend',     label: 'Backend',     checks: backendHealth(s) },
+    { key: 'permission',  label: 'Permission',  checks: permissionHealth(s, report) },
+    { key: 'testing',     label: 'Testing',     checks: testingHealth(s) },
   ];
 
   for (const c of categories) {

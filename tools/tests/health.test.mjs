@@ -217,3 +217,73 @@ test('a category with no checks at all keeps the overall honest', () => {
   assert.equal(scored.length, 0);
   assert.equal(bandOf(null), 'none');
 });
+
+/* ── the seven categories the design prompt names ───────────────────────── */
+
+test('all seven categories the prompt names are present, in its order', () => {
+  const h = healthOf(readSpec('apps/demo/spec.json'));
+  assert.deepEqual(h.categories.map((c) => c.label),
+    ['Build', 'Security', 'Performance', 'Dependency', 'Backend', 'Permission', 'Testing']);
+});
+
+test('Performance is offered and scores nothing, because nothing was ever measured', () => {
+  // The prompt asks for a Performance ring. This project has never profiled a
+  // generated app, so there is no measurement to derive a number from, and a
+  // number invented from things that merely correlate with slowness is exactly
+  // what the prompt forbids. The ring exists; it says what it does not know.
+  for (const spec of ['apps/demo/spec.json', 'apps/native-demo/spec.json', 'apps/backend-demo/spec.json']) {
+    const perf = healthOf(readSpec(spec)).categories.find((c) => c.key === 'performance');
+    assert.equal(perf.score, null, `${spec} scored performance ${perf.score}`);
+    assert.deepEqual(perf.checks, []);
+    assert.equal(perf.band, 'none');
+  }
+});
+
+test('Testing is measured from what the device harness can actually verify', () => {
+  const native = healthOf(readSpec('apps/native-demo/spec.json')).categories.find((c) => c.key === 'testing');
+  const web = healthOf(readSpec('apps/demo/spec.json')).categories.find((c) => c.key === 'testing');
+  assert.notEqual(native.score, null);
+  assert.notEqual(web.score, null);
+  assert.ok(native.score > web.score,
+    `an app that draws its own screens is more verifiable than a web page: native ${native.score}, webview ${web.score}`);
+  assert.ok(web.checks.some((c) => c.status === 'warn'),
+    'a webview app must carry the warning that the harness cannot see into its content');
+});
+
+test('a webview app that bundles its page can be tested without a network', () => {
+  const spec = readSpec('apps/demo/spec.json');
+  assert.equal(spec.app.webview.localAsset, 'index.html', 'the reference app bundles its entry page');
+  const testing = healthOf(spec).categories.find((c) => c.key === 'testing');
+  const offline = testing.checks.find((c) => /without a network/i.test(c.name));
+  assert.equal(offline.status, 'pass', 'a bundled page does not depend on a host being up');
+});
+
+test('a webview app with no bundled page depends on a remote host, and is warned', () => {
+  const spec = readSpec('apps/demo/spec.json');
+  delete spec.app.webview.localAsset;         // now the only thing it can open is a URL
+  const testing = healthOf(spec).categories.find((c) => c.key === 'testing');
+  const offline = testing.checks.find((c) => /without a network/i.test(c.name));
+  assert.equal(offline.status, 'warn');
+  assert.ok(/host/.test(offline.detail), `reason was "${offline.detail}"`);
+  // And the score moves with it, so the check is not decoration.
+  const withBundle = healthOf(readSpec('apps/demo/spec.json')).categories.find((c) => c.key === 'testing');
+  assert.ok(testing.score < withBundle.score,
+    `bundled ${withBundle.score} vs remote-only ${testing.score}`);
+});
+
+test('a screen-based app with no screens has nothing for the harness to verify', () => {
+  const spec = readSpec('apps/native-demo/spec.json');
+  spec.screens = [];
+  const testing = healthOf(spec).categories.find((c) => c.key === 'testing');
+  assert.ok(testing.checks.some((c) => c.status === 'warn'),
+    testing.checks.map((c) => `${c.status}: ${c.name}`).join('; '));
+});
+
+test('an unmeasured category never drags the overall down or props it up', () => {
+  const h = healthOf(readSpec('apps/demo/spec.json'));
+  const measured = h.categories.filter((c) => c.score !== null);
+  assert.equal(h.overall, Math.min(...measured.map((c) => c.score)));
+  assert.equal(h.measured, measured.length);
+  assert.equal(h.unmeasured, h.categories.length - measured.length);
+  assert.ok(h.unmeasured >= 1, 'Performance is never measured, so something is always unmeasured');
+});

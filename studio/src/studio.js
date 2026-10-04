@@ -175,7 +175,7 @@ const S = {
   lastRun: null,
   // The run the Studio started, plus the real steps GitHub has reported for
   // it. The stepper is drawn from this and from nothing else.
-  pipeline: { run: null, steps: [], polling: false, error: null },
+  pipeline: { run: null, steps: [], artifacts: [], polling: false, error: null },
   dirty: false,
 };
 
@@ -1077,7 +1077,7 @@ async function startBuild() {
 
     toast('Committed. The build is starting…');
 
-    S.pipeline = { run: null, steps: [], polling: true, error: null };
+    S.pipeline = { run: null, steps: [], artifacts: [], polling: true, error: null };
     hardUpdate();
     // Watch the run so the stepper shows what is actually happening instead
     // of a static claim. pollPipeline stops itself once the run concludes.
@@ -1123,6 +1123,13 @@ async function pollPipeline(since) {
         if (jobs) S.pipeline.steps = stepsFromJobs(jobs);
         S.pipeline.error = null;
         if (run && run.status === 'completed') {
+          // The artifact list carries the size and checksum of the file that was
+          // actually stored, which is what the success state shows.
+          const arts = await fetch(
+            `https://api.github.com/repos/${repo}/actions/runs/${id}/artifacts?per_page=20`,
+            { headers },
+          ).then((x) => (x.ok ? x.json() : null)).catch(() => null);
+          if (arts) S.pipeline.artifacts = arts.artifacts || [];
           S.pipeline.polling = false;
           S.pipeline._watching = false;
           hardUpdate();
@@ -1207,7 +1214,7 @@ window.__appmintBoot = boot;
 // ever renders "waiting" would pass every test that could otherwise be written
 // for it, including the ones that matter most.
 window.__appmintPipeline = (next) => {
-  S.pipeline = next ? { polling: false, error: null, ...next } : { run: null, steps: [], polling: false, error: null };
+  S.pipeline = next ? { artifacts: [], polling: false, error: null, ...next } : { run: null, steps: [], artifacts: [], polling: false, error: null };
   renderActive();
 };
 

@@ -1407,13 +1407,17 @@ input[aria-invalid="true"] { border-color: var(--bad); }
   grid-template-columns: 10px 1fr auto;
   gap: var(--s3);
   align-items: start;
-  padding: var(--s2) 0;
-  border-top: 1px solid var(--line);
+  padding: var(--s2) var(--s3);
+  /* The design prompt asks for a colour-coded left border on each check row, so
+     a column of reasons can be read by colour before it is read by word. */
+  border-left: 3px solid var(--line-2);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: var(--surface-2);
 }
 .why-mark { width: 8px; height: 8px; margin-top: 6px; border-radius: var(--r-full); background: currentColor; }
-.why-row.s-pass { color: var(--ok); }
-.why-row.s-warn { color: var(--warn); }
-.why-row.s-fail { color: var(--bad); }
+.why-row.s-pass { color: var(--ok);   border-left-color: var(--ok); }
+.why-row.s-warn { color: var(--warn); border-left-color: var(--warn); }
+.why-row.s-fail { color: var(--bad);  border-left-color: var(--bad); }
 .why-main { min-width: 0; color: var(--fg); }
 .why-name { display: block; font: var(--t-body); }
 .why-detail { display: block; font: var(--t-label); color: var(--fg-2); margin-top: 2px; }
@@ -1536,4 +1540,65 @@ input[aria-invalid="true"] { border-color: var(--bad); }
 @media (prefers-reduced-motion: reduce) {
   .skel { animation: none; }
   .pstep.s-running .pmark svg { animation: none; }
+}
+
+/* ── build outcome ──────────────────────────────────────────────────────────
+   Success is a drawn checkmark and the file itself, with the size and checksum
+   of the artifact GitHub stored. No confetti: the interesting part is not that
+   the build passed but what it produced.
+   ─────────────────────────────────────────────────────────────────────────── */
+.outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.outcome.s-success { border-color: var(--ok-line); background: var(--ok-soft); }
+.outcome.s-failure { border-color: var(--bad-line); background: var(--bad-soft); }
+.outcome.s-cancelled { border-color: var(--warn-line); background: var(--warn-soft); }
+.outcome-text { flex: 1 1 220px; min-width: 0; }
+.outcome-text h3 { font: var(--t-h3); margin: 0 0 2px; }
+.outcome.s-success .outcome-text h3 { color: var(--ok-ink); }
+.outcome.s-failure .outcome-text h3 { color: var(--bad-ink); }
+.outcome.s-cancelled .outcome-text h3 { color: var(--warn-ink); }
+
+.outcome-mark { flex: none; width: 52px; height: 52px; display: grid; place-items: center; }
+.outcome-mark svg { width: 52px; height: 52px; overflow: visible; }
+.outcome-mark.ok .om-ring {
+  fill: none; stroke: var(--ok); stroke-width: 2.5;
+  stroke-dasharray: 145; stroke-dashoffset: 145;
+  transform-origin: 26px 26px;
+  animation: om-ring 620ms var(--ease-out) forwards;
+}
+.outcome-mark.ok .om-tick {
+  fill: none; stroke: var(--ok); stroke-width: 3.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 34; stroke-dashoffset: 34;
+  animation: om-tick 320ms var(--ease-out) 420ms forwards;
+}
+@keyframes om-ring { to { stroke-dashoffset: 0; } }
+@keyframes om-tick { to { stroke-dashoffset: 0; } }
+.outcome-mark.bad, .outcome-mark.warn { color: var(--bad-ink); }
+.outcome-mark.warn { color: var(--warn-ink); }
+.outcome-mark.bad svg, .outcome-mark.warn svg { width: 26px; height: 26px; }
+
+.outcome-files { list-style: none; margin: 0; padding: 0; flex: 1 1 100%; display: flex; flex-direction: column; gap: var(--s2); }
+.outcome-files li {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.fname { font: 500 13.5px/1.4 var(--font-ui); color: var(--fg); }
+.fsize { font: var(--t-label); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.fsha { font: var(--t-code); color: var(--fg-2); }
+.outcome-files .btn { margin-left: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .outcome-mark.ok .om-ring, .outcome-mark.ok .om-tick { animation: none; stroke-dashoffset: 0; }
 }

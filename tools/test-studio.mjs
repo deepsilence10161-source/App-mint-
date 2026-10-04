@@ -117,10 +117,10 @@ async function main() {
   await tapTab(page, 'Health');
 
   const rings = await page.locator('.rings .ringcard').count();
-  check('Health shows a ring for every category', rings === 5, `found ${rings} rings`);
+  check('Health shows a ring for every category', rings === 7, `found ${rings} rings`);
 
   const whys = await page.locator('.why-box > summary').count();
-  check('Every ring offers "Why this score?"', whys === 5, `found ${whys}`);
+  check('Every ring offers "Why this score?"', whys === 7, `found ${whys}`);
 
   const ringFacts = await page.evaluate(() => {
     const h = window.__appmintHealth();
@@ -321,6 +321,54 @@ async function main() {
   check('A cancelled run says cancelled',
     /s-cancelled/.test(cancelled.done) && cancelled.anyDone === 0,
     `done=${cancelled.done}, stages marked done=${cancelled.anyDone}`);
+
+  /* ── the outcome: what the build produced ────────────────────────────────
+     Success is not confetti. The interesting part is the file, and the size and
+     checksum shown are the properties of the artifact GitHub actually stored,
+     so a person can verify what they downloaded against what the screen said. */
+  await setPipeline(
+    { id: 5, run_number: 46, name: 'Generate, build and validate', status: 'completed', conclusion: 'success', html_url: 'https://example.invalid/run/5' },
+    STEPS_OK,
+  );
+  await page.evaluate(() => { window.__appmintPipeline({
+    run: { id: 5, run_number: 46, name: 'Generate, build and validate', status: 'completed', conclusion: 'success' },
+    steps: [],
+    artifacts: [{ id: 99, name: 'app-debug.apk', size_in_bytes: 5976832 }],
+    polling: false, error: null,
+  }); });
+  await page.waitForTimeout(300);
+
+  const ok = await page.evaluate(() => {
+    const o = document.querySelector('.outcome');
+    return {
+      cls: o ? o.className : '',
+      tick: !!document.querySelector('.outcome-mark.ok .om-tick'),
+      title: o ? o.querySelector('h3').textContent.trim() : '',
+      file: (document.querySelector('.fname') || {}).textContent || '',
+      size: (document.querySelector('.fsize') || {}).textContent || '',
+      link: (document.querySelector('.outcome-files a') || {}).textContent || '',
+    };
+  });
+  check('A successful build shows the success state',
+    /s-success/.test(ok.cls) && ok.tick && /succeeded/i.test(ok.title),
+    JSON.stringify(ok).slice(0, 150));
+  check('The success state names the file and its size',
+    ok.file === 'app-debug.apk' && ok.size === '5.7 MB' && /Download/.test(ok.link),
+    `file="${ok.file}" size="${ok.size}" link="${ok.link}"`);
+
+  await setPipeline(
+    { id: 6, run_number: 47, name: 'Generate, build and validate', status: 'completed', conclusion: 'failure' },
+    failing,
+  );
+  await page.waitForTimeout(250);
+  const badOut = await page.evaluate(() => ({
+    cls: (document.querySelector('.outcome') || {}).className || '',
+    title: (document.querySelector('.outcome h3') || {}).textContent || '',
+    tick: !!document.querySelector('.outcome-mark.ok'),
+  }));
+  check('A failed build does not get the success state',
+    /s-failure/.test(badOut.cls) && !badOut.tick && /failed/i.test(badOut.title),
+    JSON.stringify(badOut).slice(0, 140));
 
   await setPipeline(null, []);
   await page.waitForTimeout(150);
