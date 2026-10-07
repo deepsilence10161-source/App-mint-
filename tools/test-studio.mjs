@@ -1981,6 +1981,8 @@ a { color: #6B3A1F; }</style></head>
     JSON.stringify({ o: Math.round(panes.outline.right), p: Math.round(panes.preview.left), i: panes.inspector ? Math.round(panes.inspector.left) : null }));
   check('The canvas is the middle column, not the leftmost',
     panes.preview.left > panes.outline.left, `outline at ${Math.round(panes.outline.left)}, canvas at ${Math.round(panes.preview.left)}`);
+  try { await page.screenshot({ path: path.join(ROOT, 'studio/screenshots/studio-builder-wide.png') }); }
+  catch (e) { console.log(`  (screenshot "studio-builder-wide.png" skipped: ${e.message.split('\n')[0]})`); }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(350);
@@ -2064,6 +2066,8 @@ a { color: #6B3A1F; }</style></head>
     /Before restoring/.test(afterRestore), 'no "Before restoring" entry was recorded');
   check('Each version offers to be compared with what is open',
     await page.locator('.vercard .why-box > summary').count() >= 1, 'no comparison control');
+  try { await page.screenshot({ path: path.join(ROOT, 'studio/screenshots/studio-versions.png') }); }
+  catch (e) { console.log(`  (screenshot "studio-versions.png" skipped: ${e.message.split('\n')[0]})`); }
 
   /* ── comfort: motion and contrast ───────────────────────────────────────── */
   await page.locator('.subtab', { hasText: 'General' }).click();
