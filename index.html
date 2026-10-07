@@ -1940,14 +1940,318 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .logchev { transition: none; }
 }
+
+/* ================================================================
+   HOME, THE GALLERY, AND THE REST OF THIS PASS
+   ================================================================
+   Every colour, radius, shadow and duration below is a token. The
+   gate in tools/tests/tokens.test.mjs fails the build if a colour is
+   named directly here, which is what keeps a second theme possible
+   rather than merely intended. */
+
+/* ── the dashboard ──────────────────────────────────────────────────────── */
+
+.home { display: flex; flex-direction: column; gap: var(--s5); }
+
+.hero {
+  padding: var(--s5);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--accent-soft) 0%, transparent 58%),
+    var(--surface);
+}
+.hero-title { font-size: 26px; font-weight: 700; letter-spacing: -0.022em; margin: 0; }
+.hero-sub { color: var(--fg-2); font-size: 14.5px; line-height: 1.6; max-width: 62ch; margin-top: var(--s2); }
+
+.methods { display: grid; gap: var(--s3); margin-top: var(--s4); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .methods { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .methods { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.method {
+  position: relative;
+  display: flex; align-items: flex-start; gap: var(--s3);
+  text-align: left; cursor: pointer;
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  transition: transform var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease),
+              box-shadow var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.method:hover, .method:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--accent-line);
+  box-shadow: var(--sh-lift), var(--sh-glow);
+}
+.method-ico {
+  flex: none; width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: var(--r-2); background: var(--accent-soft); color: var(--accent);
+}
+.method-ico svg { width: 21px; height: 21px; }
+.method-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.method-name { font-size: 15px; font-weight: 650; }
+.method-line { font-size: 13px; line-height: 1.55; color: var(--fg-2); }
+.method-go { flex: none; align-self: center; color: var(--fg-3); opacity: 0.5; transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease); }
+.method-go svg { width: 18px; height: 18px; }
+.method:hover .method-go { opacity: 1; transform: translateX(2px); }
+
+.home-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
+.home-h2 { font-size: 18px; font-weight: 650; margin: 0; }
+.home-count { font-size: 13px; color: var(--fg-3); }
+
+.projects { display: grid; gap: var(--s3); margin-top: var(--s3); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .projects { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .projects { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.pcard {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: border-color var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.pcard:hover { border-color: var(--line-2); box-shadow: var(--sh-1); }
+.pcard-top { display: flex; gap: var(--s3); align-items: flex-start; }
+.pthumb { flex: none; display: block; line-height: 0; }
+.pmeta { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pname { font-size: 15px; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
+.ppkg { font: 500 12px/1.4 var(--font-mono); color: var(--fg-3); overflow-wrap: anywhere; }
+.pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pcard-acts { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* A small chip: the grid cards carry four of them and a full-size pill each
+   would turn a card into a row of buttons. */
+.chip.small { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.chip.band-good { color: var(--ok-ink); border-color: var(--ok-line); background: var(--ok-soft); }
+.chip.band-fair { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-soft); }
+.chip.band-poor { color: var(--bad-ink); border-color: var(--bad-line); background: var(--bad-soft); }
+
+.home-health {
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.hh-ring { flex: none; }
+.hh-ring .ring { width: 72px; height: 72px; }
+.hh-ring .ring { color: var(--accent); }
+.hh-meta { min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* ── the gallery ────────────────────────────────────────────────────────── */
+
+.gallery-head { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.gallery-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+.gallery-head .home-count { margin-left: auto; }
+
+.gallery-search {
+  position: sticky; top: 0; z-index: 4;
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s3) 0;
+  background: linear-gradient(var(--bg) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.search {
+  width: 100%; min-height: 46px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit; font-size: 15px;
+}
+.search::placeholder { color: var(--fg-3); }
+.search:focus-visible { border-color: var(--accent-line); outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.tpl-cats { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.tpl-cats::-webkit-scrollbar { display: none; }
+.chip.filter { flex: 0 0 auto; cursor: pointer; }
+
+.tpl-grid { display: grid; gap: var(--s3); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .tpl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.tcard {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: transform var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.tcard:hover { transform: translateY(-3px); border-color: var(--accent-line); box-shadow: var(--sh-lift); }
+.tcard-top { display: flex; gap: var(--s3); align-items: flex-start; }
+.tcard-meta { min-width: 0; }
+.tmark.big {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: var(--r-2); background: var(--accent-soft); color: var(--accent);
+}
+.tmark.big svg { width: 22px; height: 22px; }
+.tcard .tname { font-size: 15px; font-weight: 650; margin: 0; }
+.tcard .ttag { font-size: 13px; color: var(--fg-2); line-height: 1.5; margin-top: 3px; }
+.tcard-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tcard-foot .btn { margin-left: auto; }
+
+.gallery-note { padding-top: var(--s2); }
+
+/* ── empty states ───────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: var(--s2); padding: var(--s5) var(--s4);
+  border: 1px dashed var(--line-2); border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.ill-wrap { line-height: 0; color: var(--fg-3); opacity: 0.9; }
+.ill-wrap .ill { max-width: 100%; height: auto; }
+.empty-title { font-size: 16px; font-weight: 650; margin: 0; }
+.empty-state .sub { max-width: 46ch; }
+.empty-state .btn { margin-top: var(--s2); }
+
+/* ── the canvas toolbar ─────────────────────────────────────────────────── */
+
+.d-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2);
+  padding: var(--s2);
+  margin-bottom: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.tb-sep { width: 1px; height: 22px; background: var(--line-2); }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r-full); overflow: hidden; }
+.seg-btn {
+  min-height: 36px; padding: 0 12px;
+  border: 0; background: transparent; color: var(--fg-2);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line-2); }
+.seg-btn.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.zoom { display: inline-flex; align-items: center; gap: 2px; }
+.zoom-val { font: 500 12.5px/1 var(--font-mono); color: var(--fg-2); min-width: 44px; text-align: center; }
+#preview-live { margin-left: auto; }
+
+/* The device sizes the toolbar offers. Only the frame changes: nothing here
+   touches the specification, and the caption under the drawing still says so. */
+.device.dev-tablet { max-width: 560px; }
+.device.orient-landscape .device-screen { min-height: 300px; }
+.device.zoomed { margin-block: var(--s2) var(--s5); }
+
+/* ── the palette, with search ───────────────────────────────────────────── */
+
+.pal-body { display: flex; flex-direction: column; gap: var(--s3); }
+.palette .search { min-height: 42px; font-size: 14px; }
+
+/* ── version history ────────────────────────────────────────────────────── */
+
+.vercard {
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.vercard + .vercard { margin-top: var(--s3); }
+.verhead { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.vername { font-size: 14.5px; font-weight: 650; margin: 0; }
+.versub { font-size: 12.5px; color: var(--fg-3); margin-top: 3px; }
+.diff { display: flex; flex-direction: column; gap: 6px; margin: 0; padding-left: var(--s4); }
+.diff li { font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+
+/* ── accessibility ──────────────────────────────────────────────────────── */
+
+/* One visible focus ring, everywhere, drawn the same way. A ring that depends
+   on which component you are on is a ring you have to hunt for. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The system's preference is honoured even before the Studio's own switch is
+   touched, and [data-motion] carries the switch itself. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+[data-motion="reduced"] *, [data-motion="reduced"] *::before, [data-motion="reduced"] *::after {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* More contrast, in the same shape as more light or less light: the tokens are
+   overridden, and every component that reads them follows without knowing. */
+[data-contrast="high"] {
+  --line: rgba(255, 255, 255, 0.22);
+  --line-2: rgba(255, 255, 255, 0.36);
+  --fg-2: #C9D1E0;
+  --fg-3: #B6BFD0;
+}
+[data-theme="light"][data-contrast="high"] {
+  --line: rgba(0, 0, 0, 0.22);
+  --line-2: rgba(0, 0, 0, 0.34);
+  --fg-2: #333B4A;
+  --fg-3: #434C5E;
+}
+[data-contrast="high"] .chip,
+[data-contrast="high"] .btn,
+[data-contrast="high"] .method,
+[data-contrast="high"] .pcard,
+[data-contrast="high"] .tcard { border-width: 1.5px; }
+
+/* ── the three-pane builder, on a screen that has room for it ───────────── */
+
+/* Below 1100px the designer stays the column it has always been: on a phone
+   that is the right shape, and the panels are reached by scrolling rather than
+   by opening drawers over the work. Above it, the component tree, the drawing
+   and the properties sit side by side — the arrangement the design prompt asks
+   for, and the one that makes the drawing the middle of the screen rather than
+   the middle of a scroll. */
+@media (min-width: 1100px) {
+  .designer {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr) minmax(0, 0.9fr);
+    grid-template-areas:
+      "outline preview inspector"
+      "outline findings inspector";
+    gap: var(--s4);
+    align-items: start;
+  }
+  .designer > .cell-outline { grid-area: outline; }
+  .designer > .cell-preview { grid-area: preview; }
+  .designer > .cell-inspector { grid-area: inspector; }
+  .designer > .cell-findings { grid-area: findings; }
+  /* Notes and the screen picker span the whole width rather than landing in a
+     column by accident. */
+  .designer > :not(.d-cell) { grid-column: 1 / -1; }
+  .designer .d-cell { margin: 0; }
+}
+
+/* The health strip is a row of pills and a spacer; on a narrow phone it had
+   the last chip pushed off the right edge, which is how a status strip stops
+   being read. It wraps now, and the spacer only works when there is room. */
+#health { flex-wrap: wrap; }
+#health .spacer { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 460px) {
+  #health .spacer { display: none; }
+  #health .chip { max-width: 100%; }
+}
 </style>
-<meta name="appmint-build" content="3744583e7abe5825">
+<meta name="appmint-build" content="ffecaff7a386c03a">
 </head>
 <body>
 
 <div class="app">
   <header class="topbar">
-    <span class="mark" aria-hidden="true"></span>
+    <button class="mark" id="homelink" type="button" aria-label="App Mint — home" title="Home"></button>
     <div class="identity">
       <div class="name" id="projname">Loading…</div>
       <span class="meta" id="projmeta">starting up</span>
@@ -6106,6 +6410,152 @@ function historyOf(project) {
 }
 
 
+/* ═══ studio/src/versions.js ═══ */
+/* ==================================================================== *
+ * VERSION HISTORY  (snapshots, comparison, restore)
+ * ====================================================================
+ * What this is
+ * ------------
+ * A list of the states a project has been in, kept inside the project itself.
+ * The master prompt asks for three things — view history, compare versions,
+ * restore a version — and for the rule that matters more than any of them:
+ * never silently overwrite project history.
+ *
+ * The design choices, and why:
+ *
+ *   1. SNAPSHOTS, NOT OPERATIONS. A snapshot cannot be wrong about what the
+ *      state was. An undo stack of inverse operations can be, quietly, and it
+ *      stops being replayable the moment two of them touch the same field.
+ *
+ *   2. A RESTORE SNAPSHOTS FIRST. Restoring is the one action that can destroy
+ *      work, so the state being replaced is recorded before it is replaced. An
+ *      undo that can itself be undone is the whole point.
+ *
+ *   3. THE LIST IS BOUNDED AND SAYS SO. Twelve snapshots per project, oldest
+ *      dropped, and the count is on the screen. Silently growing this into the
+ *      localStorage quota would turn "saved" into "saved until it wasn't".
+ *
+ *   4. NOTHING HERE IS SMART. No automatic merging, no guessing which of two
+ *      changes was intended. A comparison says what differs; the person decides.
+ */
+
+const VERSIONS_LIMIT = 12;
+
+/** The project's list, created on first use. Bounded, newest first. */
+function versionsOf(project) {
+  if (!project) return [];
+  if (!Array.isArray(project.versions)) project.versions = [];
+  return project.versions;
+}
+
+/** Counts a snapshot can report without running the validator over it. */
+function versionStats(spec) {
+  let components = 0;
+  const walk = (list) => { for (const n of list || []) { components += 1; walk(n.children); } };
+  for (const s of (spec.screens || [])) walk(s.components);
+  const caps = Object.entries(spec.capabilities || {}).filter(([, v]) => v).map(([k]) => k);
+  return { screens: (spec.screens || []).length, components, caps };
+}
+
+/**
+ * Record the project as it is now. Returns the entry, or null when there is
+ * nothing to record — a snapshot of no project would be a lie in a list that
+ * claims to hold work.
+ */
+function snapshotVersion(project, note) {
+  if (!project || !project.spec) return null;
+  const list = versionsOf(project);
+  const entry = {
+    at: new Date().toISOString(),
+    note: note || 'Saved by hand',
+    name: project.spec.identity?.appName || project.name || 'Untitled',
+    spec: JSON.parse(JSON.stringify(project.spec)),
+  };
+  list.unshift(entry);
+  while (list.length > VERSIONS_LIMIT) list.pop();
+  return entry;
+}
+
+/**
+ * What differs between two specifications, said in sentences. Deliberately a
+ * summary rather than a field-by-field diff: the question a person asks before
+ * restoring is "what am I about to lose?", and a hundred lines of JSON is not
+ * an answer to that.
+ */
+function versionDiff(before, after) {
+  const lines = [];
+  const b = versionStats(before || {});
+  const a = versionStats(after || {});
+
+  const bName = (before?.identity?.appName) || '—';
+  const aName = (after?.identity?.appName) || '—';
+  if (bName !== aName) lines.push(`Application name: “${bName}” → “${aName}”`);
+
+  const bPkg = (before?.identity?.packageName) || '—';
+  const aPkg = (after?.identity?.packageName) || '—';
+  if (bPkg !== aPkg) lines.push(`Package name: “${bPkg}” → “${aPkg}”`);
+
+  const bScreens = (before?.screens || []).map((s) => s.id);
+  const aScreens = (after?.screens || []).map((s) => s.id);
+  const added = aScreens.filter((id) => !bScreens.includes(id));
+  const removed = bScreens.filter((id) => !aScreens.includes(id));
+  if (added.length) lines.push(`Screens added: ${added.join(', ')}`);
+  if (removed.length) lines.push(`Screens removed: ${removed.join(', ')}`);
+  if (!added.length && !removed.length && b.screens !== a.screens) {
+    lines.push(`Screens: ${b.screens} → ${a.screens}`);
+  }
+
+  if (b.components !== a.components) lines.push(`Components: ${b.components} → ${a.components}`);
+
+  const capsAdded = a.caps.filter((c) => !b.caps.includes(c));
+  const capsRemoved = b.caps.filter((c) => !a.caps.includes(c));
+  if (capsAdded.length) lines.push(`Features enabled: ${capsAdded.join(', ')}`);
+  if (capsRemoved.length) lines.push(`Features disabled: ${capsRemoved.join(', ')}`);
+
+  const bTheme = before?.theme || {};
+  const aTheme = after?.theme || {};
+  for (const key of ['primary', 'background', 'surface']) {
+    if (bTheme[key] !== aTheme[key]) lines.push(`Theme ${key}: ${bTheme[key] || '—'} → ${aTheme[key] || '—'}`);
+  }
+  const bMode = (before?.app || {}).mode;
+  const aMode = (after?.app || {}).mode;
+  if (bMode !== aMode) lines.push(`Architecture: ${bMode || '—'} → ${aMode || '—'}`);
+  const bNav = (before?.navigation || {}).type;
+  const aNav = (after?.navigation || {}).type;
+  if (bNav !== aNav) lines.push(`Navigation: ${bNav || '—'} → ${aNav || '—'}`);
+
+  return lines;
+}
+
+/**
+ * Put a version back. The current state is snapshotted first, under a note that
+ * says what it is, so restoring is itself reversible.
+ *
+ * Returns a description of what happened, or a reason nothing did — the caller
+ * shows one or the other and never claims a restore that did not occur.
+ */
+function restoreVersion(project, index) {
+  if (!project) return { ok: false, reason: 'There is no project open.' };
+  const list = versionsOf(project);
+  const entry = list[index];
+  if (!entry || !entry.spec) return { ok: false, reason: 'That version is no longer in the list.' };
+
+  snapshotVersion(project, `Before restoring “${entry.note}”`);
+
+  const before = JSON.parse(JSON.stringify(project.spec));
+  project.spec = JSON.parse(JSON.stringify(entry.spec));
+  project.name = project.spec.identity?.appName || project.name;
+  project.updatedAt = new Date().toISOString();
+
+  // The designer's undo stack describes a structure that no longer exists, so
+  // it is cleared rather than left to walk into a screen id that is gone.
+  clearHistory(project.id);
+  if (typeof D !== 'undefined') { D.screen = null; D.selected = null; D.adding = false; }
+
+  return { ok: true, changed: versionDiff(before, project.spec), entry };
+}
+
+
 /* ═══ studio/src/designer.js ═══ */
 /* ==================================================================== *
  * THE SCREEN DESIGNER  (M5)
@@ -6145,6 +6595,15 @@ const D = {
   depth: 0,         // recursion guard for the preview
   dragging: null,   // id of the component being dragged
   dragOver: null,   // id of the component the drop line is drawn above
+  // The canvas controls. They change how the drawing is shown, never what the
+  // app is: none of them touches the specification, which is the only thing
+  // the build reads. That distinction matters — a "dark preview" is a question
+  // about the phone you are holding, not a theme change.
+  dev: 'phone',     // 'phone' | 'tablet'
+  orient: 'portrait', // 'portrait' | 'landscape'
+  pvTheme: 'app',   // 'app' (the project's theme) | 'light' | 'dark'
+  zoom: 100,        // 75 | 100 | 125
+  pq: '',           // palette search query
 };
 
 const MAX_PREVIEW_DEPTH = 12;
@@ -6754,43 +7213,21 @@ function screenDesignerView() {
   const findings = screenFindings(spec, screen);
 
   wrap.append(
-    el('div', { class: 'd-cell' }, [
+    el('div', { class: 'd-cell cell-preview' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, 'Preview'),
         el('span', { class: 'd-note' }, 'Drawn in the browser from the same numbers the app uses. The installed app is what settles it.'),
       ]),
+      canvasToolbar(screen),
       renderPreview(screen, spec),
     ]),
-    el('div', { class: 'd-cell' }, [
+    el('div', { class: 'd-cell cell-outline' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Contents of ${screen.name}`),
         el('div', { class: 'd-tools' }, [
           /* Undo says what it will undo. On a screen full of components a
              button labelled only "Undo" does not tell you which of the last
              sixty edits you are about to lose. */
-          el('button', {
-            class: 'btn small',
-            id: 'undo-edit',
-            disabled: !canUndo(S.active),
-            title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
-            'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
-            onclick: () => {
-              const what = undoEdit(S.active);
-              touch(); hardUpdate();
-              toast(what ? `Undid: ${what}` : 'Nothing to undo.');
-            },
-          }, 'Undo'),
-          el('button', {
-            class: 'btn small',
-            id: 'redo-edit',
-            disabled: !canRedo(S.active),
-            'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
-            onclick: () => {
-              const what = redoEdit(S.active);
-              touch(); hardUpdate();
-              toast(what ? `Redid: ${what}` : 'Nothing to redo.');
-            },
-          }, 'Redo'),
           el('button', {
             class: 'btn small' + (D.adding ? ' primary' : ''),
             onclick: () => { D.adding = !D.adding; hardUpdate(); },
@@ -6806,7 +7243,7 @@ function screenDesignerView() {
 
   if (D.selected) {
     const found = locate(screen, D.selected);
-    if (found) wrap.append(el('div', { class: 'd-cell' }, [
+    if (found) wrap.append(el('div', { class: 'd-cell cell-inspector' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Edit ${(COMPONENTS[found.node.type] || {}).label || found.node.type}`),
         el('button', { class: 'btn small', onclick: () => { D.selected = null; hardUpdate(); } }, 'Deselect'),
@@ -6973,39 +7410,85 @@ function iconBtn(glyph, label, onclick) {
 
 /* ── the palette ────────────────────────────────────────────────────────── */
 
-function palette(screen) {
+/* Everything below the search field, so typing can redraw the results without
+   redrawing the field the caret is in. */
+function paletteBody(screen) {
   const groups = GROUPS;
   const open = D.group || groups[0];
-  const wrap = el('div', { class: 'palette' }, [
-    el('div', { class: 'palette-groups', role: 'tablist', 'aria-label': 'Component groups' },
+  const q = (D.pq || '').trim();
+  const nodes = [];
+
+  if (!q) {
+    nodes.push(el('div', { class: 'palette-groups', role: 'tablist', 'aria-label': 'Component groups' },
       groups.map((g) => el('button', {
         class: 'chip' + (g === open ? ' on' : ''),
         role: 'tab',
         'aria-selected': g === open ? 'true' : 'false',
         onclick: () => { D.group = g; hardUpdate(); },
-      }, g))),
-  ]);
-  const items = componentList().filter((c) => c.group === open);
-  const grid = el('div', { class: 'palette-grid' });
+      }, g))));
+  }
+
+  // With a query, the search is over every component rather than the open
+  // group: someone typing "card" wants the card, not a lesson in which shelf
+  // it happens to sit on.
+  // Ranked the way the command palette ranks, and a match is anything but
+  // null: a prefix scores -100, so "> 0" would have discarded "Button" when
+  // someone typed "but" and kept only the scattered hits.
+  const items = q
+    ? componentList()
+      .map((c) => ({ c, score: Math.min(fuzzyScore(q, c.label) ?? Infinity, fuzzyScore(q, c.name) ?? Infinity) }))
+      .filter((x) => Number.isFinite(x.score))
+      .sort((a, b) => a.score - b.score)
+      .map((x) => x.c)
+    : componentList().filter((c) => c.group === open);
+
+  const grid = el('div', { class: 'palette-grid', id: 'pal-grid' });
   for (const c of items) {
     grid.append(el('button', {
       class: 'pitem',
+      'data-comp': c.name,
       onclick: () => {
         editScreen(screen, `Add ${c.label}`, () => addComponent(screen, c.name));
         toast(`${c.label} added.`);
       },
     }, [
       el('span', { class: 'pitem-name' }, c.label),
-      el('span', { class: 'pitem-sub' }, c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role)),
+      el('span', { class: 'pitem-sub' }, q
+        ? c.group
+        : (c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role))),
     ]));
   }
+
+  if (!items.length) {
+    nodes.push(emptyState('no-results', 'No component matches', `Nothing in the library matches “${q}”. Clearing the search shows the shelves again.`, null));
+    return nodes;
+  }
+
   const target = insertTarget(screen);
   const targetName = target.parent
     ? ((COMPONENTS[(locate(screen, target.parent) || {}).node?.type] || {}).label || target.parent)
     : 'the screen';
-  wrap.append(el('p', { class: 'sub' }, `New components are added inside ${targetName}.`));
-  wrap.append(grid);
-  return wrap;
+  nodes.push(el('p', { class: 'sub' }, `New components are added inside ${targetName}.`));
+  nodes.push(grid);
+  return nodes;
+}
+
+function redrawPalette(screen) {
+  const box = $('#pal-body');
+  if (box) box.replaceChildren(...paletteBody(screen));
+}
+
+function palette(screen) {
+  const body = el('div', { class: 'pal-body', id: 'pal-body' }, ...paletteBody(screen));
+  return el('div', { class: 'palette' }, [
+    el('input', {
+      id: 'pal-search', class: 'search', type: 'search', autocomplete: 'off',
+      placeholder: 'Search all components', value: D.pq || '',
+      'aria-label': 'Search components',
+      oninput: (e) => { D.pq = e.target.value; redrawPalette(screen); },
+    }),
+    body,
+  ]);
 }
 
 /* ── the inspector ──────────────────────────────────────────────────────── */
@@ -7214,7 +7697,8 @@ function eventEditor(screen, node, ev) {
  * is fixed. Leaving a solved error on screen teaches people to ignore errors.
  */
 function findingsCell(screen, findings) {
-  const cell = el('div', { class: 'd-cell', id: 'designer-findings' }, [
+  // Carries its own class so the wide layout can place it under the canvas.
+  const cell = el('div', { class: 'd-cell cell-findings', id: 'designer-findings' }, [
     el('div', { class: 'd-head' }, [
       el('span', { class: 'd-title' }, findings.length
         ? `What needs attention (${findings.length})`
@@ -7285,6 +7769,76 @@ function locateById(screen, id) {
   return found ? found.node : null;
 }
 
+/* ── the canvas toolbar ─────────────────────────────────────────────────── */
+
+/*
+ * What the drawing is shown on, and how — not what the app is. Every control
+ * here changes D and nothing else, so nothing here can reach the
+ * specification. The undo and redo buttons live here because this is where the
+ * work is done, and because on a wide screen the outline is a column of its
+ * own and a control that edits it should not be in it.
+ */
+function seg(label, options, current, pick, key) {
+  return el('div', { class: 'seg', role: 'group', 'aria-label': label },
+    ...options.map(([id, text]) => el('button', {
+      class: 'seg-btn' + (current === id ? ' on' : ''),
+      type: 'button',
+      'aria-pressed': current === id ? 'true' : 'false',
+      'data-seg': `${key}-${id}`,
+      onclick: () => pick(id),
+    }, text)));
+}
+
+function canvasToolbar(screen) {
+  const zoomLabel = `${D.zoom}%`;
+  return el('div', { class: 'd-toolbar' }, [
+    el('button', {
+      class: 'btn small', id: 'undo-edit', disabled: !canUndo(S.active),
+      title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+      'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+      onclick: () => {
+        const what = undoEdit(S.active);
+        touch(); hardUpdate();
+        toast(what ? `Undid: ${what}` : 'Nothing to undo.');
+      },
+    }, 'Undo'),
+    el('button', {
+      class: 'btn small', id: 'redo-edit', disabled: !canRedo(S.active),
+      'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
+      onclick: () => {
+        const what = redoEdit(S.active);
+        touch(); hardUpdate();
+        toast(what ? `Redid: ${what}` : 'Nothing to redo.');
+      },
+    }, 'Redo'),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    seg('Device', [['phone', 'Phone'], ['tablet', 'Tablet']], D.dev,
+      (v) => { D.dev = v; hardUpdate(); }, 'dev'),
+    seg('Orientation', [['portrait', 'Portrait'], ['landscape', 'Landscape']], D.orient,
+      (v) => { D.orient = v; hardUpdate(); }, 'orient'),
+    seg('Preview colours', [['app', 'App'], ['light', 'Light'], ['dark', 'Dark']], D.pvTheme,
+      (v) => { D.pvTheme = v; hardUpdate(); }, 'theme'),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    el('div', { class: 'zoom', role: 'group', 'aria-label': 'Zoom' }, [
+      el('button', {
+        class: 'ibtn', id: 'zoom-out', type: 'button', 'aria-label': 'Zoom out',
+        disabled: D.zoom <= 75,
+        onclick: () => { D.zoom = Math.max(75, D.zoom - 25); hardUpdate(); },
+      }, '−'),
+      el('span', { class: 'zoom-val', id: 'zoom-val' }, zoomLabel),
+      el('button', {
+        class: 'ibtn', id: 'zoom-in', type: 'button', 'aria-label': 'Zoom in',
+        disabled: D.zoom >= 125,
+        onclick: () => { D.zoom = Math.min(125, D.zoom + 25); hardUpdate(); },
+      }, '+'),
+    ]),
+    el('button', {
+      class: 'btn primary small', id: 'preview-live', type: 'button',
+      onclick: () => { S.tab = 'preview'; touch(); hardUpdate(); },
+    }, 'Preview live'),
+  ]);
+}
+
 /* ── the preview ────────────────────────────────────────────────────────── */
 /*
  * A drawing of the screen, built from the same component descriptions and the
@@ -7296,8 +7850,17 @@ function locateById(screen, id) {
 
 function renderPreview(screen, spec) {
   const th = spec.theme || {};
-  const dark = (spec.android || {}).theme === 'dark' || luminance(th.background || '#FFFFFF') < 0.5;
-  const host = el('div', { class: 'device' + (dark ? ' dark' : '') });
+  // What the app will look like is the project's own decision; what you are
+  // looking at it on is yours. So the forced theme wins over the project's,
+  // and says so on the control that set it.
+  const appDark = (spec.android || {}).theme === 'dark' || luminance(th.background || '#FFFFFF') < 0.5;
+  const dark = D.pvTheme === 'light' ? false : D.pvTheme === 'dark' ? true : appDark;
+  const host = el('div', {
+    class: 'device' + (dark ? ' dark' : '')
+      + ` dev-${D.dev} orient-${D.orient}` + (D.zoom !== 100 ? ' zoomed' : ''),
+    'data-dev': D.dev, 'data-orient': D.orient, 'data-zoom': String(D.zoom),
+    style: D.zoom !== 100 ? `transform:scale(${D.zoom / 100});transform-origin:top center;` : null,
+  });
   const frame = el('div', { class: 'device-screen', id: 'preview-root', style: `background:${th.background || '#FFFFFF'};color:${th.onSurface || '#111827'}` });
   // Moving a component is done on the drawing itself, not only in the outline,
   // so the two listeners that make the canvas work are attached here. They are
@@ -8163,6 +8726,47 @@ function cycleTheme() {
   toast(now === 'light' ? 'Light mode' : 'Dark mode');
 }
 
+/* ── comfort ─────────────────────────────────────────────────────────────
+   Two settings the design spec requires to be reachable rather than merely
+   respected: fewer animations, and more contrast. Both are attributes on the
+   root element, because both are the same kind of thing as the theme — a set
+   of token overrides, not a second stylesheet and not a component that has to
+   be told. Both are remembered, because a comfort setting you have to set
+   twice is not a comfort setting. */
+
+const LS_COMFORT = 'appmint.comfort.v1';
+
+function comfortState() {
+  if (!S.comfort) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LS_COMFORT) || '{}'); } catch { /* first run */ }
+    S.comfort = {
+      motion: saved.motion === 'reduced' ? 'reduced' : 'full',
+      contrast: saved.contrast === 'high' ? 'high' : 'normal',
+    };
+  }
+  return S.comfort;
+}
+
+function setComfort(key, value) {
+  comfortState()[key] = value;
+  try { localStorage.setItem(LS_COMFORT, JSON.stringify(S.comfort)); } catch { /* ignore */ }
+  applyComfort();
+}
+
+/** Reads the system preference the same way the theme does. */
+const systemWantsLessMotion = () => {
+  try { return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch { return false; }
+};
+
+function applyComfort() {
+  const c = comfortState();
+  const root = document.documentElement;
+  root.setAttribute('data-motion', c.motion === 'reduced' || systemWantsLessMotion() ? 'reduced' : 'full');
+  root.setAttribute('data-contrast', c.contrast);
+}
+
 /* ── application state ─────────────────────────────────────────────────── */
 const S = {
   templates: { templates: [] },
@@ -8974,37 +9578,39 @@ function hardUpdate() { renderActive(); }
 const main = el('main');
 
 /* ── project picker ────────────────────────────────────────────────────── */
+/**
+ * Home. This is where there is no project, and where the mark in the top bar
+ * goes — the same screen both times, because "where do I start" and "where are
+ * my projects" are the same question asked in two moods.
+ */
 function renderPicker() {
-  $('#projname').textContent = 'New project';
-  const tpls = S.templates.templates || [];
-  main.replaceChildren(
-    el('div', { class: 'tabpage on' }, [
-      card('Start a project', [
-        el('p', { class: 'hint' }, 'Pick a starting point. Every template is an ordinary specification you can change completely.'),
-        ...tpls.map((t) => el('button', {
-          class: 'tpl', onclick: () => createProject(t),
-        }, [
-          el('span', { class: 'tmark', html: svg(I[t.mark] || I.square) }),
-          el('span', { style: 'flex:1;min-width:0' }, [
-            el('div', { class: 'tname' }, t.name),
-            el('div', { class: 'ttag' }, t.tagline),
-          ]),
-        ])),
-      ]),
-      S.projects.length ? card('Your projects', S.projects.map((p) => el('button', {
-        class: 'tpl', onclick: () => { S.active = p; touch(); renderActive(); },
-      }, [
-        el('span', { class: 'tmark', html: svg(I.square) }),
-        el('span', { style: 'flex:1;min-width:0' }, [
-          el('div', { class: 'tname' }, p.spec.identity.appName),
-          el('div', { class: 'ttag' }, p.spec.identity.packageName),
-        ]),
-      ]))) : null,
-    ].filter(Boolean)));
+  const tpls = (S.templates && S.templates.templates) || [];
+  $('#projname').textContent = 'App Mint';
+  $('#projmeta').textContent = S.projects.length
+    ? `${say(S.projects.length, 'project')} in this browser`
+    : 'no projects yet';
+  main.replaceChildren(el('div', { class: 'tabpage on' }, [
+    el('div', { class: 'home' }, ...viewHome()),
+  ]));
 
   // tabs are meaningless before a project exists
   $('.tabbar .inner').replaceChildren();
-  $('#health').replaceChildren(el('span', { class: 'chip' }, `${tpls.length} templates`), el('span', { class: 'spacer' }));
+  $('#health').replaceChildren(
+    el('span', { class: 'chip' }, `${tpls.length} templates`),
+    el('span', { class: 'spacer' }),
+    el('span', { class: 'chip' }, 'offline · nothing leaves this browser'),
+  );
+}
+
+/** The template gallery, reached from Home. */
+function renderGallery() {
+  $('#projname').textContent = 'Templates';
+  $('#projmeta').textContent = 'each one is an ordinary specification you can change';
+  main.replaceChildren(el('div', { class: 'tabpage on' }, [
+    el('div', { class: 'home' }, ...viewGallery()),
+  ]));
+  $('.tabbar .inner').replaceChildren();
+  $('#health').replaceChildren(el('span', { class: 'chip' }, 'nothing is installed until you build'), el('span', { class: 'spacer' }));
 }
 
 function createProject(tpl) {
@@ -9231,6 +9837,10 @@ async function boot(templatesData) {
   $('#importproj').addEventListener('click', importSpec);
   $('#themebtn').addEventListener('click', cycleTheme);
   $('#palbtn').addEventListener('click', togglePalette);
+  // The mark is the way home, which is where every tool puts it. On a phone it
+  // is also the only way back to the project list without closing the tab.
+  const home = $('#homelink');
+  if (home) home.addEventListener('click', () => { renderPicker(); });
 
   /* Ctrl+K is the convention people arrive expecting, and Escape is the one
      that must never trap anyone inside an overlay. The palette also has a
@@ -9250,6 +9860,7 @@ async function boot(templatesData) {
   // said — including across a reload, which is when an unremembered preference
   // is most annoying.
   applyTheme(store.theme());
+  applyComfort();
   if (window.matchMedia) {
     try {
       window.matchMedia('(prefers-color-scheme: light)')
@@ -9323,6 +9934,444 @@ window.__appmintHealth = () => {
   const spec = S.active ? S.active.spec : {};
   return projectHealth(spec, check(), permissionReport(spec));
 };
+
+
+/* ═══ studio/src/viewHome.js ═══ */
+/* ==================================================================== *
+ * HOME  (the dashboard) and the TEMPLATE GALLERY
+ * ====================================================================
+ * What this is
+ * ------------
+ * The screen you land on when there is no project, and the screen the mark in
+ * the top bar takes you back to. It answers one question — "how do I start?" —
+ * with four explicit creation methods rather than a list that only says
+ * "templates", and it shows the work you already have underneath them.
+ *
+ * Three things are deliberately true of everything below:
+ *
+ *   1. NOTHING IS INVENTED. The health badge on a project is the number the
+ *      engine derives (engine/spec/health.mjs), the thumbnail is drawn from the
+ *      project's own theme, and the counts are read out of the specification.
+ *      A dashboard is exactly where a reassuring number would go unnoticed.
+ *
+ *   2. NO SECOND COPY OF ANYTHING. The template list, the component names and
+ *      the permission rules all come from where they already live. The only
+ *      thing declared here is the category a template belongs to, because that
+ *      is a fact about the gallery and about nothing else.
+ *
+ *   3. NO EXTERNAL RESOURCES. The illustrations and the thumbnails are inline
+ *      SVG drawn from the tokens; the Studio is one file that works offline.
+ */
+
+const LS_HOME = 'appmint.home.v1';   // the gallery's search and filter
+
+const homeState = () => {
+  if (!S.home) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LS_HOME) || '{}'); } catch { /* first run */ }
+    S.home = { q: typeof saved.q === 'string' ? saved.q : '', cat: saved.cat || 'all' };
+  }
+  return S.home;
+};
+
+const saveHomeState = () => {
+  try { localStorage.setItem(LS_HOME, JSON.stringify({ q: homeState().q, cat: homeState().cat })); }
+  catch { /* a filter that cannot be remembered is not a failure */ }
+};
+
+/* Which shelf a template sits on. This is the one fact the gallery owns: it is
+   about browsing, not about the app the template makes. */
+const TEMPLATE_CATEGORY = {
+  blank: 'Start',
+  business: 'Business',
+  portfolio: 'Portfolio',
+  commerce: 'Shop',
+  education: 'Learning',
+  news: 'News',
+  tournament: 'Community',
+  utility: 'Tools',
+  dashboard: 'Business',
+};
+
+/* ── illustrations ──────────────────────────────────────────────────────── */
+
+/*
+ * Geometric line drawings, in the tokens, with the brand gradient used once.
+ * Called "illustration" rather than "icon" on purpose: at 120px these are the
+ * empty-state drawings the design spec asks for, not scaled-up icons.
+ */
+function illustration(kind, size = 120) {
+  const g = `<linearGradient id="ill-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--brand)"/><stop offset="1" stop-color="var(--mint)"/>
+    </linearGradient>`;
+  const drawings = {
+    // a stack of screens, none of them written yet
+    'no-projects': `
+      <rect x="26" y="14" width="68" height="92" rx="10" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+      <rect x="16" y="26" width="68" height="92" rx="10" stroke="currentColor" stroke-width="1.5" opacity="0.55"/>
+      <rect x="36" y="38" width="68" height="92" rx="10" fill="none" stroke="url(#ill-g)" stroke-width="1.8"/>
+      <path d="M46 56h48M46 70h34M46 84h42" stroke="url(#ill-g)" stroke-width="1.8" stroke-linecap="round" opacity="0.8"/>
+      <circle cx="46" cy="112" r="3" fill="url(#ill-g)"/>`,
+    // a magnifier over nothing
+    'no-results': `
+      <circle cx="58" cy="56" r="30" fill="none" stroke="url(#ill-g)" stroke-width="1.8"/>
+      <path d="m80 78 20 20" stroke="url(#ill-g)" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M44 50h28M44 62h18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>`,
+    // an empty phone, waiting
+    'empty-screen': `
+      <rect x="38" y="10" width="64" height="112" rx="12" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"/>
+      <path d="M70 22h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+      <path d="M52 52h36M52 68h24" stroke="url(#ill-g)" stroke-width="1.8" stroke-linecap="round"/>
+      <rect x="52" y="84" width="36" height="14" rx="7" fill="none" stroke="url(#ill-g)" stroke-width="1.8"/>`,
+  };
+  const body = drawings[kind] || drawings['no-projects'];
+  return `<svg class="ill" viewBox="0 0 140 140" width="${size}" height="${size}" aria-hidden="true" role="presentation">
+    <defs>${g}</defs>${body}
+  </svg>`;
+}
+
+/** An empty state: drawing, a sentence, and the one action worth taking. */
+function emptyState(kind, title, text, action) {
+  return el('div', { class: 'empty-state' }, [
+    el('span', { class: 'ill-wrap', html: illustration(kind) }),
+    el('p', { class: 'empty-title' }, title),
+    el('p', { class: 'sub' }, text),
+    action || null,
+  ]);
+}
+
+/* ── what a project looks like, small ───────────────────────────────────── */
+
+/** Counts read out of the specification, so the card cannot flatter it. */
+function projectStats(spec) {
+  let components = 0;
+  const walk = (list) => {
+    for (const n of list || []) { components += 1; walk(n.children); }
+  };
+  for (const s of spec.screens || []) walk(s.components);
+  const caps = Object.entries(spec.capabilities || {}).filter(([, v]) => v).length;
+  return { screens: (spec.screens || []).length, components, caps };
+}
+
+/**
+ * A drawing of the app, built from the project's own theme — the same thing
+ * the Preview tab does, at card size. It is deliberately abstract: at 64px a
+ * "realistic" preview would be a picture of four grey rectangles pretending to
+ * be content, and pretending is the thing this project does not do.
+ */
+function projectThumb(spec) {
+  const th = spec.theme || {};
+  const bg = th.background || '#0B0D12';
+  const surface = th.surface || '#15171F';
+  const primary = th.primary || '#6C5CE7';
+  const screens = (spec.screens || []).length;
+  const rows = Math.max(2, Math.min(4, (spec.screens && spec.screens[0] && (spec.screens[0].components || []).length) || 3));
+  let inner = `<rect x="0" y="0" width="96" height="120" rx="10" fill="${bg}"/>`;
+  inner += `<rect x="0" y="0" width="96" height="22" rx="10" fill="${primary}"/>`;
+  inner += `<rect x="0" y="14" width="96" height="8" fill="${primary}"/>`;
+  for (let i = 0; i < rows; i += 1) {
+    inner += `<rect x="12" y="${34 + i * 20}" width="${72 - i * 12}" height="10" rx="5" fill="${surface}"/>`;
+  }
+  if (screens > 1) inner += `<rect x="0" y="110" width="96" height="10" rx="5" fill="${surface}"/>`;
+  return `<svg viewBox="0 0 96 120" width="64" height="80" aria-hidden="true" role="presentation"
+    style="border-radius:12px;border:1px solid var(--line-2);background:${bg}">${inner}</svg>`;
+}
+
+/* ── the four creation methods ──────────────────────────────────────────── */
+
+/**
+ * The four ways in, declared once. Every card says what it does in one line and
+ * does it — there is no card here that leads to a screen where the thing you
+ * asked for has to be found again.
+ */
+function creationMethods() {
+  return [
+    {
+      id: 'template',
+      icon: I.grid,
+      title: 'From a template',
+      line: 'Nine starting points — a shop, a business, a learning app — each one editable to the last detail.',
+      run: () => renderGallery(),
+    },
+    {
+      id: 'website',
+      icon: I.eye,
+      title: 'Website to app',
+      line: 'Give an address and the analyser says how the site will behave inside an app, before anything is built.',
+      run: () => startWebsiteProject(),
+    },
+    {
+      id: 'blank',
+      icon: I.square,
+      title: 'Blank project',
+      line: 'A name, a package and one empty screen. For when you already know what you are making.',
+      run: () => startBlankProject(),
+    },
+    {
+      id: 'import',
+      icon: I.code,
+      title: 'Import a specification',
+      line: 'Open a spec.json you already have. It is validated before anything is offered.',
+      run: () => importSpec(),
+    },
+  ];
+}
+
+/** Start a project whose whole point is the website analyser on the Design tab. */
+function startWebsiteProject() {
+  if (S.active) { S.tab = 'design'; renderActive(); return; }
+  const tpls = (S.templates && S.templates.templates) || [];
+  const tpl = tpls.find((t) => t.id === 'blank');
+  if (!tpl) { toast('No blank template is available to start from.'); return; }
+  createProject(tpl);          // lands on the Design tab, where the address field is
+}
+
+function startBlankProject() {
+  const tpls = (S.templates && S.templates.templates) || [];
+  const tpl = tpls.find((t) => t.id === 'blank');
+  if (!tpl) { toast('No blank template is available.'); return; }
+  createProject(tpl);
+}
+
+/* ── the health badge ───────────────────────────────────────────────────── */
+
+/**
+ * The same three calls the Health tab makes, so the badge on this screen and
+ * the rings on that one cannot disagree. Returns null when there is no project
+ * to measure, rather than a comforting zero.
+ */
+function homeHealth(spec) {
+  if (!spec || !spec.identity) return null;
+  try {
+    return projectHealth(spec, validateSpec(spec), permissionReport(spec));
+  } catch { return null; }
+}
+
+/* ── the Home screen ────────────────────────────────────────────────────── */
+
+function viewHome() {
+  const methods = creationMethods();
+  const recent = (S.projects || []).slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+
+  const hero = el('section', { class: 'hero' }, [
+    el('h1', { class: 'hero-title' }, 'Build an Android app'),
+    el('p', { class: 'hero-sub' }, 'Free, offline, and deterministic: no account, no credits, no AI, and nothing here counts how many apps you make. Choose a way in.'),
+    el('div', { class: 'methods' }, ...methods.map((m) => el('button', {
+      class: 'method', id: `method-${m.id}`, type: 'button', onclick: m.run,
+    }, [
+      el('span', { class: 'method-ico', html: svg(m.icon) }),
+      el('span', { class: 'method-text' }, [
+        el('span', { class: 'method-name' }, m.title),
+        el('span', { class: 'method-line' }, m.line),
+      ]),
+      el('span', { class: 'method-go', 'aria-hidden': 'true', html: svg('<path d="m9 6 6 6-6 6"/>') }),
+    ]))),
+  ]);
+
+  const nodes = [hero];
+
+  if (recent.length) {
+    nodes.push(el('section', { class: 'sec-open' }, [
+      el('div', { class: 'home-head' }, [
+        el('h2', { class: 'home-h2' }, 'Your projects'),
+        el('span', { class: 'home-count' }, `${recent.length} project${recent.length === 1 ? '' : 's'} in this browser`),
+      ]),
+      el('div', { class: 'projects' }, ...recent.map((p) => {
+        const st = projectStats(p.spec);
+        const h = p.id === (S.active && S.active.id) ? homeHealth(p.spec) : null;
+        const when = p.updatedAt ? new Date(p.updatedAt) : null;
+        return el('article', { class: 'pcard', 'data-project': p.id }, [
+          el('div', { class: 'pcard-top' }, [
+            el('span', { class: 'pthumb', html: projectThumb(p.spec) }),
+            el('div', { class: 'pmeta' }, [
+              el('h3', { class: 'pname' }, p.spec.identity.appName || p.name || 'Untitled'),
+              el('p', { class: 'ppkg' }, p.spec.identity.packageName || 'no package name yet'),
+              el('div', { class: 'pchips' }, [
+                el('span', { class: 'chip small' }, `${st.screens} screen${st.screens === 1 ? '' : 's'}`),
+                el('span', { class: 'chip small' }, `${st.caps} feature${st.caps === 1 ? '' : 's'}`),
+                h ? el('span', { class: `chip small band-${bandOf(h.overall)}` }, `health ${h.overall}`) : null,
+                when && !Number.isNaN(when.getTime())
+                  ? el('span', { class: 'chip small' }, when.toISOString().slice(0, 10)) : null,
+              ]),
+            ]),
+          ]),
+          el('div', { class: 'pcard-acts' }, [
+            el('button', {
+              class: 'btn primary small', type: 'button',
+              onclick: () => { S.active = p; persist(); S.tab = 'design'; touch(); renderActive(); },
+            }, 'Open'),
+            h ? el('button', {
+              class: 'btn small', type: 'button',
+              onclick: () => { S.active = p; persist(); S.tab = 'health'; touch(); renderActive(); },
+            }, 'Health') : null,
+            el('button', {
+              class: 'btn ghost small', type: 'button',
+              onclick: () => removeProject(p),
+            }, 'Remove'),
+          ]),
+        ]);
+      })),
+    ]));
+  } else {
+    nodes.push(card('Your projects', emptyState(
+      'no-projects',
+      'Nothing here yet',
+      'Projects live in this browser, not on a server. The first thing you make will appear here, with its health score — no account, nothing to sign into.',
+      el('button', { class: 'btn primary', type: 'button', onclick: () => renderGallery() }, 'Start from a template'),
+    )));
+  }
+
+  // The ring for whatever is open, with the one link that explains it.
+  const h = homeHealth(S.active && S.active.spec);
+  if (h) {
+    nodes.push(el('section', { class: 'home-health' }, [
+      el('div', { class: 'hh-ring' }, scoreRing(h.overall, bandOf(h.overall))),
+      el('div', { class: 'hh-meta' }, [
+        el('h2', { class: 'home-h2' }, `Health of ${S.active.spec.identity.appName}`),
+        el('p', { class: 'sub' }, `The overall score is the weakest category — ${h.weakest} — so nothing failing is averaged away.`),
+        el('button', {
+          class: 'btn small', type: 'button',
+          onclick: () => { S.tab = 'health'; touch(); renderActive(); },
+        }, 'Why this score?'),
+      ]),
+    ]));
+  }
+
+  return nodes;
+}
+
+/** Removing a project closes it first if it is the open one. */
+function removeProject(p) {
+  const at = S.projects.findIndex((x) => x.id === p.id);
+  if (at === -1) return;
+  S.projects.splice(at, 1);
+  if (S.active && S.active.id === p.id) S.active = S.projects[0] || null;
+  clearHistory(p.id);
+  persist();
+  toast(`Removed ${p.spec.identity.appName || p.name}.`);
+  renderPicker();
+}
+
+/* ── the template gallery ───────────────────────────────────────────────── */
+
+/** Templates that match the current filter and query. */
+function galleryMatches() {
+  const st = homeState();
+  const tpls = (S.templates && S.templates.templates) || [];
+  const q = st.q.trim();
+  return tpls.filter((t) => {
+    const cat = TEMPLATE_CATEGORY[t.id] || 'Other';
+    if (st.cat !== 'all' && cat !== st.cat) return false;
+    if (!q) return true;
+    // The same ranked subsequence search the command palette uses. A match is
+    // anything that is not null: a prefix scores -100 and a plain substring
+    // scores its position, so testing for a positive score would throw away
+    // the best matches and keep the worst.
+    return [t.name, t.tagline, cat].some((text) => fuzzyScore(q, text) !== null);
+  });
+}
+
+function galleryCategories() {
+  const tpls = (S.templates && S.templates.templates) || [];
+  const used = [];
+  for (const t of tpls) {
+    const c = TEMPLATE_CATEGORY[t.id] || 'Other';
+    if (!used.includes(c)) used.push(c);
+  }
+  return used.sort((a, b) => a.localeCompare(b));
+}
+
+/** The grid alone, so typing does not lose the caret in the search field. */
+function redrawGalleryGrid() {
+  const box = $('#tpl-grid');
+  if (!box) return;
+  const matches = galleryMatches();
+  box.replaceChildren(...(matches.length
+    ? matches.map(templateCard)
+    : [emptyState('no-results', 'Nothing matches',
+      'No template matches that search. Clearing it shows all of them again.', null)]));
+  const count = document.querySelector('#tpl-count');
+  if (count) count.textContent = `${matches.length} of ${((S.templates && S.templates.templates) || []).length} templates`;
+}
+
+function templateCard(t) {
+  const st = projectStats(t.spec);
+  const cat = TEMPLATE_CATEGORY[t.id] || 'Other';
+  // Screens first when there are any; otherwise the theme, because every
+  // template has one and "start blank" was the same words on nine cards.
+  const shape = st.screens ? `${st.screens} screen${st.screens === 1 ? '' : 's'}` : 'empty start';
+  const theme = (t.spec.theme || {}).primary;
+  const facts = [shape, theme ? `theme ${theme}` : null].filter(Boolean);
+
+  return el('article', { class: 'tcard', 'data-tpl': t.id }, [
+    el('div', { class: 'tcard-top' }, [
+      el('span', { class: 'tmark big', html: svg(I[t.mark] || I.square) }),
+      el('div', { class: 'tcard-meta' }, [
+        el('h3', { class: 'tname' }, t.name),
+        el('p', { class: 'ttag' }, t.tagline),
+      ]),
+    ]),
+    el('div', { class: 'tcard-foot' }, [
+      el('span', { class: 'chip small' }, cat),
+      ...facts.map((f) => el('span', { class: 'chip small' }, f)),
+      el('button', {
+        class: 'btn primary small', type: 'button', 'data-use': t.id,
+        onclick: () => createProject(t),
+      }, 'Use template'),
+    ]),
+  ]);
+}
+
+function viewGallery() {
+  const st = homeState();
+  const cats = galleryCategories();
+  const search = el('input', {
+    id: 'tpl-search', class: 'search', type: 'search', autocomplete: 'off',
+    placeholder: 'Search templates by name, use or category', value: st.q,
+    'aria-label': 'Search templates',
+    oninput: (e) => { st.q = e.target.value; saveHomeState(); redrawGalleryGrid(); },
+  });
+
+  const total = ((S.templates && S.templates.templates) || []).length;
+  const shown = galleryMatches().length;
+
+  const pills = el('div', {
+    class: 'tpl-cats', id: 'tpl-cats', role: 'tablist', 'aria-label': 'Template categories',
+  }, ...[['all', 'All'], ...cats.map((c) => [c, c])].map(([id, label]) => el('button', {
+    class: 'chip filter' + (st.cat === id ? ' on' : ''),
+    role: 'tab', type: 'button', 'data-cat': id,
+    'aria-selected': st.cat === id ? 'true' : 'false',
+    onclick: () => {
+      st.cat = id; saveHomeState();
+      // The pills are marked from their own data rather than from their label:
+      // two categories may not share a name, but a label is a rendering of the
+      // thing and matching on it is how a filter ends up selecting the wrong
+      // one after a rename.
+      for (const b of document.querySelectorAll('#tpl-cats .chip')) {
+        const on = b.dataset.cat === id;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      redrawGalleryGrid();
+    },
+  }, label)));
+
+  return [
+    el('div', { class: 'gallery-head' }, [
+      el('button', { class: 'btn ghost small', type: 'button', onclick: () => renderPicker() }, '← Home'),
+      el('h1', { class: 'gallery-title' }, 'Templates'),
+      el('span', { class: 'home-count', id: 'tpl-count' }, `${shown} of ${total} templates`),
+    ]),
+    el('p', { class: 'hint' }, 'Every template is an ordinary specification you can change completely — nothing about it is fixed, and nothing here is charged for.'),
+    el('div', { class: 'gallery-search' }, search, pills),
+    el('div', { class: 'tpl-grid', id: 'tpl-grid' }, ...galleryMatches().map(templateCard)),
+    el('div', { class: 'gallery-note' }, el('p', { class: 'sub' },
+      'Choosing a template copies it into a project in this browser. The template itself is never modified, so the gallery is the same next time.')),
+  ];
+}
+
+/* The count under the title is filled by redrawGalleryGrid, which runs once
+   after the first paint rather than being computed twice. */
 
 
 /* ═══ studio/src/repairs.js ═══ */
@@ -9930,6 +10979,7 @@ const SETTINGS_TABS = [
   ['signing', 'Signing'],
   ['permissions', 'Permissions'],
   ['engine', 'Build Engine'],
+  ['versions', 'Versions'],
   ['diagnostics', 'Diagnostics'],
 ];
 
@@ -10341,6 +11391,110 @@ function tabAdvanced(spec) {
 
 /* ── the screen ─────────────────────────────────────────────────────────── */
 
+/* ── comfort ────────────────────────────────────────────────────────────── */
+
+/**
+ * Two settings that change how the tool feels rather than what it does, which
+ * is exactly why they are here and not in the specification: they are about the
+ * person using the Studio, so they belong to the Studio and to this browser.
+ */
+function comfortSection() {
+  const c = comfortState();
+  return section('Comfort', {
+    id: 'comfort', icon: I.spark, open: true, summary: 'motion and contrast',
+    children: [
+      field('Reduce motion', sw(c.motion === 'reduced', 'Reduce motion',
+        (e) => { setComfort('motion', e.target.checked ? 'reduced' : 'full'); hardUpdate(); }),
+        'Turns off every non-essential transition and animation. Your system setting is followed until you choose here.'),
+      field('High contrast', sw(c.contrast === 'high', 'High contrast',
+        (e) => { setComfort('contrast', e.target.checked ? 'high' : 'normal'); hardUpdate(); }),
+        'Strengthens borders, secondary text and the focus ring. The contrast gate already holds 4.5:1; this goes further for people who need it.'),
+      field('Font scaling', el('p', { class: 'sub' },
+        'Text scales with the browser or system setting up to 200%. This is a deliberate limit: the layouts here are built on a fixed spacing scale, and pretending to scale beyond what has been checked would be a claim rather than a feature.'),
+        null),
+    ],
+  });
+}
+
+/* ── version history ────────────────────────────────────────────────────── */
+
+function sayWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'unknown time';
+  return d.toISOString().replace('T', ' ').slice(0, 16);
+}
+
+function versionRow(project, entry, index) {
+  const diff = versionDiff(project.spec, entry.spec);
+  const st = versionStats(entry.spec);
+  return el('article', { class: 'vercard', 'data-ver': String(index) }, [
+    el('div', { class: 'verhead' }, [
+      el('div', { class: 'vermeta' }, [
+        el('h3', { class: 'vername' }, entry.note),
+        el('p', { class: 'versub' }, `${sayWhen(entry.at)} · “${entry.name}” · ${st.screens} screen${st.screens === 1 ? '' : 's'} · ${st.components} component${st.components === 1 ? '' : 's'}`),
+      ]),
+      el('button', {
+        class: 'btn small', type: 'button', 'data-restore': String(index),
+        onclick: () => {
+          const out = restoreVersion(S.active, index);
+          if (!out.ok) { toast(out.reason); return; }
+          persist(); touch(); hardUpdate();
+          toast(out.changed.length
+            ? `Restored “${entry.note}” — ${out.changed.length} thing(s) differ from what was open.`
+            : `Restored “${entry.note}”. The specification was already identical.`);
+        },
+      }, 'Restore'),
+    ]),
+    // "What am I about to lose?" is the only question worth answering here, so
+    // the comparison is against what is open right now, not against the
+    // neighbouring snapshot.
+    el('details', { class: 'why-box' },
+      el('summary', {}, diff.length ? `Compared with what is open (${diff.length} difference${diff.length === 1 ? '' : 's'})` : 'Compared with what is open (identical)'),
+      diff.length
+        ? el('ul', { class: 'diff' }, ...diff.map((line) => el('li', {}, line)))
+        : el('p', { class: 'why-none' }, 'This snapshot and the open project are the same specification.'),
+    ),
+  ]);
+}
+
+function tabVersions(spec) {
+  const project = S.active;
+  const list = versionsOf(project);
+  const note = el('input', {
+    id: 'ver-note', type: 'text', autocomplete: 'off', maxlength: '60',
+    placeholder: 'What are you saving, and why?', 'aria-label': 'A name for this version',
+  });
+
+  return [
+    section('Save a version', {
+      id: 'ver-save', icon: I.build, open: true, summary: `${list.length} of ${VERSIONS_LIMIT} kept`,
+      children: [
+        el('p', { class: 'hint' }, 'A version is the whole specification, kept inside this project in this browser. Twelve are kept per project; the oldest is dropped first, and the count is on this screen rather than discovered later.'),
+        field('Name this version', note, 'Left empty it is recorded as “Saved by hand”.'),
+        el('div', { class: 'row' },
+          el('button', {
+            class: 'btn primary', id: 'ver-save-btn', type: 'button',
+            onclick: () => {
+              const entry = snapshotVersion(project, (note.value || '').trim() || 'Saved by hand');
+              if (!entry) { toast('There is no project to save.'); return; }
+              persist(); hardUpdate();
+              toast(`Saved “${entry.note}”.`);
+            },
+          }, 'Save this version'),
+          el('span', { class: 'sub' }, 'Restoring always saves what it replaces, so a restore can be undone by restoring the next entry.'),
+        ),
+      ],
+    }),
+    section('History', {
+      id: 'ver-list', icon: I.list, open: true, summary: list.length ? `${list.length} version${list.length === 1 ? '' : 's'}` : 'nothing saved yet',
+      children: list.length
+        ? list.map((entry, i) => versionRow(project, entry, i))
+        : [emptyState('no-projects', 'No versions yet',
+          'Save a version before a big change — the specification is small, so keeping a dozen costs nothing and answers “what did this look like before?” exactly.', null)],
+    }),
+  ];
+}
+
 function viewSettings() {
   const spec = S.active.spec;
   const st = S.settings || (S.settings = { tab: 'general', advanced: false });
@@ -10360,7 +11514,8 @@ function viewSettings() {
     sw(st.advanced, 'Advanced Mode', (e) => { st.advanced = e.target.checked; hardUpdate(); }),
   );
 
-  const panel = st.tab === 'general' ? tabGeneral(spec)
+  const panel = st.tab === 'general' ? [...tabGeneral(spec), comfortSection()]
+    : st.tab === 'versions' ? tabVersions(spec)
     : st.tab === 'backend' ? tabBackend(spec)
     : st.tab === 'signing' ? tabSigning(spec)
     : st.tab === 'permissions' ? tabPermissions(spec)
@@ -10585,7 +11740,8 @@ function paletteActions() {
     acts.push({ label: 'Copy the specification', hint: 'to the clipboard', run: () => { PAL.open = false; copySpec(); } });
   }
 
-  acts.push({ label: 'New project', hint: 'start from a template', run: () => { PAL.open = false; renderPicker(); } });
+  acts.push({ label: 'Home', hint: 'the four ways to start, and your projects', run: () => { PAL.open = false; renderPicker(); } });
+  acts.push({ label: 'Browse templates', hint: 'the gallery, with categories', run: () => { PAL.open = false; renderGallery(); } });
   acts.push({ label: 'Import a specification', hint: 'from a spec.json file', run: () => { PAL.open = false; importSpec(); } });
 
   const themeNow = document.documentElement.getAttribute('data-theme');
