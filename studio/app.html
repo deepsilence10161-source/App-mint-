@@ -2234,8 +2234,18 @@ body.dragging { user-select: none; -webkit-user-select: none; }
   .designer > :not(.d-cell) { grid-column: 1 / -1; }
   .designer .d-cell { margin: 0; }
 }
+
+/* The health strip is a row of pills and a spacer; on a narrow phone it had
+   the last chip pushed off the right edge, which is how a status strip stops
+   being read. It wraps now, and the spacer only works when there is room. */
+#health { flex-wrap: wrap; }
+#health .spacer { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 460px) {
+  #health .spacer { display: none; }
+  #health .chip { max-width: 100%; }
+}
 </style>
-<meta name="appmint-build" content="e243abaf1e6df5c8">
+<meta name="appmint-build" content="ffecaff7a386c03a">
 </head>
 <body>
 
@@ -10287,6 +10297,12 @@ function redrawGalleryGrid() {
 function templateCard(t) {
   const st = projectStats(t.spec);
   const cat = TEMPLATE_CATEGORY[t.id] || 'Other';
+  // Screens first when there are any; otherwise the theme, because every
+  // template has one and "start blank" was the same words on nine cards.
+  const shape = st.screens ? `${st.screens} screen${st.screens === 1 ? '' : 's'}` : 'empty start';
+  const theme = (t.spec.theme || {}).primary;
+  const facts = [shape, theme ? `theme ${theme}` : null].filter(Boolean);
+
   return el('article', { class: 'tcard', 'data-tpl': t.id }, [
     el('div', { class: 'tcard-top' }, [
       el('span', { class: 'tmark big', html: svg(I[t.mark] || I.square) }),
@@ -10297,7 +10313,7 @@ function templateCard(t) {
     ]),
     el('div', { class: 'tcard-foot' }, [
       el('span', { class: 'chip small' }, cat),
-      el('span', { class: 'chip small' }, st.screens ? `${st.screens} screens` : 'start blank'),
+      ...facts.map((f) => el('span', { class: 'chip small' }, f)),
       el('button', {
         class: 'btn primary small', type: 'button', 'data-use': t.id,
         onclick: () => createProject(t),

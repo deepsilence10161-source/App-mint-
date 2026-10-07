@@ -358,6 +358,12 @@ function redrawGalleryGrid() {
 function templateCard(t) {
   const st = projectStats(t.spec);
   const cat = TEMPLATE_CATEGORY[t.id] || 'Other';
+  // Screens first when there are any; otherwise the theme, because every
+  // template has one and "start blank" was the same words on nine cards.
+  const shape = st.screens ? `${st.screens} screen${st.screens === 1 ? '' : 's'}` : 'empty start';
+  const theme = (t.spec.theme || {}).primary;
+  const facts = [shape, theme ? `theme ${theme}` : null].filter(Boolean);
+
   return el('article', { class: 'tcard', 'data-tpl': t.id }, [
     el('div', { class: 'tcard-top' }, [
       el('span', { class: 'tmark big', html: svg(I[t.mark] || I.square) }),
@@ -366,14 +372,9 @@ function templateCard(t) {
         el('p', { class: 'ttag' }, t.tagline),
       ]),
     ]),
-    // Screens first when there are any; otherwise the theme, because every
-    // template has one and "start blank" was the same words on nine cards.
-    const shape = st.screens ? `${st.screens} screen${st.screens === 1 ? '' : 's'}` : 'empty start';
-    const flavours = (t.spec.theme || {}).primary ? [`theme ${(t.spec.theme || {}).primary}`] : [];
     el('div', { class: 'tcard-foot' }, [
       el('span', { class: 'chip small' }, cat),
-      el('span', { class: 'chip small' }, shape),
-      ...flavours.slice(0, 1).map((f) => el('span', { class: 'chip small' }, f)),
+      ...facts.map((f) => el('span', { class: 'chip small' }, f)),
       el('button', {
         class: 'btn primary small', type: 'button', 'data-use': t.id,
         onclick: () => createProject(t),
