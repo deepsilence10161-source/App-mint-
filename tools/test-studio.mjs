@@ -892,6 +892,249 @@ async function main() {
     JSON.stringify(await orderOf()) === JSON.stringify(orderBefore),
     'expected the original order back');
 
+  /* ── moving components on the canvas ─────────────────────────────────────
+     The design prompt asks the visual builder to feel like Figma: dragging
+     with a drop indicator and alignment guides. The outline's drag cannot show
+     either, so these checks are about the canvas itself — and about the two
+     claims that are easiest to fake: that the drop lands where the indicator
+     said it would, and that a refusal is a refusal rather than a silent no-op. */
+
+  const historyNow = () => page.evaluate(() => window.__appmintHistory());
+  const topsOf = () => page.evaluate(() => [...document.querySelectorAll('#preview-root .pv-body > .pv-node')]
+    .map((n) => n.dataset.id));
+  /* The tree row is a rendering of the component; what "untouched" has to mean
+     is that the specification's shape is the same, so this reads the ids out of
+     the specification itself rather than out of the labels the tree happens to
+     be showing. */
+  const structureOf = () => page.evaluate(() => {
+    const walk = (list, out) => { for (const n of list || []) { out.push(n.id); walk(n.children, out); } return out; };
+    return (window.__appmintSpec().screens || []).flatMap((s) => walk(s.components, []));
+  });
+
+  const tops = await topsOf();
+  check("The canvas draws the screen's components, and each can be addressed", tops.length >= 2,
+    `top-level components: ${tops.length}`);
+
+  /* Tapping the drawing selects — and the outline has to agree, or the two
+     halves of the editor disagree about what is being edited. */
+  const firstTop = page.locator('#preview-root .pv-body > .pv-node').first();
+  await firstTop.scrollIntoViewIfNeeded();
+  await firstTop.click();
+  await page.waitForTimeout(350);
+  const afterTap = await page.evaluate(() => {
+    const sel = document.querySelector('#preview-root .pv-node.sel');
+    const row = document.querySelector('.tree .node.on');
+    return {
+      selId: sel ? sel.dataset.id : null,
+      treeName: row ? ((row.querySelector('.node-id') || {}).textContent || '') : '',
+      grip: !!(sel && sel.querySelector(':scope > .pv-grip')),
+    };
+  });
+  check('Tapping a component in the preview selects it, and the outline agrees',
+    afterTap.selId === tops[0] && afterTap.treeName.length > 0, JSON.stringify(afterTap));
+  check('The selected component offers a grip to drag it by', afterTap.grip,
+    'no .pv-grip inside the selection');
+
+  const gripBox = await page.locator('#preview-root .pv-node.sel .pv-grip').boundingBox();
+  check('The grip is a real 44px touch target, not a decorative dot',
+    gripBox && gripBox.width >= 44 && gripBox.height >= 44,
+    gripBox ? `${Math.round(gripBox.width)}x${Math.round(gripBox.height)}` : 'no grip box');
+
+  /* touch-action is what makes a touch drag possible at all, and it is only
+     safe on the grip: on the components it would take scrolling away from a
+     screen that is usually taller than the phone. */
+  const touchActions = await page.evaluate(() => ({
+    node: getComputedStyle(document.querySelector('#preview-root .pv-node')).touchAction,
+    grip: getComputedStyle(document.querySelector('#preview-root .pv-node.sel .pv-grip')).touchAction,
+  }));
+  check('Only the grip claims the touch gesture, so the screen behind it still scrolls',
+    touchActions.grip === 'none' && touchActions.node !== 'none', JSON.stringify(touchActions));
+
+  /* A drag that lands exactly where the component already is changes nothing,
+     so it must record nothing: an undo step for a no-op is a claim that
+     something happened. */
+  const orderBeforeNoop = await orderOf();
+  const historyBeforeNoop = await historyNow();
+  const boxA = await page.locator('#preview-root .pv-body > .pv-node').first().boundingBox();
+  const boxB = await page.locator('#preview-root .pv-body > .pv-node').nth(1).boundingBox();
+  await page.mouse.move(boxA.x + boxA.width / 2, boxA.y + boxA.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(boxA.x + boxA.width / 2 + 12, boxA.y + boxA.height / 2 + 10, { steps: 4 });
+  await page.mouse.move(boxB.x + boxB.width / 2, boxB.y + Math.min(10, boxB.height * 0.2), { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(350);
+  const historyAfterNoop = await historyNow();
+  check('A drag that lands where the component already was records nothing',
+    historyAfterNoop.length === historyBeforeNoop.length
+      && JSON.stringify(await orderOf()) === JSON.stringify(orderBeforeNoop),
+    `history ${historyBeforeNoop.length} -> ${historyAfterNoop.length}`);
+
+  /* The drag itself, with the mouse. What is being tested while the pointer is
+     down is not the outcome but the promise: an outline that says what is
+     moving, a line that says where it will land, and guides that say what it
+     has lined up with. */
+  const orderBeforeDrag = await orderOf();
+  const historyBeforeDrag = await historyNow();
+  const srcBox = await page.locator('#preview-root .pv-body > .pv-node').first().boundingBox();
+  const dstBox = await page.locator('#preview-root .pv-body > .pv-node').last().boundingBox();
+  await page.mouse.move(srcBox.x + srcBox.width / 2, srcBox.y + srcBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(srcBox.x + srcBox.width / 2 + 16, srcBox.y + srcBox.height / 2 + 34, { steps: 5 });
+  await page.mouse.move(dstBox.x + dstBox.width / 2, dstBox.y + dstBox.height - 6, { steps: 8 });
+  await page.waitForTimeout(150);
+  const inTheAir = await page.evaluate(() => ({
+    ghost: !!document.querySelector('.pv-ghost'),
+    label: (document.querySelector('.pv-ghost-label') || {}).textContent || '',
+    line: !!document.querySelector('#preview-root .pv-overlay .pv-line'),
+    refused: !!document.querySelector('#preview-root .pv-overlay .refused'),
+    guides: document.querySelectorAll('#preview-root .pv-overlay .pv-guide').length,
+  }));
+  check('A component in the air is drawn as an outline that names it',
+    inTheAir.ghost && inTheAir.label.length > 0, JSON.stringify(inTheAir));
+  check('The canvas says where the component will land',
+    inTheAir.line && !inTheAir.refused, JSON.stringify(inTheAir));
+  check('Alignment guides are drawn while dragging, so edges line up rather than being guessed at',
+    inTheAir.guides >= 1, `guides drawn: ${inTheAir.guides}`);
+
+  // The guides exist only while a drag is open, so this is the only moment a
+  // picture of them can be taken.
+  try { await page.screenshot({ path: path.join(ROOT, 'studio/screenshots/studio-drag.png') }); }
+  catch (e) { console.log(`  (screenshot "studio-drag.png" skipped: ${e.message.split('\n')[0]})`); }
+
+  await page.mouse.up();
+  await page.waitForTimeout(450);
+  const orderAfterDrag = await orderOf();
+  check('Dropping lands the component where the indicator promised',
+    orderAfterDrag.length === orderBeforeDrag.length
+      && orderAfterDrag[orderAfterDrag.length - 1] === orderBeforeDrag[0],
+    `before ${orderBeforeDrag.join(', ')} -> after ${orderAfterDrag.join(', ')}`);
+
+  const afterDragHistory = await historyNow();
+  check('A canvas move is recorded as an edit, so it can be undone',
+    afterDragHistory.length === historyBeforeDrag.length + 1 && /^Move /.test(afterDragHistory[0] || ''),
+    `newest edit: "${afterDragHistory[0]}"`);
+
+  await page.locator('#undo-edit').click();
+  await page.waitForTimeout(400);
+  check('Undo walks a canvas move back to where it was',
+    JSON.stringify(await orderOf()) === JSON.stringify(orderBeforeDrag),
+    `expected ${orderBeforeDrag.join(', ')}`);
+
+  /* Dropping a container onto one of its own children would put the container
+     inside itself, which breaks the tree. The refusal has to be visible while
+     the pointer is still down, and the drop has to leave the project and the
+     undo stack exactly as they were.
+
+     This is also the one place that checks the other half of "add": with a
+     container selected, the next component goes inside it. */
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(250);
+  await page.locator('.palette-groups .chip', { hasText: 'Layout' }).click();
+  await page.waitForTimeout(250);
+  await page.locator('.pitem', { hasText: 'Card' }).first().click();
+  await page.waitForTimeout(450);
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(250);
+  await page.locator('.palette-groups .chip', { hasText: 'Text' }).click();
+  await page.waitForTimeout(250);
+  await page.locator('.pitem', { hasText: 'Heading' }).first().click();
+  await page.waitForTimeout(450);
+  // A component from the palette starts empty, and an empty one has no height
+  // to aim at; give it words.
+  await page.locator('#prop-text').fill('Inside the card');
+  await page.waitForTimeout(400);
+
+  const card = page.locator('#preview-root .pv-node[data-type="Card"]').first();
+  const cardChild = page.locator('#preview-root .pv-node[data-type="Card"] .pv-node[data-type="Heading"]').first();
+  check('A component added while a container is selected is drawn inside it',
+    await cardChild.count() === 1, 'expected the heading to land inside the card');
+  // Centre it rather than scrolling it "into view": the top of this page is a
+  // sticky strip, and an element sitting underneath it cannot be pointed at.
+  await card.evaluate((n) => n.scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(250);
+  const cardBox = await card.boundingBox();
+  const childBox = await cardChild.boundingBox();
+  const structureBeforeRefusal = await structureOf();
+  const historyBeforeRefusal = await historyNow();
+  // Let the "added" toast finish before this drag can print its own.
+  await page.waitForTimeout(2700);
+  await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(cardBox.x + cardBox.width / 2 + 18, cardBox.y + cardBox.height / 2, { steps: 5 });
+  await page.mouse.move(childBox.x + childBox.width / 2, childBox.y + childBox.height / 2, { steps: 5 });
+  await page.waitForTimeout(150);
+  const refusedNow = await page.evaluate(() => ({
+    box: !!document.querySelector('#preview-root .pv-overlay .pv-box.refused'),
+    line: !!document.querySelector('#preview-root .pv-overlay .pv-line.refused'),
+  }));
+  check('A drop that cannot happen is drawn as refused while the pointer is still down',
+    refusedNow.box || refusedNow.line, JSON.stringify(refusedNow));
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  const refusalToast = ((await page.textContent('#toast')) || '').trim();
+  check('The refusal is explained rather than silently ignored',
+    /inside itself/i.test(refusalToast), `toast reads "${refusalToast}"`);
+  const historyAfterRefusal = await historyNow();
+  const structureAfterRefusal = await structureOf();
+  check('A refused drop leaves the project and the undo stack untouched',
+    JSON.stringify(structureAfterRefusal) === JSON.stringify(structureBeforeRefusal)
+      && JSON.stringify(historyAfterRefusal) === JSON.stringify(historyBeforeRefusal),
+    `structure ${JSON.stringify(structureBeforeRefusal)} -> ${JSON.stringify(structureAfterRefusal)}; `
+    + `history ${JSON.stringify(historyBeforeRefusal)} -> ${JSON.stringify(historyAfterRefusal)}`);
+
+  /* The same drag on a touchscreen. The pointer events are dispatched by hand,
+     on the grip, because that is the path the product defines for touch — and
+     because a synthetic touch through the driver would be measuring the driver. */
+  await page.locator('#preview-root .pv-body > .pv-node').first().click();
+  await page.waitForTimeout(350);
+  const orderBeforeTouch = await orderOf();
+  const touchResult = await page.evaluate(() => {
+    const from = document.querySelector('#preview-root .pv-node.sel');
+    if (!from) return 'nothing is selected';
+    const grip = from.querySelector(':scope > .pv-grip');
+    if (!grip) return 'the selected component has no grip';
+    const others = [...document.querySelectorAll('#preview-root .pv-body > .pv-node')].filter((n) => n !== from);
+    const to = others.pop();
+    if (!to) return 'there is no second component to drop beside';
+    const mk = (type, x, y) => new PointerEvent(type, {
+      bubbles: true, cancelable: true, clientX: x, clientY: y,
+      pointerId: 21, pointerType: 'touch', isPrimary: true, buttons: 1,
+    });
+    const g = grip.getBoundingClientRect();
+    grip.dispatchEvent(mk('pointerdown', g.x + g.width / 2, g.y + g.height / 2));
+    const r = from.getBoundingClientRect();
+    window.dispatchEvent(mk('pointermove', r.x + r.width / 2 + 20, r.y + r.height / 2 + 28));
+    window.dispatchEvent(mk('pointermove', r.x + r.width / 2 + 26, r.y + r.height / 2 + 44));
+    const t = to.getBoundingClientRect();
+    window.dispatchEvent(mk('pointermove', t.x + t.width / 2, t.y + t.height - 6));
+    window.dispatchEvent(mk('pointerup', t.x + t.width / 2, t.y + t.height - 6));
+    return window.__appmintHistory()[0] || '';
+  });
+  await page.waitForTimeout(450);
+  check('A drag that begins on the grip works with touch pointer events',
+    typeof touchResult === 'string' && /^Move /.test(touchResult), `result: "${touchResult}"`);
+  check('The touch drag moved the component',
+    JSON.stringify(await orderOf()) !== JSON.stringify(orderBeforeTouch), 'the order did not change');
+  await page.locator('#undo-edit').click();
+  await page.waitForTimeout(400);
+
+  /* A heading and its explanation used to be two bare spans in a div, so they
+     were drawn run together — "PreviewDrawn in the browser from the same
+     numbers the app uses." — in every cell that used them. */
+  const headLayout = await page.evaluate(() => {
+    const head = document.querySelector('.d-head');
+    if (!head) return null;
+    const t = head.querySelector('.d-title');
+    const n = head.querySelector('.d-note');
+    if (!t || !n) return null;
+    const a = t.getBoundingClientRect();
+    const b = n.getBoundingClientRect();
+    return { sameLine: Math.abs(a.top - b.top) < 2, gap: Math.round(b.left - a.right) };
+  });
+  check('A heading and its explanation are separated, not run together',
+    !!headLayout && (headLayout.sameLine ? headLayout.gap >= 6 : true),
+    JSON.stringify(headLayout));
+
   /* ── the command palette ─────────────────────────────────────────────── */
   // Keyboard-first, but it also has a button, because the way most people hold
   // this tool is a phone and there is no Ctrl key on a phone.

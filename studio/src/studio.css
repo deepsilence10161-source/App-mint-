@@ -738,6 +738,61 @@ input[aria-invalid="true"] { border-color: var(--bad); }
    element that is not a component. */
 .tree .node.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
 .tree .node.dragging { opacity: 0.45; }
+
+/* ── the designer's own headings ─────────────────────────────────────────── */
+/* A heading and its explanation used to be two bare spans in a div, so they
+   ran together — "PreviewDrawn in the browser from the same numbers the app
+   uses." — in every cell that used them. */
+.d-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s3); margin-bottom: var(--s2); }
+.d-title { font-size: 14px; font-weight: 650; color: var(--fg); }
+.d-note { font-size: 12.5px; color: var(--fg-3); }
+
+/* ── moving a component on the canvas ────────────────────────────────────── */
+/* The selection outline is dashed, the way the design spec draws it. There are
+   deliberately no corner handles: those mean "resize" in every tool that draws
+   them, and nothing here resizes a component, so they would be a promise the
+   preview cannot keep. */
+.pv-node { position: relative; }
+.pv-node.sel { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+
+.pv-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+.pv-line { position: absolute; height: 3px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 0 1px var(--bg); }
+.pv-line.refused { background: var(--bad); }
+.pv-box { position: absolute; border: 2px solid var(--accent); border-radius: var(--r-2); background: var(--accent-soft); }
+.pv-box.refused { border-color: var(--bad); background: var(--bad-soft); }
+.pv-guide { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); opacity: 0.85; }
+
+.pv-ghost {
+  position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: var(--r-2); background: var(--accent-soft);
+}
+.pv-ghost-label {
+  position: absolute; top: -22px; left: -2px; padding: 2px var(--s2);
+  font: 600 11px/1.5 var(--font-ui); white-space: nowrap;
+  color: var(--on-brand); background: var(--accent); border-radius: var(--r-full);
+}
+
+/* The grip is 44px so that a thumb can find it; the mark inside it is smaller,
+   because the drawing is to the app's scale, not the tool's. touch-action:none
+   is set here and only here: that is what makes a touch drag possible on the
+   grip without taking scrolling away from the screen behind it. */
+.pv-grip {
+  position: absolute; top: -16px; left: -12px; width: 44px; height: 44px;
+  display: grid; place-items: center; z-index: 6;
+  touch-action: none; cursor: grab;
+}
+.pv-grip:active { cursor: grabbing; }
+.pv-grip-dot {
+  width: 20px; height: 20px; display: grid; place-items: center;
+  border-radius: var(--r-sm); background: var(--accent); color: var(--on-brand); box-shadow: var(--sh-1);
+}
+.pv-grip-dot::before {
+  content: ''; width: 2px; height: 2px; border-radius: 50%; background: currentColor;
+  box-shadow: -4px -5px 0 currentColor, 0 -5px 0 currentColor, 4px -5px 0 currentColor,
+              -4px 0 0 currentColor, 4px 0 0 currentColor,
+              -4px 5px 0 currentColor, 0 5px 0 currentColor, 4px 5px 0 currentColor;
+}
+body.dragging { user-select: none; -webkit-user-select: none; }
 .tree .node[draggable="true"] { cursor: grab; }
 .tree .node[draggable="true"]:active { cursor: grabbing; }
 

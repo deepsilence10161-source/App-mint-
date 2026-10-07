@@ -251,6 +251,362 @@ function moveNodeTo(screen, id, targetParentId, index) {
   return null;
 }
 
+/* ── moving components on the canvas ────────────────────────────────────── */
+
+/*
+ * The outline has had drag-reordering since the designer was written. The
+ * preview — the drawing of the app, which is the thing you are actually
+ * looking at — had none, so the one place you most want to move a component
+ * was the one place you could not.
+ *
+ * Two things are added here that a flat list cannot draw:
+ *
+ *   A DROP INDICATOR. A line where the component will land, drawn beside the
+ *   component it will land next to, or a box around the container it will go
+ *   into. The destination is worked out from the pointer's position inside the
+ *   component under it, and the indicator is drawn from those same numbers — so
+ *   the drawing cannot promise something the drop will not do.
+ *
+ *   ALIGNMENT GUIDES. While a component is in the air its left, centre and
+ *   right edges are compared with its siblings'. Within a few pixels the ghost
+ *   snaps to them and a violet line is drawn down the screen. Only the
+ *   horizontal axis snaps: the vertical position is the decision being made,
+ *   and snapping it would take that decision away.
+ *
+ * Why pointer events here when the outline uses HTML5 drag events: `draggable`
+ * is inert on a touchscreen, and the canvas is where a phone user works. The
+ * outline keeps `draggable` because it costs nothing there and works with a
+ * mouse.
+ *
+ * Why a touch drag must begin on the grip: the same one-finger drag is how the
+ * preview is scrolled, and a screen taller than the phone would become
+ * impossible to read if the whole drawing swallowed that gesture. So a mouse
+ * drag may begin anywhere on a component, and a touch drag begins on the grip
+ * — which is drawn only on the selected component, so it is never in the way
+ * of something not yet chosen.
+ */
+
+const CD = {
+  id: null,          // the component being dragged
+  started: false,    // has the pointer moved far enough to be a drag
+  x0: 0, y0: 0,      // where the pointer went down
+  offX: 0, offY: 0,  // where inside the component it took hold
+  ghost: null,       // the outline that follows the pointer
+  drop: null,        // the destination the indicator is currently promising
+};
+
+let canvasDragHandled = false;   // set when a drag ends, so the click after it is not read as a new one
+
+const DRAG_THRESHOLD = 6;   // px of movement before a press becomes a drag
+const GUIDE_TOLERANCE = 6;  // px within which two edges count as lined up
+const EDGE_SCROLL = 28;     // px from an edge at which the screen scrolls itself
+
+/** A component's plain name, for saying what is being moved. */
+function componentLabel(node) {
+  return (COMPONENTS[node.type] || {}).label || node.type;
+}
+
+/** The overlay the drop line and the guides are painted into. */
+function canvasOverlay() {
+  const frame = $('#preview-root');
+  if (!frame) return null;
+  let ov = frame.querySelector('.pv-overlay');
+  if (!ov) { ov = el('div', { class: 'pv-overlay' }); frame.append(ov); }
+  return ov;
+}
+
+/** Is `id` the same component as `ofId`, or one of its descendants? */
+function insideOrSelf(screen, id, ofId) {
+  if (!id || !ofId) return false;
+  let cursor = found0(screen, id);
+  while (cursor) {
+    if (cursor.node.id === ofId) return true;
+    cursor = cursor.parent ? found0(screen, cursor.parent.id) : null;
+  }
+  return false;
+}
+
+/**
+ * What a drop at this point would do, or null when there is nothing under it.
+ * Returns the destination, the rectangle the indicator is drawn from, and —
+ * decided here rather than after the drop — whether it is refused.
+ */
+function dropTargetAt(x, y, screen) {
+  const hit = document.elementFromPoint(x, y);
+  const nodeEl = hit && hit.closest ? hit.closest('#preview-root .pv-node') : null;
+  if (!nodeEl || !nodeEl.dataset.id) return CD.drop;   // nothing under it: keep the last promise
+  if (nodeEl.dataset.id === CD.id) return CD.drop;     // over itself: the last promise still stands
+  const target = found0(screen, nodeEl.dataset.id);
+  if (!target) return CD.drop;
+
+  const rect = nodeEl.getBoundingClientRect();
+  const rel = rect.height ? (y - rect.top) / rect.height : 0.5;
+  const def = COMPONENTS[target.node.type] || {};
+  let kind, parentId, index;
+  if (def.container && !def.single && rel > 0.3 && rel < 0.7) {
+    kind = 'inside';
+    parentId = target.node.id;
+    index = (target.node.children || []).length;
+  } else if (rel < 0.5) {
+    kind = 'before';
+    parentId = target.parent ? target.parent.id : null;
+    index = target.index;
+  } else {
+    kind = 'after';
+    parentId = target.parent ? target.parent.id : null;
+    index = target.index + 1;
+  }
+
+  const drop = { kind, parentId, index, rect, nodeEl, refused: false, reason: null };
+  // Refused when the container it would go into is the component itself or one
+  // of its own descendants: the tree would then hold a branch inside itself.
+  if (parentId && insideOrSelf(screen, parentId, CD.id)) {
+    drop.refused = true;
+    drop.reason = 'A component cannot be placed inside itself.';
+  }
+  return drop;
+}
+
+/**
+ * Where the ghost's edges line up with its siblings', and how far it should
+ * move so that they line up exactly. The lines to draw are the reference
+ * edges the ghost has just snapped onto.
+ */
+function alignmentFor(nodeEl, drop) {
+  const out = { guides: [], snapDx: 0 };
+  // Dropping into a container, the things to line up with are that container's
+  // children; dropping beside a component, they are the components already
+  // next to it, plus the container holding them both.
+  const container = drop.kind === 'inside' ? drop.nodeEl : drop.nodeEl.parentElement;
+  if (!container) return out;
+  const refs = [...container.children].filter(
+    (n) => n !== nodeEl && n.classList && n.classList.contains('pv-node'));
+  const outer = container.closest ? container.closest('#preview-root .pv-node') : null;
+  if (outer) refs.push(outer);
+  if (!refs.length) return out;
+
+  const r = nodeEl.getBoundingClientRect();
+  const mine = [r.left, r.left + r.width / 2, r.right];
+  for (const ref of refs) {
+    const rr = ref.getBoundingClientRect();
+    for (const a of mine) {
+      for (const b of [rr.left, rr.left + rr.width / 2, rr.right]) {
+        const d = b - a;
+        if (Math.abs(d) <= GUIDE_TOLERANCE && (out.snapDx === 0 || Math.abs(d) < Math.abs(out.snapDx))) out.snapDx = d;
+      }
+    }
+  }
+  const snapped = mine.map((v) => v + out.snapDx);
+  for (const ref of refs) {
+    const rr = ref.getBoundingClientRect();
+    for (const b of [rr.left, rr.left + rr.width / 2, rr.right]) {
+      if (snapped.some((a) => Math.abs(a - b) < 1)) out.guides.push(Math.round(b));
+    }
+  }
+  out.guides = [...new Set(out.guides)];
+  return out;
+}
+
+/* The painting. Nothing below decides anything: it draws the decision
+   dropTargetAt() has already made and the lines alignmentFor() already found. */
+
+function beginGhost(nodeEl) {
+  const r = nodeEl.getBoundingClientRect();
+  const ghost = el('div', { class: 'pv-ghost' }, [
+    el('span', { class: 'pv-ghost-label' }, componentLabel({ type: nodeEl.dataset.type })),
+  ]);
+  ghost.style.width = `${Math.round(r.width)}px`;
+  ghost.style.height = `${Math.round(r.height)}px`;
+  document.body.append(ghost);
+  CD.ghost = ghost;
+  CD.offX = CD.x0 - r.left;
+  CD.offY = CD.y0 - r.top;
+  document.body.classList.add('dragging');
+}
+
+function positionGhost(x, y, snapDx) {
+  if (!CD.ghost) return;
+  CD.ghost.style.transform = `translate3d(${Math.round(x - CD.offX + snapDx)}px, ${Math.round(y - CD.offY)}px, 0)`;
+}
+
+function paintCanvas(ov, drop, guides) {
+  const parts = [];
+  const orect = ov.getBoundingClientRect();
+  const body = $('#preview-root .pv-body');
+  if (drop) {
+    const refused = drop.refused ? ' refused' : '';
+    const r = drop.rect;
+    if (drop.kind === 'inside') {
+      parts.push(el('div', { class: 'pv-box' + refused, style:
+        `left:${Math.round(r.left - orect.left)}px;top:${Math.round(r.top - orect.top)}px;` +
+        `width:${Math.round(r.width)}px;height:${Math.round(r.height)}px` }));
+    } else {
+      // The line spans the width of the screen's content rather than only the
+      // component under the pointer, because that is where the component will
+      // actually sit once it lands.
+      const br = body ? body.getBoundingClientRect() : { left: r.left, width: r.width };
+      const y = Math.round((drop.kind === 'before' ? r.top : r.bottom) - orect.top);
+      parts.push(el('div', { class: 'pv-line' + refused, style:
+        `left:${Math.round(br.left - orect.left + 12)}px;top:${y - 1}px;` +
+        `width:${Math.max(24, Math.round(br.width - 24))}px` }));
+    }
+  }
+  for (const gx of guides) parts.push(el('div', { class: 'pv-guide', style: `left:${Math.round(gx - orect.left)}px` }));
+  ov.replaceChildren(...parts);
+}
+
+/** Drag near an edge and the screen scrolls itself, so a component can be
+    carried past the fold on a phone without a second hand. */
+function scrollCanvasWhileDragging(e) {
+  const body = $('#preview-root .pv-body');
+  if (!body) return;
+  const r = body.getBoundingClientRect();
+  if (e.clientY < r.top + EDGE_SCROLL) body.scrollTop -= 10;
+  else if (e.clientY > r.bottom - EDGE_SCROLL) body.scrollTop += 10;
+}
+
+/** Draw the selection without re-rendering the screen. A re-render during a
+    pointer sequence would destroy the element the pointer has hold of, and the
+    click that follows it — which is how a preview button says what its action
+    would do. */
+function markCanvasSelection(id) {
+  const frame = $('#preview-root');
+  if (!frame) return;
+  for (const old of frame.querySelectorAll('.pv-node.sel')) {
+    old.classList.remove('sel');
+    const grip = old.querySelector(':scope > .pv-grip');
+    if (grip) grip.remove();
+  }
+  const node = frame.querySelector(`.pv-node[data-id="${id}"]`);
+  if (!node) return;
+  node.classList.add('sel');
+  if (!node.querySelector(':scope > .pv-grip')) {
+    node.append(gripFor({ id: node.dataset.id, type: node.dataset.type }));
+  }
+}
+
+function canvasPointerDown(e) {
+  const screen = activeScreen(S.active.spec);
+  if (!screen || !e.target || !e.target.closest) return;
+  const nodeEl = e.target.closest('#preview-root .pv-node');
+  if (!nodeEl || !nodeEl.dataset.id) return;
+  // A touch drag has to start on the grip; a mouse drag can start anywhere.
+  if (e.pointerType !== 'mouse' && !e.target.closest('.pv-grip')) return;
+  if (e.button) return;
+  canvasDragHandled = false;
+  CD.id = nodeEl.dataset.id;
+  CD.started = false;
+  CD.drop = null;
+  CD.x0 = e.clientX;
+  CD.y0 = e.clientY;
+  window.addEventListener('pointermove', canvasPointerMove, { passive: false });
+  window.addEventListener('pointerup', canvasPointerUp);
+  window.addEventListener('pointercancel', canvasPointerUp);
+}
+
+function canvasPointerMove(e) {
+  if (!CD.id) return;
+  const screen = activeScreen(S.active.spec);
+  const nodeEl = screen ? document.querySelector(`#preview-root .pv-node[data-id="${CD.id}"]`) : null;
+  if (!nodeEl) return endCanvasDrag();
+
+  if (!CD.started) {
+    if (Math.abs(e.clientX - CD.x0) < DRAG_THRESHOLD && Math.abs(e.clientY - CD.y0) < DRAG_THRESHOLD) return;
+    CD.started = true;
+    if (e.cancelable) e.preventDefault();
+    beginGhost(nodeEl);
+    // The thing being moved is the thing being edited, so the outline and the
+    // properties follow it — at the end of the drag, when the redraw is safe.
+    D.selected = CD.id;
+    markCanvasSelection(CD.id);
+  }
+  const ov = canvasOverlay();
+  if (!ov) return;
+  scrollCanvasWhileDragging(e);
+  const drop = dropTargetAt(e.clientX, e.clientY, screen);
+  const guide = drop && !drop.refused ? alignmentFor(nodeEl, drop) : { guides: [], snapDx: 0 };
+  positionGhost(e.clientX, e.clientY, guide.snapDx);
+  paintCanvas(ov, drop, guide.guides);
+  CD.drop = drop;
+}
+
+function canvasPointerUp() {
+  window.removeEventListener('pointermove', canvasPointerMove);
+  window.removeEventListener('pointerup', canvasPointerUp);
+  window.removeEventListener('pointercancel', canvasPointerUp);
+  const ov = $('#preview-root .pv-overlay');
+  if (ov) ov.replaceChildren();
+  // A press that never became a drag is a selection, and the click handler
+  // deals with it; this flag stops that click from being read as a new one.
+  canvasDragHandled = CD.started;
+  const id = CD.id;
+  const drop = CD.started ? CD.drop : null;
+  endCanvasDrag();
+  if (id && drop) commitCanvasDrop(id, drop);
+}
+
+function endCanvasDrag() {
+  if (CD.ghost) { CD.ghost.remove(); CD.ghost = null; }
+  document.body.classList.remove('dragging');
+  CD.id = null; CD.started = false; CD.drop = null;
+}
+
+/**
+ * Do the move the indicator has been promising, or say why it will not.
+ * A drag that would land exactly where the component already is changes
+ * nothing, so it records nothing: an undo step for a no-op is a claim that
+ * something happened.
+ */
+function commitCanvasDrop(id, drop) {
+  const screen = activeScreen(S.active.spec);
+  const found = found0(screen, id);
+  if (!found) return;
+  if (drop.refused) { toast(drop.reason || 'That move is not possible.'); hardUpdate(); return; }
+  const dest = drop.parentId ? found0(screen, drop.parentId) : null;
+  const list = dest ? dest.node.children : screen.components;
+  if (!Array.isArray(list)) return;
+  if (list === found.list && (drop.index === found.index || drop.index === found.index + 1)) { hardUpdate(); return; }
+  let reason = null;
+  const label = componentLabel(found.node);
+  editScreen(screen, `Move ${label}`, () => { reason = moveNodeTo(screen, id, drop.parentId, drop.index); });
+  if (reason) toast(reason);
+}
+
+/** A tap on the canvas selects what was tapped, once the click has finished
+    travelling: a component's own action has to be reported before the element
+    it lives on is replaced. */
+function canvasClick(e) {
+  if (CD.id) return;
+  if (canvasDragHandled) { canvasDragHandled = false; return; }
+  if (!e.target || !e.target.closest) return;
+  const nodeEl = e.target.closest('#preview-root .pv-node');
+  if (!nodeEl || !nodeEl.dataset.id) return;
+  if (D.selected === nodeEl.dataset.id && nodeEl.classList.contains('sel')) return;
+  D.selected = nodeEl.dataset.id;
+  D.adding = false;
+  hardUpdate();
+}
+
+/** The grip is a pointer control, but it is focusable, so the arrow keys do
+    the same job the outline's buttons do rather than nothing at all. */
+function gripKey(e, node) {
+  const screen = activeScreen(S.active.spec);
+  if (!screen) return;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  e.preventDefault();
+  editScreen(screen, `Move ${componentLabel(node)}`, () => moveComponent(screen, node.id, e.key === 'ArrowUp' ? -1 : 1));
+}
+
+/** The grip itself, drawn on the selected component and on nothing else. */
+function gripFor(node) {
+  return el('span', {
+    class: 'pv-grip', role: 'button', tabindex: '0',
+    'aria-label': `Move ${componentLabel(node)}`,
+    title: 'Drag to move, or press the arrow keys',
+    onkeydown: (e) => gripKey(e, node),
+  }, el('span', { class: 'pv-grip-dot' }));
+}
+
 /* ── the tab ────────────────────────────────────────────────────────────── */
 
 /**
@@ -617,7 +973,17 @@ function propField(screen, node, key, prop) {
     if (v === '' || v === undefined) delete node.props[key];
     else node.props[key] = v;
     touch();
-    if (rerender) hardUpdate(); else { redrawPreview(); refreshFindings(); }
+    if (rerender) hardUpdate(); else {
+      redrawPreview();
+      refreshFindings();
+      // The outline names a component by its own text, so it has to follow the
+      // text as it is typed. Leaving the row showing an old name while the
+      // preview and the properties show the new one makes the editor
+      // contradict itself — and the next redraw silently "fixes" it, which is
+      // exactly the kind of thing that makes a tool feel unreliable.
+      const row = document.querySelector(`.tree .node[data-node="${node.id}"] .node-id`);
+      if (row) row.textContent = labelFor(node);
+    }
   };
 
   const label = el('label', { for: id }, prop.label || key);
@@ -824,6 +1190,12 @@ function renderPreview(screen, spec) {
   const dark = (spec.android || {}).theme === 'dark' || luminance(th.background || '#FFFFFF') < 0.5;
   const host = el('div', { class: 'device' + (dark ? ' dark' : '') });
   const frame = el('div', { class: 'device-screen', id: 'preview-root', style: `background:${th.background || '#FFFFFF'};color:${th.onSurface || '#111827'}` });
+  // Moving a component is done on the drawing itself, not only in the outline,
+  // so the two listeners that make the canvas work are attached here. They are
+  // on the frame rather than on the components because the frame survives a
+  // redraw — redrawing while the pointer is down would orphan the listeners.
+  frame.addEventListener('pointerdown', canvasPointerDown);
+  frame.addEventListener('click', canvasClick);
 
   // status bar, matching what the app actually reserves
   frame.append(el('div', { class: 'sbar', style: `color:${th.onSurface || '#111827'}` }, [
@@ -1107,6 +1479,13 @@ function previewNode(node, spec, depth) {
       break;
     default:
       wrap.append(...kids());
+  }
+  // The selection is drawn here as well as in the outline, and the grip comes
+  // with it: the drawing and the editor have to agree about what is selected,
+  // and the grip is the touch path into dragging it.
+  if (D.selected === node.id) {
+    wrap.classList.add('sel');
+    wrap.append(gripFor(node));
   }
   return wrap;
 }

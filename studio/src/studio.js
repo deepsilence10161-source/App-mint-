@@ -1309,6 +1309,13 @@ window.__appmintLogReset = () => {
 
 window.__appmintSpec = () => JSON.parse(JSON.stringify(S.active ? S.active.spec : {}));
 
+// Every edit the designer has recorded, newest first. The canvas drag claims
+// two things a screenshot cannot show: that a move it made is undoable, and
+// that a drag which changed nothing recorded nothing. Both are statements about
+// this list, so a verification has to be able to read it — the same reason
+// window.__appmintHealth exists.
+window.__appmintHistory = () => (S.active ? historyOf(S.active) : []);
+
 // What is currently stopping a build, as the validator sees it.
 window.__appmintBlocking = () => {
   const r = check();

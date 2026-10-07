@@ -235,14 +235,14 @@ decoration.
 | Phase | Subject | Status |
 |---|---|---|
 | 1–4 | Audit, architecture map, weaknesses, specification | **done** (this file) |
-| 5 | Visual Builder | partial — the designer exists; drag-and-drop reordering, snapping guides, undo/redo and a command palette do not |
+| 5 | Visual Builder | **mostly done** — see section 8: canvas dragging with a drop indicator and alignment guides; undo/redo, the command palette, the pipeline stepper and the log console all exist. What remains is free positioning, resizing and multi-select, none of which the generated app could honour anyway |
 | 6 | Website Converter | not started — the analyser and rule-based recommendations exist and are tested |
 | 7 | Deterministic generators | not audited in depth |
 | 8 | Diagnostics and known-fix engine | exists (`diagnose/`, `fix-policy`); not yet measured |
 | 9 | Modular toolchain | `toolchain.mjs` exists and is shared; not audited |
 | 10 | Performance | **no measurements exist.** The prompt is explicit that no optimisation may be claimed without before/after numbers, so nothing is claimed here |
-| 11 | Testing | 207 engine assertions + 87 browser checks; the emulator E2E runs on Actions, not locally (no KVM in this sandbox) |
-| 12 | Build UX | the pipeline stepper and log console in the spec are not built |
+| 11 | Testing | 294 engine assertions + 181 browser checks; the emulator E2E runs on Actions, not locally (no KVM in this sandbox) |
+| 12 | Build UX | the pipeline stepper and the log console exist |
 | 13 | APK/AAB validation | exists in `tools/build-apk.mjs`; not audited |
 | 14 | Final regression | pending the above |
 
@@ -258,3 +258,78 @@ Known limitations that remain, and are not hidden:
   implementation of something the component library already defines.
 - No performance numbers exist anywhere in this repository. Until they do, no
   claim about speed is made or should be believed.
+
+## 8. Canvas dragging (this pass)
+
+The design prompt asks the visual builder to feel like Figma. The outline had
+drag-reordering; the **preview** — the drawing of the app, which is the thing
+you are actually looking at — had none, so the one place you most want to move a
+component was the one place you could not.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `studio/src/designer.js` | the canvas drag: destination from the pointer's position in the component under it, a ghost outline naming what is moving, a drop indicator, alignment guides, refusal of self-nesting, edge auto-scroll, and a selection that the outline and the drawing share |
+| `studio/src/studio.css` | `.pv-overlay`, `.pv-line`, `.pv-box`, `.pv-guide`, `.pv-ghost`, `.pv-grip`, the selected-node outline — and `.d-head`/`.d-title`/`.d-note`, which had no rules at all, so a heading and its explanation were drawn run together in every cell that used them |
+| `studio/src/studio.js` | `window.__appmintHistory()`: the journal of designer edits, so a test can check that a move is undoable and that a no-op recorded nothing |
+| `tools/test-studio.mjs` | 15 checks: selection from the canvas, the grip's 44px target, `touch-action` only on the grip, the ghost and its name, the drop line, the guides, the landing, the journal, undo, a refused drop, a touch drag through real pointer events |
+| `studio/app.html` | rebuilt — two consecutive rebuilds are byte-identical |
+
+Two guarantees were built into the drag rather than left to the outcome:
+
+- **The indicator is a promise.** The drop decision (`dropTargetAt`) is made
+  once, from the pointer's position, and both the indicator and the drop read
+  it. There is no second code path that could disagree with what was drawn.
+- **A refusal is visible before release.** Dragging a container onto one of its
+  own children draws the indicator in the danger colour while the pointer is
+  still down; releasing explains itself ("A component cannot be placed inside
+  itself.") and records nothing. `moveNodeTo` — the same function the outline's
+  drop uses — refuses it, so both paths are corrected by the same rule.
+
+### Why the details are the way they are
+
+- **Pointer events on the canvas, HTML5 drag events in the outline.** `draggable`
+  is inert on a touchscreen, and the canvas is where a phone user works. The
+  outline keeps `draggable`: it is one attribute, it works with a mouse, and it
+  is what the existing tests exercise.
+- **A touch drag starts on the grip, a mouse drag anywhere.** The same
+  one-finger drag scrolls the preview, and a screen taller than the phone has to
+  stay readable. `touch-action: none` is set on the grip alone, and the test
+  asserts exactly that.
+- **Guides snap horizontally only.** Comparing left, centre and right edges with
+  siblings, and with the container itself, within 6px. The vertical position is
+  the decision being made; snapping it would take the decision away.
+- **A drag that lands where the component already is records nothing.** An undo
+  step for a no-op is a claim that something happened.
+
+### A wart found on the way
+
+Typing a property updated the preview and the findings but **not the outline**,
+so the tree kept showing a component's old name until the next full redraw —
+the editor contradicting itself. It was found by a test that refused to accept
+"the structure is unchanged" from a rendering of it. The tree row now follows
+its component as it is typed, and the refusal test compares the specification's
+ids rather than the labels drawn from them.
+
+### Verification
+
+```
+node --test tools/tests/        →  294 tests, 294 pass, 0 fail
+node tools/test-studio.mjs      →  181/181 checks passed   (was 162)
+node tools/build-studio.mjs     →  deterministic: two rebuilds byte-identical
+```
+
+The drag is also exercised in both directions: a drop that is accepted is
+checked to land where the indicator said, to be recorded, and to be undoable; a
+drop that is refused is checked to be drawn as refused, explained out loud, and
+to leave both the specification and the journal untouched.
+
+### Performance
+
+No numbers are claimed here, for the same reason as section 4: none were
+measured. What can be said is structural — during a drag the page is not
+re-rendered (the ghost and the indicators are one absolutely-positioned overlay
+inside the device frame), movement is written with `transform`, and the canvas
+is scrolled by hand rather than by re-layout. Whether that holds up on a
+mid-range phone is a measurement that has not been made.

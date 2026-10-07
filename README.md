@@ -173,13 +173,24 @@ compile SDK 36. So the toolchain is a compliance question, not a preference.
 
 ## Honest limitations
 
-- The screen designer is tap-driven, not drag-driven. You add a component from
-  the palette and edit it in the tree; there is no drag-and-drop reordering, no
-  snapping guides, and no undo/redo inside the designer. Repairs made on the
-  Build screen *are* journaled and undoable — the designer is not.
-- There is no command palette (`Ctrl+K`) and no build pipeline stepper or live log
-  console; the Build screen reports findings and the state of a run, and stops
-  there.
+- The designer is a stack, not a canvas. Components are arranged in a column,
+  inside containers, at the sizes the Android renderer uses — so there is no
+  free positioning, no resizing by corner handles and no multi-select. A drag
+  moves a component *within* that structure: it cannot place one at arbitrary
+  coordinates, because the generated app could not honour that either.
+- Dragging on the canvas works with a mouse from anywhere on a component, and
+  with a finger from the grip on the selected component. The grip exists because
+  the same one-finger drag is how the preview scrolls, and a screen taller than
+  the phone has to stay readable. Alignment guides snap the horizontal edges
+  only: the vertical position is the decision being made.
+- Components are added from the palette into the current selection, not dropped
+  from the palette onto the canvas. The palette is a list of things the library
+  can build; dragging from it would be a second, competing way to say the same
+  thing before the structure has an insertion point.
+- Designer edits — including canvas drags — are journaled and undoable. That
+  journal is per session: it is not saved with the project, so closing the tab
+  ends it. Project version history (snapshots you can compare and restore) is
+  separate and is not implemented.
 - Light mode is a complete set of token overrides with a control in the top bar
   that remembers your choice. It passes the contrast gate in both themes, but it
   has not been reviewed by a person, and token parity is necessary rather than
