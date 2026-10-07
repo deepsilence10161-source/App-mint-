@@ -100,7 +100,8 @@ function paletteActions() {
     acts.push({ label: 'Copy the specification', hint: 'to the clipboard', run: () => { PAL.open = false; copySpec(); } });
   }
 
-  acts.push({ label: 'New project', hint: 'start from a template', run: () => { PAL.open = false; renderPicker(); } });
+  acts.push({ label: 'Home', hint: 'the four ways to start, and your projects', run: () => { PAL.open = false; renderPicker(); } });
+  acts.push({ label: 'Browse templates', hint: 'the gallery, with categories', run: () => { PAL.open = false; renderGallery(); } });
   acts.push({ label: 'Import a specification', hint: 'from a spec.json file', run: () => { PAL.open = false; importSpec(); } });
 
   const themeNow = document.documentElement.getAttribute('data-theme');

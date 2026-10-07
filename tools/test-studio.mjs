@@ -83,22 +83,84 @@ async function main() {
   await page.goto('file://' + STUDIO, { waitUntil: 'load' });
   await page.waitForTimeout(400);
 
-  /* ── it boots ───────────────────────────────────────────────────────── */
-  const tplCount = await page.locator('button.tpl').count();
-  check('Studio boots and lists templates', tplCount >= 8, `found ${tplCount} template buttons`);
+  /* ── it boots onto Home ─────────────────────────────────────────────── */
+  const methods = await page.locator('.method').count();
+  check('Studio boots onto a Home screen that offers four creation methods',
+    methods === 4, `found ${methods} method cards`);
+
+  const homeText = (await page.textContent('#main')) || '';
+  check('Every method says what it does in one line',
+    ['From a template', 'Website to app', 'Blank project', 'Import a specification']
+      .every((t) => homeText.includes(t)),
+    'one of the four methods is missing its name');
+  check('With nothing made yet, Home says so instead of showing an empty grid',
+    /Nothing here yet/i.test(homeText), 'expected the empty state');
+  check('The empty state is a drawing, not bare text',
+    await page.locator('.empty-state .ill').count() >= 1, 'no illustration');
 
   const title = await page.textContent('#projname');
   check('Shows a title instead of staying on the loading screen', title && !/Loading/i.test(title), `title="${title}"`);
 
-  /* ── creating a project ─────────────────────────────────────────────── */
-  await page.locator('button.tpl').nth(1).click();      // first real template
+  // The dashboard and the gallery go into the record along with the rest: a
+  // screen nobody looks at is the screen that quietly rots.
+  try { await page.screenshot({ path: path.join(ROOT, 'studio/screenshots/studio-home.png') }); }
+  catch (e) { console.log(`  (screenshot "studio-home.png" skipped: ${e.message.split('\n')[0]})`); }
+
+  /* ── the template gallery ───────────────────────────────────────────── */
+  await page.locator('#method-template').click();
+  await page.waitForTimeout(300);
+  const gcards = await page.locator('.tcard').count();
+  check('Choosing "from a template" opens the gallery, not a second menu',
+    gcards >= 8, `found ${gcards} template cards`);
+  const pills = await page.locator('#tpl-cats .chip').count();
+  check('The gallery can be filtered by category', pills >= 5, `found ${pills} category pills`);
+  try { await page.screenshot({ path: path.join(ROOT, 'studio/screenshots/studio-gallery.png') }); }
+  catch (e) { console.log(`  (screenshot "studio-gallery.png" skipped: ${e.message.split('\n')[0]})`); }
+
+  await page.locator('#tpl-cats .chip[data-cat="Shop"]').click();
   await page.waitForTimeout(250);
+  const shopCards = await page.locator('.tcard').count();
+  check('A category shows only its own templates',
+    shopCards >= 1 && shopCards < gcards, `${gcards} templates became ${shopCards} under "Shop"`);
+  await page.locator('#tpl-cats .chip[data-cat="all"]').click();
+  await page.waitForTimeout(200);
+
+  await page.locator('#tpl-search').fill('zzzznothing');
+  await page.waitForTimeout(300);
+  const searchedText = (await page.textContent('#main')) || '';
+  check('A search that matches nothing says so, with a drawing',
+    /Nothing matches/i.test(searchedText) && await page.locator('#tpl-grid .ill').count() >= 1,
+    'expected an empty state inside the grid');
+  await page.locator('#tpl-search').fill('bus');
+  await page.waitForTimeout(300);
+  check('Search finds a template from the first few letters of its name',
+    await page.locator('.tcard[data-tpl="business"]').count() === 1,
+    'typing "bus" should find Business');
+  await page.locator('#tpl-search').fill('');
+  await page.waitForTimeout(250);
+
+  /* ── creating a project ─────────────────────────────────────────────── */
+  await page.locator('.tcard[data-tpl="business"] [data-use]').click();
+  await page.waitForTimeout(300);
 
   const tabs = await page.locator('.tabbar .tab').count();
   check('Opening a template reveals the seven sections', tabs === 7, `found ${tabs} tabs`);
 
   const health = (await page.textContent('#health')) || '';
   check('Health strip reports a verdict', /Valid|Blocked|Ready/.test(health), `health="${health.trim()}"`);
+
+  // A status strip whose last chip is pushed off the right edge is a status
+  // strip that stops being read, which is how this was found.
+  const clipped = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    return [...document.querySelectorAll('#health .chip, #health .pill')]
+      .filter((c) => {
+        const r = c.getBoundingClientRect();
+        return r.width > 0 && (r.right > vw + 1 || r.left < -1);
+      }).map((c) => c.textContent.trim());
+  });
+  check('No status chip is pushed off the edge of a phone', clipped.length === 0,
+    `off-screen: ${JSON.stringify(clipped)}`);
 
   /* ── every section renders ──────────────────────────────────────────── */
   for (const [label, expect] of [['Design', 'Application name'], ['Screens', 'Build the first screen'], ['Features', 'Permissions this app will request'], ['Preview', 'Preview'], ['Health', 'Project health'], ['Settings', 'Advanced Mode'], ['Build', 'Validation']]) {
@@ -222,7 +284,7 @@ async function main() {
   check('No two visible controls share an accessible name', dupes.length === 0, `duplicated: ${[...new Set(dupes)].join(', ')}`);
 
   const subtabs = await page.locator('.subtab').count();
-  check('Settings is tabbed rather than one long scroll', subtabs === 6, `found ${subtabs} tabs`);
+  check('Settings is tabbed rather than one long scroll', subtabs === 7, `found ${subtabs} tabs`);
 
   check('Advanced Mode is offered, with what it unlocks stated',
     /Unlocks the raw configuration/.test(await page.textContent('#main')), 'the toggle must say what it does');
@@ -1135,6 +1197,107 @@ async function main() {
     !!headLayout && (headLayout.sameLine ? headLayout.gap >= 6 : true),
     JSON.stringify(headLayout));
 
+  /* ── the canvas toolbar ──────────────────────────────────────────────────
+     What the drawing is shown on, and how. None of these controls may touch
+     the specification — they are questions about the screen you are holding,
+     not about the app — so each check reads the drawing, and one of them reads
+     the specification afterwards to prove it did not move. */
+
+  await tapTab(page, 'Screens');
+  await page.waitForTimeout(300);
+
+  const specBeforeToolbar = JSON.stringify(await page.evaluate(() => window.__appmintSpec()));
+  const dev0 = await page.evaluate(() => {
+    const d = document.querySelector('.device');
+    return { cls: d.className, maxW: getComputedStyle(d).maxWidth };
+  });
+  check('The canvas defaults to a phone, at the phone width',
+    dev0.cls.includes('dev-phone') && dev0.maxW === '340px', JSON.stringify(dev0));
+
+  await page.locator('[data-seg="dev-tablet"]').click();
+  await page.waitForTimeout(300);
+  const devTablet = await page.evaluate(() => {
+    const d = document.querySelector('.device');
+    return { cls: d.className, maxW: getComputedStyle(d).maxWidth };
+  });
+  check('The device toggle widens the canvas rather than relabelling it',
+    devTablet.cls.includes('dev-tablet') && devTablet.maxW === '560px', JSON.stringify(devTablet));
+  await page.locator('[data-seg="dev-phone"]').click();
+  await page.waitForTimeout(250);
+
+  const minH0 = await page.evaluate(() => getComputedStyle(document.querySelector('.device-screen')).minHeight);
+  await page.locator('[data-seg="orient-landscape"]').click();
+  await page.waitForTimeout(300);
+  const land = await page.evaluate(() => ({
+    cls: document.querySelector('.device').className,
+    minH: getComputedStyle(document.querySelector('.device-screen')).minHeight,
+  }));
+  check('The orientation toggle changes the frame, not a label',
+    land.cls.includes('orient-landscape') && land.minH !== minH0, `portrait ${minH0} → landscape ${land.minH}`);
+  await page.locator('[data-seg="orient-portrait"]').click();
+  await page.waitForTimeout(250);
+
+  await page.locator('[data-seg="theme-light"]').click();
+  await page.waitForTimeout(300);
+  const light = await page.evaluate(() => document.querySelector('.device').classList.contains('dark'));
+  await page.locator('[data-seg="theme-dark"]').click();
+  await page.waitForTimeout(300);
+  const dark = await page.evaluate(() => document.querySelector('.device').classList.contains('dark'));
+  check('The preview can be forced light or dark without changing the app',
+    light === false && dark === true, `light→${light}, dark→${dark}`);
+  await page.locator('[data-seg="theme-app"]').click();
+  await page.waitForTimeout(250);
+
+  await page.locator('#zoom-in').click();
+  await page.waitForTimeout(300);
+  const zoomed = await page.evaluate(() => ({
+    label: document.querySelector('#zoom-val').textContent,
+    transform: getComputedStyle(document.querySelector('.device')).transform,
+  }));
+  check('Zoom scales the drawing, and says the number it used',
+    zoomed.label === '125%' && zoomed.transform !== 'none', JSON.stringify(zoomed));
+  await page.locator('#zoom-out').click();
+  await page.waitForTimeout(250);
+  check('Zoom returns to 100%', (await page.textContent('#zoom-val')) === '100%', 'zoom out did not step back');
+
+  const specAfterToolbar = JSON.stringify(await page.evaluate(() => window.__appmintSpec()));
+  check('None of the canvas controls touch the specification', specBeforeToolbar === specAfterToolbar,
+    'the drawing changed what the app is');
+
+  await page.locator('#preview-live').click();
+  await page.waitForTimeout(350);
+  check('"Preview live" opens the Preview section',
+    /Preview/i.test(await page.textContent('#main')) && await page.locator('.tab.on, .tab[aria-selected="true"]').first().textContent().then((t) => /Preview/.test(t)),
+    'expected the Preview section to be showing');
+  await tapTab(page, 'Screens');
+  await page.waitForTimeout(300);
+
+  /* ── searching the component library ─────────────────────────────────── */
+  await page.locator('button:has-text("+ Add")').click();
+  await page.waitForTimeout(250);
+  check('The palette opens with a field to search it', await page.locator('#pal-search').isVisible(), 'expected #pal-search');
+
+  await page.locator('#pal-search').fill('but');
+  await page.waitForTimeout(300);
+  check('Typing filters the library to what matches',
+    await page.locator('#pal-grid .pitem[data-comp="Button"]').count() === 1
+      && await page.locator('#pal-grid .pitem').count() < 10,
+    `found ${await page.locator('#pal-grid .pitem').count()} components`);
+
+  await page.locator('#pal-search').fill('zzzz');
+  await page.waitForTimeout(250);
+  check('A component search that matches nothing says so, with the drawing',
+    /No component matches/i.test(await page.textContent('#pal-body'))
+      && await page.locator('#pal-body .ill').count() >= 1,
+    'expected an empty state in the palette');
+
+  await page.locator('#pal-search').fill('');
+  await page.waitForTimeout(250);
+  check('Clearing the search brings the shelves back',
+    await page.locator('.palette-groups .chip').count() >= 6, 'the group chips did not return');
+  await page.locator('button:has-text("Close")').click();
+  await page.waitForTimeout(250);
+
   /* ── the command palette ─────────────────────────────────────────────── */
   // Keyboard-first, but it also has a button, because the way most people hold
   // this tool is a phone and there is no Ctrl key on a phone.
@@ -1589,9 +1752,11 @@ const external = [];
    * blocked. The claim being tested is "a site can be turned into a valid app",
    * so it starts from a project that is valid.
    */
-  await page.locator('#newproj').click();
+  await page.locator('#newproj').click();          // Home
   await page.waitForTimeout(500);
-  await page.locator('button.tpl').first().click();
+  await page.locator('#method-template').click();  // the gallery
+  await page.waitForTimeout(500);
+  await page.locator('.tcard[data-tpl="blank"] [data-use]').click();
   await page.waitForTimeout(900);
   await page.locator('.tab:has-text("Design")').click();
   await page.waitForTimeout(500);
@@ -1780,6 +1945,43 @@ a { color: #6B3A1F; }</style></head>
     pinned.barW > 180 && pinned.pressed === 'true' && pinned.label === '1',
     JSON.stringify(pinned));
 
+  /* ── the three-pane builder, where there is room for it ───────────────────
+     Above 1100px the component tree, the drawing and the properties sit side
+     by side. The assertion is geometric on purpose: a stylesheet that claims a
+     grid and lays out one column satisfies every text check ever written. */
+  await tapTab(page, 'Screens');
+  await page.waitForTimeout(400);
+  // The project the previous section left open was started blank, so give it a
+  // screen and a selection: the three panes only exist when there is something
+  // to draw and something selected to edit.
+  const firstScreenBtn = page.locator('button:has-text("Build the first screen")');
+  if (await firstScreenBtn.count()) {
+    await firstScreenBtn.click();
+    await page.waitForTimeout(500);
+  }
+  if (await page.locator('.tree .node-main').count()) {
+    await page.locator('.tree .node-main').first().click();
+    await page.waitForTimeout(400);
+  }
+  const panes = await page.evaluate(() => {
+    const outline = document.querySelector('.designer .cell-outline');
+    const preview = document.querySelector('.designer .cell-preview');
+    const inspector = document.querySelector('.designer .cell-inspector');
+    const rect = (n) => (n ? n.getBoundingClientRect() : null);
+    return {
+      has: Boolean(outline && preview),
+      outline: rect(outline), preview: rect(preview), inspector: rect(inspector),
+      wide: window.innerWidth,
+    };
+  });
+  check('On a wide screen the builder becomes three columns',
+    panes.has && Boolean(panes.inspector)
+      && panes.outline.right <= panes.preview.left + 1
+      && panes.preview.right <= panes.inspector.left + 1,
+    JSON.stringify({ o: Math.round(panes.outline.right), p: Math.round(panes.preview.left), i: panes.inspector ? Math.round(panes.inspector.left) : null }));
+  check('The canvas is the middle column, not the leftmost',
+    panes.preview.left > panes.outline.left, `outline at ${Math.round(panes.outline.left)}, canvas at ${Math.round(panes.preview.left)}`);
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(350);
   const narrow = await page.evaluate(() => {
@@ -1794,6 +1996,131 @@ a { color: #6B3A1F; }</style></head>
   check('On a phone the same markup is a bottom bar, and the pin goes away',
     narrow.atBottom && narrow.full && narrow.pin === 'none' && narrow.label === '1',
     JSON.stringify(narrow));
+
+  /* ── home, with a project in it ─────────────────────────────────────────── */
+  await page.locator('#homelink').click();
+  await page.waitForTimeout(400);
+  const homeNow = (await page.textContent('#main')) || '';
+  check('The mark in the top bar goes Home, and the project is waiting there',
+    /Your projects/i.test(homeNow) && /From a template/.test(homeNow), 'expected the dashboard');
+  const cards = await page.locator('.pcard').count();
+  const thumbs = await page.locator('.pcard .pthumb svg').count();
+  check('Home shows every project as a card with a drawing of it',
+    cards >= 1 && thumbs === cards, `${cards} project cards, ${thumbs} drawings`);
+  check('The card carries measured chips rather than adjectives',
+    await page.locator('.pcard .chip').count() >= 3,
+    `found ${await page.locator('.pcard .chip').count()} chips`);
+
+  const homeRing = await page.evaluate(() => {
+    const ring = document.querySelector('.home-health .ring');
+    return ring ? {
+      num: ring.querySelector('.ring-num').textContent,
+      arc: ring.querySelector('.ring-arc').getAttribute('stroke-dasharray'),
+    } : null;
+  });
+  const engineHealth = await page.evaluate(() => window.__appmintHealth());
+  check('The ring on Home is the number the engine derives',
+    homeRing && homeRing.num === String(engineHealth.overall),
+    `page shows ${homeRing && homeRing.num}, engine derives ${engineHealth.overall}`);
+
+  await page.locator('.pcard .btn.primary').first().click();
+  await page.waitForTimeout(400);
+  check('Opening a project from Home returns to the work, tabs and all',
+    await page.locator('.tabbar .tab').count() === 7, 'the section bar did not come back');
+
+  /* ── version history ────────────────────────────────────────────────────── */
+  await tapTab(page, 'Settings');
+  await page.locator('.subtab', { hasText: 'Versions' }).click();
+  await page.waitForTimeout(350);
+  check('Settings has a section for version history',
+    /Save a version/i.test(await page.textContent('#main')), 'expected the Versions panel');
+
+  const nameBeforeVersion = await page.evaluate(() => window.__appmintSpec().identity.appName);
+  await page.locator('#ver-note').fill('Before renaming the app');
+  await page.locator('#ver-save-btn').click();
+  await page.waitForTimeout(350);
+  check('A saved version is listed with the name it was given',
+    await page.locator('.vercard').count() >= 1
+      && /Before renaming the app/.test(await page.textContent('#main')),
+    'the saved version is not in the history');
+
+  await tapTab(page, 'Design');
+  await page.locator('input[aria-label="Application name"]').fill('Renamed After Saving');
+  await page.waitForTimeout(350);
+  const nameChanged = await page.evaluate(() => window.__appmintSpec().identity.appName);
+  check('The application name actually changed before the restore',
+    nameChanged === 'Renamed After Saving', `name is "${nameChanged}"`);
+
+  await tapTab(page, 'Settings');
+  await page.locator('.subtab', { hasText: 'Versions' }).click();
+  await page.waitForTimeout(350);
+  await page.locator('[data-restore="0"]').click();
+  await page.waitForTimeout(450);
+  const nameRestored = await page.evaluate(() => window.__appmintSpec().identity.appName);
+  check('Restoring a version puts the specification back',
+    nameRestored === nameBeforeVersion, `"${nameBeforeVersion}" became "${nameRestored}"`);
+  const afterRestore = (await page.textContent('#main')) || '';
+  check('The restore leaves a snapshot of what it replaced, so it can itself be undone',
+    /Before restoring/.test(afterRestore), 'no "Before restoring" entry was recorded');
+  check('Each version offers to be compared with what is open',
+    await page.locator('.vercard .why-box > summary').count() >= 1, 'no comparison control');
+
+  /* ── comfort: motion and contrast ───────────────────────────────────────── */
+  await page.locator('.subtab', { hasText: 'General' }).click();
+  await page.waitForTimeout(300);
+  const durBefore = await page.evaluate(() =>
+    getComputedStyle(document.querySelector('.btn')).transitionDuration);
+  await page.locator('input[aria-label="Reduce motion"]').check();
+  await page.waitForTimeout(300);
+  const motionAfter = await page.evaluate(() => ({
+    attr: document.documentElement.getAttribute('data-motion'),
+    dur: getComputedStyle(document.querySelector('.btn')).transitionDuration,
+  }));
+  check('"Reduce motion" is honoured by the transitions themselves, not just remembered',
+    motionAfter.attr === 'reduced'
+      && motionAfter.dur.split(',').every((v) => v.trim() === '0s')
+      && durBefore.split(',').some((v) => v.trim() !== '0s'),
+    `before "${durBefore}", after "${motionAfter.dur}"`);
+
+  await page.locator('input[aria-label="High contrast"]').check();
+  await page.waitForTimeout(300);
+  const contrastAfter = await page.evaluate(() => ({
+    attr: document.documentElement.getAttribute('data-contrast'),
+    line: getComputedStyle(document.documentElement).getPropertyValue('--line-2').trim(),
+    fg3: getComputedStyle(document.documentElement).getPropertyValue('--fg-3').trim(),
+  }));
+  check('"High contrast" strengthens the tokens rather than repainting by hand',
+    contrastAfter.attr === 'high' && contrastAfter.line.length > 0 && contrastAfter.fg3.length > 0,
+    JSON.stringify(contrastAfter));
+
+  // Tabbed to, not focus()d: :focus-visible is the browser deciding whether a
+  // ring is wanted, and it says yes for a keyboard and no for a mouse. A
+  // scripted focus() is neither, so the keyboard is the only honest way to ask.
+  await page.evaluate(() => document.body.focus());
+  let ringStyle = { tag: '', style: 'none', width: '0px', matches: false };
+  for (let i = 0; i < 14; i += 1) {
+    await page.keyboard.press('Tab');
+    ringStyle = await page.evaluate(() => {
+      const a = document.activeElement;
+      const cs = getComputedStyle(a);
+      return {
+        tag: a ? a.tagName : '',
+        style: cs.outlineStyle,
+        width: cs.outlineWidth,
+        matches: a ? a.matches(':focus-visible') : false,
+      };
+    });
+    if (ringStyle.tag === 'BUTTON' || ringStyle.tag === 'INPUT') break;
+  }
+  check('Tabbing reaches a control and gives it a visible ring',
+    (ringStyle.tag === 'BUTTON' || ringStyle.tag === 'INPUT')
+      && ringStyle.matches && ringStyle.style === 'solid' && parseFloat(ringStyle.width) >= 2,
+    JSON.stringify(ringStyle));
+
+  // Left as they were found, so a later run starts from the same place.
+  await page.locator('input[aria-label="Reduce motion"]').uncheck();
+  await page.locator('input[aria-label="High contrast"]').uncheck();
+  await page.waitForTimeout(200);
 
   if (!process.argv.includes('--keep')) await browser.close();
 

@@ -36,6 +36,15 @@ const D = {
   depth: 0,         // recursion guard for the preview
   dragging: null,   // id of the component being dragged
   dragOver: null,   // id of the component the drop line is drawn above
+  // The canvas controls. They change how the drawing is shown, never what the
+  // app is: none of them touches the specification, which is the only thing
+  // the build reads. That distinction matters — a "dark preview" is a question
+  // about the phone you are holding, not a theme change.
+  dev: 'phone',     // 'phone' | 'tablet'
+  orient: 'portrait', // 'portrait' | 'landscape'
+  pvTheme: 'app',   // 'app' (the project's theme) | 'light' | 'dark'
+  zoom: 100,        // 75 | 100 | 125
+  pq: '',           // palette search query
 };
 
 const MAX_PREVIEW_DEPTH = 12;
@@ -645,43 +654,21 @@ function screenDesignerView() {
   const findings = screenFindings(spec, screen);
 
   wrap.append(
-    el('div', { class: 'd-cell' }, [
+    el('div', { class: 'd-cell cell-preview' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, 'Preview'),
         el('span', { class: 'd-note' }, 'Drawn in the browser from the same numbers the app uses. The installed app is what settles it.'),
       ]),
+      canvasToolbar(screen),
       renderPreview(screen, spec),
     ]),
-    el('div', { class: 'd-cell' }, [
+    el('div', { class: 'd-cell cell-outline' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Contents of ${screen.name}`),
         el('div', { class: 'd-tools' }, [
           /* Undo says what it will undo. On a screen full of components a
              button labelled only "Undo" does not tell you which of the last
              sixty edits you are about to lose. */
-          el('button', {
-            class: 'btn small',
-            id: 'undo-edit',
-            disabled: !canUndo(S.active),
-            title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
-            'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
-            onclick: () => {
-              const what = undoEdit(S.active);
-              touch(); hardUpdate();
-              toast(what ? `Undid: ${what}` : 'Nothing to undo.');
-            },
-          }, 'Undo'),
-          el('button', {
-            class: 'btn small',
-            id: 'redo-edit',
-            disabled: !canRedo(S.active),
-            'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
-            onclick: () => {
-              const what = redoEdit(S.active);
-              touch(); hardUpdate();
-              toast(what ? `Redid: ${what}` : 'Nothing to redo.');
-            },
-          }, 'Redo'),
           el('button', {
             class: 'btn small' + (D.adding ? ' primary' : ''),
             onclick: () => { D.adding = !D.adding; hardUpdate(); },
@@ -697,7 +684,7 @@ function screenDesignerView() {
 
   if (D.selected) {
     const found = locate(screen, D.selected);
-    if (found) wrap.append(el('div', { class: 'd-cell' }, [
+    if (found) wrap.append(el('div', { class: 'd-cell cell-inspector' }, [
       el('div', { class: 'd-head' }, [
         el('span', { class: 'd-title' }, `Edit ${(COMPONENTS[found.node.type] || {}).label || found.node.type}`),
         el('button', { class: 'btn small', onclick: () => { D.selected = null; hardUpdate(); } }, 'Deselect'),
@@ -864,39 +851,85 @@ function iconBtn(glyph, label, onclick) {
 
 /* ── the palette ────────────────────────────────────────────────────────── */
 
-function palette(screen) {
+/* Everything below the search field, so typing can redraw the results without
+   redrawing the field the caret is in. */
+function paletteBody(screen) {
   const groups = GROUPS;
   const open = D.group || groups[0];
-  const wrap = el('div', { class: 'palette' }, [
-    el('div', { class: 'palette-groups', role: 'tablist', 'aria-label': 'Component groups' },
+  const q = (D.pq || '').trim();
+  const nodes = [];
+
+  if (!q) {
+    nodes.push(el('div', { class: 'palette-groups', role: 'tablist', 'aria-label': 'Component groups' },
       groups.map((g) => el('button', {
         class: 'chip' + (g === open ? ' on' : ''),
         role: 'tab',
         'aria-selected': g === open ? 'true' : 'false',
         onclick: () => { D.group = g; hardUpdate(); },
-      }, g))),
-  ]);
-  const items = componentList().filter((c) => c.group === open);
-  const grid = el('div', { class: 'palette-grid' });
+      }, g))));
+  }
+
+  // With a query, the search is over every component rather than the open
+  // group: someone typing "card" wants the card, not a lesson in which shelf
+  // it happens to sit on.
+  // Ranked the way the command palette ranks, and a match is anything but
+  // null: a prefix scores -100, so "> 0" would have discarded "Button" when
+  // someone typed "but" and kept only the scattered hits.
+  const items = q
+    ? componentList()
+      .map((c) => ({ c, score: Math.min(fuzzyScore(q, c.label) ?? Infinity, fuzzyScore(q, c.name) ?? Infinity) }))
+      .filter((x) => Number.isFinite(x.score))
+      .sort((a, b) => a.score - b.score)
+      .map((x) => x.c)
+    : componentList().filter((c) => c.group === open);
+
+  const grid = el('div', { class: 'palette-grid', id: 'pal-grid' });
   for (const c of items) {
     grid.append(el('button', {
       class: 'pitem',
+      'data-comp': c.name,
       onclick: () => {
         editScreen(screen, `Add ${c.label}`, () => addComponent(screen, c.name));
         toast(`${c.label} added.`);
       },
     }, [
       el('span', { class: 'pitem-name' }, c.label),
-      el('span', { class: 'pitem-sub' }, c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role)),
+      el('span', { class: 'pitem-sub' }, q
+        ? c.group
+        : (c.container ? 'holds children' : (c.requiresLabel ? 'needs a label' : c.role))),
     ]));
   }
+
+  if (!items.length) {
+    nodes.push(emptyState('no-results', 'No component matches', `Nothing in the library matches “${q}”. Clearing the search shows the shelves again.`, null));
+    return nodes;
+  }
+
   const target = insertTarget(screen);
   const targetName = target.parent
     ? ((COMPONENTS[(locate(screen, target.parent) || {}).node?.type] || {}).label || target.parent)
     : 'the screen';
-  wrap.append(el('p', { class: 'sub' }, `New components are added inside ${targetName}.`));
-  wrap.append(grid);
-  return wrap;
+  nodes.push(el('p', { class: 'sub' }, `New components are added inside ${targetName}.`));
+  nodes.push(grid);
+  return nodes;
+}
+
+function redrawPalette(screen) {
+  const box = $('#pal-body');
+  if (box) box.replaceChildren(...paletteBody(screen));
+}
+
+function palette(screen) {
+  const body = el('div', { class: 'pal-body', id: 'pal-body' }, ...paletteBody(screen));
+  return el('div', { class: 'palette' }, [
+    el('input', {
+      id: 'pal-search', class: 'search', type: 'search', autocomplete: 'off',
+      placeholder: 'Search all components', value: D.pq || '',
+      'aria-label': 'Search components',
+      oninput: (e) => { D.pq = e.target.value; redrawPalette(screen); },
+    }),
+    body,
+  ]);
 }
 
 /* ── the inspector ──────────────────────────────────────────────────────── */
@@ -1105,7 +1138,8 @@ function eventEditor(screen, node, ev) {
  * is fixed. Leaving a solved error on screen teaches people to ignore errors.
  */
 function findingsCell(screen, findings) {
-  const cell = el('div', { class: 'd-cell', id: 'designer-findings' }, [
+  // Carries its own class so the wide layout can place it under the canvas.
+  const cell = el('div', { class: 'd-cell cell-findings', id: 'designer-findings' }, [
     el('div', { class: 'd-head' }, [
       el('span', { class: 'd-title' }, findings.length
         ? `What needs attention (${findings.length})`
@@ -1176,6 +1210,76 @@ function locateById(screen, id) {
   return found ? found.node : null;
 }
 
+/* ── the canvas toolbar ─────────────────────────────────────────────────── */
+
+/*
+ * What the drawing is shown on, and how — not what the app is. Every control
+ * here changes D and nothing else, so nothing here can reach the
+ * specification. The undo and redo buttons live here because this is where the
+ * work is done, and because on a wide screen the outline is a column of its
+ * own and a control that edits it should not be in it.
+ */
+function seg(label, options, current, pick, key) {
+  return el('div', { class: 'seg', role: 'group', 'aria-label': label },
+    ...options.map(([id, text]) => el('button', {
+      class: 'seg-btn' + (current === id ? ' on' : ''),
+      type: 'button',
+      'aria-pressed': current === id ? 'true' : 'false',
+      'data-seg': `${key}-${id}`,
+      onclick: () => pick(id),
+    }, text)));
+}
+
+function canvasToolbar(screen) {
+  const zoomLabel = `${D.zoom}%`;
+  return el('div', { class: 'd-toolbar' }, [
+    el('button', {
+      class: 'btn small', id: 'undo-edit', disabled: !canUndo(S.active),
+      title: nextUndoLabel(S.active) ? `Undo: ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+      'aria-label': nextUndoLabel(S.active) ? `Undo ${nextUndoLabel(S.active)}` : 'Nothing to undo',
+      onclick: () => {
+        const what = undoEdit(S.active);
+        touch(); hardUpdate();
+        toast(what ? `Undid: ${what}` : 'Nothing to undo.');
+      },
+    }, 'Undo'),
+    el('button', {
+      class: 'btn small', id: 'redo-edit', disabled: !canRedo(S.active),
+      'aria-label': canRedo(S.active) ? 'Redo the last undone change' : 'Nothing to redo',
+      onclick: () => {
+        const what = redoEdit(S.active);
+        touch(); hardUpdate();
+        toast(what ? `Redid: ${what}` : 'Nothing to redo.');
+      },
+    }, 'Redo'),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    seg('Device', [['phone', 'Phone'], ['tablet', 'Tablet']], D.dev,
+      (v) => { D.dev = v; hardUpdate(); }, 'dev'),
+    seg('Orientation', [['portrait', 'Portrait'], ['landscape', 'Landscape']], D.orient,
+      (v) => { D.orient = v; hardUpdate(); }, 'orient'),
+    seg('Preview colours', [['app', 'App'], ['light', 'Light'], ['dark', 'Dark']], D.pvTheme,
+      (v) => { D.pvTheme = v; hardUpdate(); }, 'theme'),
+    el('span', { class: 'tb-sep', 'aria-hidden': 'true' }),
+    el('div', { class: 'zoom', role: 'group', 'aria-label': 'Zoom' }, [
+      el('button', {
+        class: 'ibtn', id: 'zoom-out', type: 'button', 'aria-label': 'Zoom out',
+        disabled: D.zoom <= 75,
+        onclick: () => { D.zoom = Math.max(75, D.zoom - 25); hardUpdate(); },
+      }, '−'),
+      el('span', { class: 'zoom-val', id: 'zoom-val' }, zoomLabel),
+      el('button', {
+        class: 'ibtn', id: 'zoom-in', type: 'button', 'aria-label': 'Zoom in',
+        disabled: D.zoom >= 125,
+        onclick: () => { D.zoom = Math.min(125, D.zoom + 25); hardUpdate(); },
+      }, '+'),
+    ]),
+    el('button', {
+      class: 'btn primary small', id: 'preview-live', type: 'button',
+      onclick: () => { S.tab = 'preview'; touch(); hardUpdate(); },
+    }, 'Preview live'),
+  ]);
+}
+
 /* ── the preview ────────────────────────────────────────────────────────── */
 /*
  * A drawing of the screen, built from the same component descriptions and the
@@ -1187,8 +1291,17 @@ function locateById(screen, id) {
 
 function renderPreview(screen, spec) {
   const th = spec.theme || {};
-  const dark = (spec.android || {}).theme === 'dark' || luminance(th.background || '#FFFFFF') < 0.5;
-  const host = el('div', { class: 'device' + (dark ? ' dark' : '') });
+  // What the app will look like is the project's own decision; what you are
+  // looking at it on is yours. So the forced theme wins over the project's,
+  // and says so on the control that set it.
+  const appDark = (spec.android || {}).theme === 'dark' || luminance(th.background || '#FFFFFF') < 0.5;
+  const dark = D.pvTheme === 'light' ? false : D.pvTheme === 'dark' ? true : appDark;
+  const host = el('div', {
+    class: 'device' + (dark ? ' dark' : '')
+      + ` dev-${D.dev} orient-${D.orient}` + (D.zoom !== 100 ? ' zoomed' : ''),
+    'data-dev': D.dev, 'data-orient': D.orient, 'data-zoom': String(D.zoom),
+    style: D.zoom !== 100 ? `transform:scale(${D.zoom / 100});transform-origin:top center;` : null,
+  });
   const frame = el('div', { class: 'device-screen', id: 'preview-root', style: `background:${th.background || '#FFFFFF'};color:${th.onSurface || '#111827'}` });
   // Moving a component is done on the drawing itself, not only in the outline,
   // so the two listeners that make the canvas work are attached here. They are

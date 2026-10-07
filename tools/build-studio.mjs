@@ -63,9 +63,11 @@ const APP_MODULES = [
   // records a step. Both are in one scope once bundled, but listing it first
   // keeps the dependency readable rather than something you have to trace.
   'studio/src/history.js',
+  'studio/src/versions.js',
   'studio/src/designer.js',
   'studio/src/website.js',
   'studio/src/studio.js',
+  'studio/src/viewHome.js',
   'studio/src/repairs.js',
   'studio/src/viewHealth.js',
   'studio/src/viewPipeline.js',

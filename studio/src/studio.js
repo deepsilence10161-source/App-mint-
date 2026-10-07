@@ -166,6 +166,47 @@ function cycleTheme() {
   toast(now === 'light' ? 'Light mode' : 'Dark mode');
 }
 
+/* ── comfort ─────────────────────────────────────────────────────────────
+   Two settings the design spec requires to be reachable rather than merely
+   respected: fewer animations, and more contrast. Both are attributes on the
+   root element, because both are the same kind of thing as the theme — a set
+   of token overrides, not a second stylesheet and not a component that has to
+   be told. Both are remembered, because a comfort setting you have to set
+   twice is not a comfort setting. */
+
+const LS_COMFORT = 'appmint.comfort.v1';
+
+function comfortState() {
+  if (!S.comfort) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(LS_COMFORT) || '{}'); } catch { /* first run */ }
+    S.comfort = {
+      motion: saved.motion === 'reduced' ? 'reduced' : 'full',
+      contrast: saved.contrast === 'high' ? 'high' : 'normal',
+    };
+  }
+  return S.comfort;
+}
+
+function setComfort(key, value) {
+  comfortState()[key] = value;
+  try { localStorage.setItem(LS_COMFORT, JSON.stringify(S.comfort)); } catch { /* ignore */ }
+  applyComfort();
+}
+
+/** Reads the system preference the same way the theme does. */
+const systemWantsLessMotion = () => {
+  try { return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch { return false; }
+};
+
+function applyComfort() {
+  const c = comfortState();
+  const root = document.documentElement;
+  root.setAttribute('data-motion', c.motion === 'reduced' || systemWantsLessMotion() ? 'reduced' : 'full');
+  root.setAttribute('data-contrast', c.contrast);
+}
+
 /* ── application state ─────────────────────────────────────────────────── */
 const S = {
   templates: { templates: [] },
@@ -977,37 +1018,39 @@ function hardUpdate() { renderActive(); }
 const main = el('main');
 
 /* ── project picker ────────────────────────────────────────────────────── */
+/**
+ * Home. This is where there is no project, and where the mark in the top bar
+ * goes — the same screen both times, because "where do I start" and "where are
+ * my projects" are the same question asked in two moods.
+ */
 function renderPicker() {
-  $('#projname').textContent = 'New project';
-  const tpls = S.templates.templates || [];
-  main.replaceChildren(
-    el('div', { class: 'tabpage on' }, [
-      card('Start a project', [
-        el('p', { class: 'hint' }, 'Pick a starting point. Every template is an ordinary specification you can change completely.'),
-        ...tpls.map((t) => el('button', {
-          class: 'tpl', onclick: () => createProject(t),
-        }, [
-          el('span', { class: 'tmark', html: svg(I[t.mark] || I.square) }),
-          el('span', { style: 'flex:1;min-width:0' }, [
-            el('div', { class: 'tname' }, t.name),
-            el('div', { class: 'ttag' }, t.tagline),
-          ]),
-        ])),
-      ]),
-      S.projects.length ? card('Your projects', S.projects.map((p) => el('button', {
-        class: 'tpl', onclick: () => { S.active = p; touch(); renderActive(); },
-      }, [
-        el('span', { class: 'tmark', html: svg(I.square) }),
-        el('span', { style: 'flex:1;min-width:0' }, [
-          el('div', { class: 'tname' }, p.spec.identity.appName),
-          el('div', { class: 'ttag' }, p.spec.identity.packageName),
-        ]),
-      ]))) : null,
-    ].filter(Boolean)));
+  const tpls = (S.templates && S.templates.templates) || [];
+  $('#projname').textContent = 'App Mint';
+  $('#projmeta').textContent = S.projects.length
+    ? `${say(S.projects.length, 'project')} in this browser`
+    : 'no projects yet';
+  main.replaceChildren(el('div', { class: 'tabpage on' }, [
+    el('div', { class: 'home' }, ...viewHome()),
+  ]));
 
   // tabs are meaningless before a project exists
   $('.tabbar .inner').replaceChildren();
-  $('#health').replaceChildren(el('span', { class: 'chip' }, `${tpls.length} templates`), el('span', { class: 'spacer' }));
+  $('#health').replaceChildren(
+    el('span', { class: 'chip' }, `${tpls.length} templates`),
+    el('span', { class: 'spacer' }),
+    el('span', { class: 'chip' }, 'offline · nothing leaves this browser'),
+  );
+}
+
+/** The template gallery, reached from Home. */
+function renderGallery() {
+  $('#projname').textContent = 'Templates';
+  $('#projmeta').textContent = 'each one is an ordinary specification you can change';
+  main.replaceChildren(el('div', { class: 'tabpage on' }, [
+    el('div', { class: 'home' }, ...viewGallery()),
+  ]));
+  $('.tabbar .inner').replaceChildren();
+  $('#health').replaceChildren(el('span', { class: 'chip' }, 'nothing is installed until you build'), el('span', { class: 'spacer' }));
 }
 
 function createProject(tpl) {
@@ -1234,6 +1277,10 @@ async function boot(templatesData) {
   $('#importproj').addEventListener('click', importSpec);
   $('#themebtn').addEventListener('click', cycleTheme);
   $('#palbtn').addEventListener('click', togglePalette);
+  // The mark is the way home, which is where every tool puts it. On a phone it
+  // is also the only way back to the project list without closing the tab.
+  const home = $('#homelink');
+  if (home) home.addEventListener('click', () => { renderPicker(); });
 
   /* Ctrl+K is the convention people arrive expecting, and Escape is the one
      that must never trap anyone inside an overlay. The palette also has a
@@ -1253,6 +1300,7 @@ async function boot(templatesData) {
   // said — including across a reload, which is when an unremembered preference
   // is most annoying.
   applyTheme(store.theme());
+  applyComfort();
   if (window.matchMedia) {
     try {
       window.matchMedia('(prefers-color-scheme: light)')

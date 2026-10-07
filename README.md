@@ -34,11 +34,14 @@ What you can do in it:
 
 | Section | What it does |
 |---|---|
+| **Home** | Four ways to start — a template, a website address, a blank project, or importing a spec.json — and every project you have, each with a drawing of it, its measured counts and its health score |
 | **Design** | Name, package, colours, website address or bundled page |
-| **Screens** | Build screens from the component library: a palette, a tree, properties, and a preview drawn from the same metrics the Android renderer uses |
+| **Screens** | Build screens from the component library: a searchable palette, a tree, properties, and a preview drawn from the same metrics the Android renderer uses. Components can be dragged on the drawing itself, with a drop indicator and alignment guides; the toolbar switches device, orientation, preview light/dark and zoom without touching the app |
 | **Features** | Turn native capabilities on and off; the permission table updates itself |
 | **Preview** | Portrait/landscape and light/dark, drawn from your theme |
 | **Build** | Run the five validation layers, see every finding with the exact field, fix what can be fixed safely, and start a build |
+| **Settings → Versions** | Save the specification as a named version, compare any version with what is open, and restore it — a restore always snapshots what it replaces, so it can be undone |
+| **Settings → General → Comfort** | Reduce motion and high contrast, remembered per browser |
 
 Dark mode is the default and light mode is one tap away in the top bar; the
 Studio follows your system setting until you say otherwise.
@@ -189,8 +192,20 @@ compile SDK 36. So the toolchain is a compliance question, not a preference.
   thing before the structure has an insertion point.
 - Designer edits — including canvas drags — are journaled and undoable. That
   journal is per session: it is not saved with the project, so closing the tab
-  ends it. Project version history (snapshots you can compare and restore) is
-  separate and is not implemented.
+  ends it. The version history in Settings is the durable one, and the two are
+  deliberately separate: a drag is an edit you are trying, a save is a decision
+  you made.
+- Twelve versions are kept per project, and the count is on the screen. Thirteen
+  is a limit, not a policy: it exists so that "saved" cannot quietly mean "saved
+  until the browser ran out of room".
+- The three-pane builder (tree · canvas · properties) appears from 1100px wide.
+  Below that the designer is one column and the panels are reached by scrolling
+  rather than by drawers over the work — a deliberate choice, and the panels do
+  not overlay the canvas at any width.
+- The gallery's categories are declared in the Studio (`TEMPLATE_CATEGORY`),
+  because a category is a fact about browsing and about nothing else. Adding a
+  template to `templates.json` without adding it there puts it under "Other"
+  rather than failing.
 - Light mode is a complete set of token overrides with a control in the top bar
   that remembers your choice. It passes the contrast gate in both themes, but it
   has not been reviewed by a person, and token parity is necessary rather than
@@ -219,6 +234,8 @@ engine/
   cli.mjs                       command line entry point
 studio/
   app.html                      the built Studio — one self-contained file
+  src/viewHome.js               the dashboard, the gallery, the empty states
+  src/versions.js               snapshots, comparison, restore
   src/                          its sources
 apps/demo/                     reference project, with its own bundled page
 tools/

@@ -1931,3 +1931,307 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 @media (prefers-reduced-motion: reduce) {
   .logchev { transition: none; }
 }
+
+/* ================================================================
+   HOME, THE GALLERY, AND THE REST OF THIS PASS
+   ================================================================
+   Every colour, radius, shadow and duration below is a token. The
+   gate in tools/tests/tokens.test.mjs fails the build if a colour is
+   named directly here, which is what keeps a second theme possible
+   rather than merely intended. */
+
+/* ── the dashboard ──────────────────────────────────────────────────────── */
+
+.home { display: flex; flex-direction: column; gap: var(--s5); }
+
+.hero {
+  padding: var(--s5);
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--accent-soft) 0%, transparent 58%),
+    var(--surface);
+}
+.hero-title { font-size: 26px; font-weight: 700; letter-spacing: -0.022em; margin: 0; }
+.hero-sub { color: var(--fg-2); font-size: 14.5px; line-height: 1.6; max-width: 62ch; margin-top: var(--s2); }
+
+.methods { display: grid; gap: var(--s3); margin-top: var(--s4); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .methods { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .methods { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.method {
+  position: relative;
+  display: flex; align-items: flex-start; gap: var(--s3);
+  text-align: left; cursor: pointer;
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit;
+  transition: transform var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease),
+              box-shadow var(--d-fast) var(--ease), background var(--d-fast) var(--ease);
+}
+.method:hover, .method:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--accent-line);
+  box-shadow: var(--sh-lift), var(--sh-glow);
+}
+.method-ico {
+  flex: none; width: 38px; height: 38px; display: grid; place-items: center;
+  border-radius: var(--r-2); background: var(--accent-soft); color: var(--accent);
+}
+.method-ico svg { width: 21px; height: 21px; }
+.method-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.method-name { font-size: 15px; font-weight: 650; }
+.method-line { font-size: 13px; line-height: 1.55; color: var(--fg-2); }
+.method-go { flex: none; align-self: center; color: var(--fg-3); opacity: 0.5; transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease); }
+.method-go svg { width: 18px; height: 18px; }
+.method:hover .method-go { opacity: 1; transform: translateX(2px); }
+
+.home-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; }
+.home-h2 { font-size: 18px; font-weight: 650; margin: 0; }
+.home-count { font-size: 13px; color: var(--fg-3); }
+
+.projects { display: grid; gap: var(--s3); margin-top: var(--s3); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .projects { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .projects { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.pcard {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: border-color var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.pcard:hover { border-color: var(--line-2); box-shadow: var(--sh-1); }
+.pcard-top { display: flex; gap: var(--s3); align-items: flex-start; }
+.pthumb { flex: none; display: block; line-height: 0; }
+.pmeta { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pname { font-size: 15px; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
+.ppkg { font: 500 12px/1.4 var(--font-mono); color: var(--fg-3); overflow-wrap: anywhere; }
+.pchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pcard-acts { display: flex; gap: var(--s2); flex-wrap: wrap; }
+
+/* A small chip: the grid cards carry four of them and a full-size pill each
+   would turn a card into a row of buttons. */
+.chip.small { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.chip.band-good { color: var(--ok-ink); border-color: var(--ok-line); background: var(--ok-soft); }
+.chip.band-fair { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-soft); }
+.chip.band-poor { color: var(--bad-ink); border-color: var(--bad-line); background: var(--bad-soft); }
+
+.home-health {
+  display: flex; align-items: center; gap: var(--s4);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.hh-ring { flex: none; }
+.hh-ring .ring { width: 72px; height: 72px; }
+.hh-ring .ring { color: var(--accent); }
+.hh-meta { min-width: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+/* ── the gallery ────────────────────────────────────────────────────────── */
+
+.gallery-head { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.gallery-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+.gallery-head .home-count { margin-left: auto; }
+
+.gallery-search {
+  position: sticky; top: 0; z-index: 4;
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s3) 0;
+  background: linear-gradient(var(--bg) 72%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.search {
+  width: 100%; min-height: 46px;
+  padding: 0 var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  color: var(--fg);
+  font: inherit; font-size: 15px;
+}
+.search::placeholder { color: var(--fg-3); }
+.search:focus-visible { border-color: var(--accent-line); outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.tpl-cats { display: flex; gap: var(--s2); overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+.tpl-cats::-webkit-scrollbar { display: none; }
+.chip.filter { flex: 0 0 auto; cursor: pointer; }
+
+.tpl-grid { display: grid; gap: var(--s3); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 620px) { .tpl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .tpl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.tcard {
+  display: flex; flex-direction: column; gap: var(--s3);
+  padding: var(--s4);
+  border-radius: var(--r-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  transition: transform var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease);
+}
+.tcard:hover { transform: translateY(-3px); border-color: var(--accent-line); box-shadow: var(--sh-lift); }
+.tcard-top { display: flex; gap: var(--s3); align-items: flex-start; }
+.tcard-meta { min-width: 0; }
+.tmark.big {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: var(--r-2); background: var(--accent-soft); color: var(--accent);
+}
+.tmark.big svg { width: 22px; height: 22px; }
+.tcard .tname { font-size: 15px; font-weight: 650; margin: 0; }
+.tcard .ttag { font-size: 13px; color: var(--fg-2); line-height: 1.5; margin-top: 3px; }
+.tcard-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tcard-foot .btn { margin-left: auto; }
+
+.gallery-note { padding-top: var(--s2); }
+
+/* ── empty states ───────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: var(--s2); padding: var(--s5) var(--s4);
+  border: 1px dashed var(--line-2); border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.ill-wrap { line-height: 0; color: var(--fg-3); opacity: 0.9; }
+.ill-wrap .ill { max-width: 100%; height: auto; }
+.empty-title { font-size: 16px; font-weight: 650; margin: 0; }
+.empty-state .sub { max-width: 46ch; }
+.empty-state .btn { margin-top: var(--s2); }
+
+/* ── the canvas toolbar ─────────────────────────────────────────────────── */
+
+.d-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2);
+  padding: var(--s2);
+  margin-bottom: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.tb-sep { width: 1px; height: 22px; background: var(--line-2); }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: var(--r-full); overflow: hidden; }
+.seg-btn {
+  min-height: 36px; padding: 0 12px;
+  border: 0; background: transparent; color: var(--fg-2);
+  font: inherit; font-size: 13px; cursor: pointer;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--line-2); }
+.seg-btn.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.zoom { display: inline-flex; align-items: center; gap: 2px; }
+.zoom-val { font: 500 12.5px/1 var(--font-mono); color: var(--fg-2); min-width: 44px; text-align: center; }
+#preview-live { margin-left: auto; }
+
+/* The device sizes the toolbar offers. Only the frame changes: nothing here
+   touches the specification, and the caption under the drawing still says so. */
+.device.dev-tablet { max-width: 560px; }
+.device.orient-landscape .device-screen { min-height: 300px; }
+.device.zoomed { margin-block: var(--s2) var(--s5); }
+
+/* ── the palette, with search ───────────────────────────────────────────── */
+
+.pal-body { display: flex; flex-direction: column; gap: var(--s3); }
+.palette .search { min-height: 42px; font-size: 14px; }
+
+/* ── version history ────────────────────────────────────────────────────── */
+
+.vercard {
+  display: flex; flex-direction: column; gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-2);
+  background: var(--surface-2);
+}
+.vercard + .vercard { margin-top: var(--s3); }
+.verhead { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.vername { font-size: 14.5px; font-weight: 650; margin: 0; }
+.versub { font-size: 12.5px; color: var(--fg-3); margin-top: 3px; }
+.diff { display: flex; flex-direction: column; gap: 6px; margin: 0; padding-left: var(--s4); }
+.diff li { font-size: 13px; color: var(--fg-2); line-height: 1.5; }
+
+/* ── accessibility ──────────────────────────────────────────────────────── */
+
+/* One visible focus ring, everywhere, drawn the same way. A ring that depends
+   on which component you are on is a ring you have to hunt for. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The system's preference is honoured even before the Studio's own switch is
+   touched, and [data-motion] carries the switch itself. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+[data-motion="reduced"] *, [data-motion="reduced"] *::before, [data-motion="reduced"] *::after {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* More contrast, in the same shape as more light or less light: the tokens are
+   overridden, and every component that reads them follows without knowing. */
+[data-contrast="high"] {
+  --line: rgba(255, 255, 255, 0.22);
+  --line-2: rgba(255, 255, 255, 0.36);
+  --fg-2: #C9D1E0;
+  --fg-3: #B6BFD0;
+}
+[data-theme="light"][data-contrast="high"] {
+  --line: rgba(0, 0, 0, 0.22);
+  --line-2: rgba(0, 0, 0, 0.34);
+  --fg-2: #333B4A;
+  --fg-3: #434C5E;
+}
+[data-contrast="high"] .chip,
+[data-contrast="high"] .btn,
+[data-contrast="high"] .method,
+[data-contrast="high"] .pcard,
+[data-contrast="high"] .tcard { border-width: 1.5px; }
+
+/* ── the three-pane builder, on a screen that has room for it ───────────── */
+
+/* Below 1100px the designer stays the column it has always been: on a phone
+   that is the right shape, and the panels are reached by scrolling rather than
+   by opening drawers over the work. Above it, the component tree, the drawing
+   and the properties sit side by side — the arrangement the design prompt asks
+   for, and the one that makes the drawing the middle of the screen rather than
+   the middle of a scroll. */
+@media (min-width: 1100px) {
+  .designer {
+    display: grid;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.18fr) minmax(0, 0.9fr);
+    grid-template-areas:
+      "outline preview inspector"
+      "outline findings inspector";
+    gap: var(--s4);
+    align-items: start;
+  }
+  .designer > .cell-outline { grid-area: outline; }
+  .designer > .cell-preview { grid-area: preview; }
+  .designer > .cell-inspector { grid-area: inspector; }
+  .designer > .cell-findings { grid-area: findings; }
+  /* Notes and the screen picker span the whole width rather than landing in a
+     column by accident. */
+  .designer > :not(.d-cell) { grid-column: 1 / -1; }
+  .designer .d-cell { margin: 0; }
+}
+
+/* The health strip is a row of pills and a spacer; on a narrow phone it had
+   the last chip pushed off the right edge, which is how a status strip stops
+   being read. It wraps now, and the spacer only works when there is room. */
+#health { flex-wrap: wrap; }
+#health .spacer { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 460px) {
+  #health .spacer { display: none; }
+  #health .chip { max-width: 100%; }
+}

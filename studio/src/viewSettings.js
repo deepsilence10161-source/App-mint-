@@ -23,6 +23,7 @@ const SETTINGS_TABS = [
   ['signing', 'Signing'],
   ['permissions', 'Permissions'],
   ['engine', 'Build Engine'],
+  ['versions', 'Versions'],
   ['diagnostics', 'Diagnostics'],
 ];
 
@@ -434,6 +435,110 @@ function tabAdvanced(spec) {
 
 /* ── the screen ─────────────────────────────────────────────────────────── */
 
+/* ── comfort ────────────────────────────────────────────────────────────── */
+
+/**
+ * Two settings that change how the tool feels rather than what it does, which
+ * is exactly why they are here and not in the specification: they are about the
+ * person using the Studio, so they belong to the Studio and to this browser.
+ */
+function comfortSection() {
+  const c = comfortState();
+  return section('Comfort', {
+    id: 'comfort', icon: I.spark, open: true, summary: 'motion and contrast',
+    children: [
+      field('Reduce motion', sw(c.motion === 'reduced', 'Reduce motion',
+        (e) => { setComfort('motion', e.target.checked ? 'reduced' : 'full'); hardUpdate(); }),
+        'Turns off every non-essential transition and animation. Your system setting is followed until you choose here.'),
+      field('High contrast', sw(c.contrast === 'high', 'High contrast',
+        (e) => { setComfort('contrast', e.target.checked ? 'high' : 'normal'); hardUpdate(); }),
+        'Strengthens borders, secondary text and the focus ring. The contrast gate already holds 4.5:1; this goes further for people who need it.'),
+      field('Font scaling', el('p', { class: 'sub' },
+        'Text scales with the browser or system setting up to 200%. This is a deliberate limit: the layouts here are built on a fixed spacing scale, and pretending to scale beyond what has been checked would be a claim rather than a feature.'),
+        null),
+    ],
+  });
+}
+
+/* ── version history ────────────────────────────────────────────────────── */
+
+function sayWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'unknown time';
+  return d.toISOString().replace('T', ' ').slice(0, 16);
+}
+
+function versionRow(project, entry, index) {
+  const diff = versionDiff(project.spec, entry.spec);
+  const st = versionStats(entry.spec);
+  return el('article', { class: 'vercard', 'data-ver': String(index) }, [
+    el('div', { class: 'verhead' }, [
+      el('div', { class: 'vermeta' }, [
+        el('h3', { class: 'vername' }, entry.note),
+        el('p', { class: 'versub' }, `${sayWhen(entry.at)} · “${entry.name}” · ${st.screens} screen${st.screens === 1 ? '' : 's'} · ${st.components} component${st.components === 1 ? '' : 's'}`),
+      ]),
+      el('button', {
+        class: 'btn small', type: 'button', 'data-restore': String(index),
+        onclick: () => {
+          const out = restoreVersion(S.active, index);
+          if (!out.ok) { toast(out.reason); return; }
+          persist(); touch(); hardUpdate();
+          toast(out.changed.length
+            ? `Restored “${entry.note}” — ${out.changed.length} thing(s) differ from what was open.`
+            : `Restored “${entry.note}”. The specification was already identical.`);
+        },
+      }, 'Restore'),
+    ]),
+    // "What am I about to lose?" is the only question worth answering here, so
+    // the comparison is against what is open right now, not against the
+    // neighbouring snapshot.
+    el('details', { class: 'why-box' },
+      el('summary', {}, diff.length ? `Compared with what is open (${diff.length} difference${diff.length === 1 ? '' : 's'})` : 'Compared with what is open (identical)'),
+      diff.length
+        ? el('ul', { class: 'diff' }, ...diff.map((line) => el('li', {}, line)))
+        : el('p', { class: 'why-none' }, 'This snapshot and the open project are the same specification.'),
+    ),
+  ]);
+}
+
+function tabVersions(spec) {
+  const project = S.active;
+  const list = versionsOf(project);
+  const note = el('input', {
+    id: 'ver-note', type: 'text', autocomplete: 'off', maxlength: '60',
+    placeholder: 'What are you saving, and why?', 'aria-label': 'A name for this version',
+  });
+
+  return [
+    section('Save a version', {
+      id: 'ver-save', icon: I.build, open: true, summary: `${list.length} of ${VERSIONS_LIMIT} kept`,
+      children: [
+        el('p', { class: 'hint' }, 'A version is the whole specification, kept inside this project in this browser. Twelve are kept per project; the oldest is dropped first, and the count is on this screen rather than discovered later.'),
+        field('Name this version', note, 'Left empty it is recorded as “Saved by hand”.'),
+        el('div', { class: 'row' },
+          el('button', {
+            class: 'btn primary', id: 'ver-save-btn', type: 'button',
+            onclick: () => {
+              const entry = snapshotVersion(project, (note.value || '').trim() || 'Saved by hand');
+              if (!entry) { toast('There is no project to save.'); return; }
+              persist(); hardUpdate();
+              toast(`Saved “${entry.note}”.`);
+            },
+          }, 'Save this version'),
+          el('span', { class: 'sub' }, 'Restoring always saves what it replaces, so a restore can be undone by restoring the next entry.'),
+        ),
+      ],
+    }),
+    section('History', {
+      id: 'ver-list', icon: I.list, open: true, summary: list.length ? `${list.length} version${list.length === 1 ? '' : 's'}` : 'nothing saved yet',
+      children: list.length
+        ? list.map((entry, i) => versionRow(project, entry, i))
+        : [emptyState('no-projects', 'No versions yet',
+          'Save a version before a big change — the specification is small, so keeping a dozen costs nothing and answers “what did this look like before?” exactly.', null)],
+    }),
+  ];
+}
+
 function viewSettings() {
   const spec = S.active.spec;
   const st = S.settings || (S.settings = { tab: 'general', advanced: false });
@@ -453,7 +558,8 @@ function viewSettings() {
     sw(st.advanced, 'Advanced Mode', (e) => { st.advanced = e.target.checked; hardUpdate(); }),
   );
 
-  const panel = st.tab === 'general' ? tabGeneral(spec)
+  const panel = st.tab === 'general' ? [...tabGeneral(spec), comfortSection()]
+    : st.tab === 'versions' ? tabVersions(spec)
     : st.tab === 'backend' ? tabBackend(spec)
     : st.tab === 'signing' ? tabSigning(spec)
     : st.tab === 'permissions' ? tabPermissions(spec)

@@ -243,6 +243,9 @@ decoration.
 | 10 | Performance | **no measurements exist.** The prompt is explicit that no optimisation may be claimed without before/after numbers, so nothing is claimed here |
 | 11 | Testing | 294 engine assertions + 181 browser checks; the emulator E2E runs on Actions, not locally (no KVM in this sandbox) |
 | 12 | Build UX | the pipeline stepper and the log console exist |
+| — | Home and the gallery (this pass) | four creation methods, project cards with drawings and measured chips, category-filtered gallery with search |
+| — | Version history (this pass) | named snapshots, compare-with-what-is-open, restore that snapshots what it replaces |
+| — | Accessibility (this pass) | reduce-motion and high-contrast switches that change the tokens, one visible focus ring, empty states drawn rather than written |
 | 13 | APK/AAB validation | exists in `tools/build-apk.mjs`; not audited |
 | 14 | Final regression | pending the above |
 
@@ -333,3 +336,64 @@ re-rendered (the ghost and the indicators are one absolutely-positioned overlay
 inside the device frame), movement is written with `transform`, and the canvas
 is scrolled by hand rather than by re-layout. Whether that holds up on a
 mid-range phone is a measurement that has not been made.
+
+## 9. The rest of the design prompt (this pass)
+
+The master prompt and the UI prompt were read against the repository, section by
+section, and everything a person can actually see was either built or written
+down as not built. This is the list.
+
+### What was built
+
+| Area | What it is |
+|---|---|
+| **Home** | Four explicit creation methods (template · website-to-app · blank · import), each one line and each one doing what it says; project cards with a drawing of the app in its own theme, measured counts and the engine's health score; an empty state that is a drawing |
+| **Template gallery** | Category pills, instant search over name, use and category, template cards, and a note that choosing a template copies it |
+| **Canvas toolbar** | Undo/redo (moved here from the outline), device (phone/tablet), orientation, preview light/dark, zoom, and a glowing Preview live. **None of these touches the specification** — a check reads the spec before and after and fails if it moved |
+| **Palette search** | The component library is searchable across all groups, ranked by the same subsequence search the command palette uses |
+| **Comfort** | Reduce motion and high contrast, as switches that override tokens; the system's `prefers-reduced-motion` is honoured before the switch is touched; both remembered per browser |
+| **Version history** | Named snapshots in the project, comparison against what is open (in sentences, not JSON), and restore — which snapshots what it replaces first |
+| **Accessibility** | A single visible focus ring drawn everywhere, empty states and error states kept in the same coral-accented language, and a documented 200% text limit rather than an unmeasured claim |
+| **Three-pane builder** | At ≥1100px: outline · canvas · properties as columns, with findings under the canvas. Below that, the single column it has always been — no drawer overlaying the work |
+
+### Two real defects found on the way
+
+1. **The gallery's and the palette's search matched almost nothing.** `fuzzyScore`
+   returns `-100` for a prefix, the position for a substring, `null` for no
+   match — and "is this a match" was tested as `> 0`, which discarded every
+   prefix hit. Typing "but" in the palette found two components instead of
+   Button. Both filters now test for non-null and rank the way the palette does.
+2. **The status strip clipped its last chip off a 390px screen.** Found by
+   looking at the screenshot rather than by any assertion, so an assertion now
+   exists: no chip in the status strip may sit past the viewport edge.
+
+### What was deliberately not built, and why
+
+- **Drag from the palette onto the canvas.** Adding happens into the selection.
+  A second way to say the same thing, before there is an insertion point, is a
+  second way to disagree with the tree.
+- **Drawers over the canvas on a phone.** The panels are below the drawing in
+  one column. A sheet that covers the thing you are editing is a worse answer to
+  a small screen than a scroll is.
+- **Free positioning, resizing, multi-select.** The generated Android layout is
+  a stack the renderer honours; offering coordinates the build cannot keep would
+  be the preview lying, which is the one thing this project refuses.
+- **An offline mode toggle.** The Studio makes no network requests at all, and a
+  check fails the build if one appears; a switch for something already true
+  would be decoration.
+
+### Verification
+
+```
+node --test tools/tests/        →  294 tests, 294 pass, 0 fail
+node tools/test-studio.mjs      →  218/218 checks passed   (was 181)
+node tools/build-studio.mjs     →  two rebuilds byte-identical
+```
+
+New checks cover: the four methods, the empty state's drawing, gallery filtering
+and search, the canvas toolbar changing the drawing *and* not the specification,
+palette search and its empty state, the three columns being columns, Home with a
+project in it (card, drawing, chips, and the ring equal to the engine's number),
+saving a version, restoring it, the restore recording what it replaced, reduce
+motion actually zeroing transition durations, high contrast changing the tokens,
+a keyboard-reachable focus ring, and no status chip off the edge.
