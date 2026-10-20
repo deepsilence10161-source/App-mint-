@@ -11,6 +11,10 @@
  */
 'use strict';
 
+/* silent death नहीं — production में systemd/pm2 से auto-restart रखना */
+process.on('unhandledRejection', e => console.error('⚠️  unhandledRejection:', e));
+process.on('uncaughtException', e => console.error('⚠️  uncaughtException:', e));
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -56,6 +60,10 @@ try { builds = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch { builds = 
 const save = () => fs.writeFileSync(DB_FILE, JSON.stringify(builds, null, 2));
 
 const ALLOWED_PERMS = ['NOTIFICATIONS', 'CAMERA', 'MIC', 'LOCATION'];
+
+/* uploaded icons — CI runner यहाँ से curl करके bake करता है */
+const ICONS_DIR = path.join(PUBLIC_DIR, 'icons');
+fs.mkdirSync(ICONS_DIR, { recursive: true });
 
 /* ---------------- validation ---------------- */
 function validate(body) {
@@ -315,7 +323,20 @@ const server = http.createServer((req, res) => {
       const sess = auth.getSession(req);
       const key = ownerKeyOf(req, sess);
 
-      const iconUrl = body.iconUrl || '';
+      /* icon upload: dataURL → public file → CI runner इसे curl करके bake करता है */
+      let iconUrl = String(body.iconUrl || '');
+      if (!iconUrl && typeof body.iconData === 'string') {
+        const im = body.iconData.match(/^data:(image\/(?:png|jpeg|jpg));base64,([A-Za-z0-9+/=]+)$/);
+        if (im) {
+          const buf = Buffer.from(im[2], 'base64');
+          if (buf.length > 0 && buf.length <= 1_500_000) {
+            const fn = 'icon_' + crypto.randomBytes(8).toString('hex') + (im[1] === 'image/png' ? '.png' : '.jpg');
+            fs.writeFileSync(path.join(ICONS_DIR, fn), buf);
+            const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+            iconUrl = proto + '://' + req.headers.host + '/icons/' + fn;
+          }
+        }
+      }
       const hash = buildHash(cfg, iconUrl);
 
       /* ⚡ L3 dedup पहले देखो — instant है, fairness की ज़रूरत ही नहीं (cost ₹0) */
@@ -355,16 +376,27 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  /* मेरी builds (dashboard/history) — ownerKey से */
+  if (u.pathname === '/api/my/builds') {
+    const sess = auth.getSession(req);
+    const key = ownerKeyOf(req, sess);
+    const mine = builds.filter(x => x.ownerKey === key).slice(0, 20)
+      .map(x => ({ ...x, queue: queueInfo(x) }));
+    return json(res, 200, { ok: true, builds: mine });
+  }
+
   const m = u.pathname.match(/^\/api\/builds\/([\w-]+)(\/download)?$/);
   if (m) {
     const b = builds.find(x => x.id === m[1]);
     if (!b) return json(res, 404, { ok: false, error: 'build नहीं मिली' });
     if (m[2]) {
-      if (!b.apkFile || b.status !== 'ready') return json(res, 409, { ok: false, error: 'APK अभी तैयार नहीं' });
-      const p = path.join(ART_DIR, b.id, b.apkFile);
+      const wantAab = u.searchParams.get('type') === 'aab';
+      const file = wantAab ? b.aabFile : b.apkFile;
+      if (!file || b.status !== 'ready') return json(res, 409, { ok: false, error: 'file अभी तैयार नहीं' });
+      const p = path.join(ART_DIR, b.id, file);
       res.writeHead(200, {
-        'Content-Type': MIME['.apk'],
-        'Content-Disposition': `attachment; filename="${b.cfg.name.replace(/\W+/g, '-')}.apk"`,
+        'Content-Type': wantAab ? 'application/octet-stream' : MIME['.apk'],
+        'Content-Disposition': `attachment; filename="${b.cfg.name.replace(/\W+/g, '-')}.${wantAab ? 'aab' : 'apk'}"`,
       });
       return fs.createReadStream(p).pipe(res);
     }
