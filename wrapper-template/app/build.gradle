@@ -22,8 +22,9 @@ android {
         applicationId pkg
         minSdk 24
         targetSdk 35
-        versionCode (System.getenv("GITHUB_RUN_NUMBER") ?: "1") as int
-        versionName "1.0." + versionCode
+        def vc = ((System.getenv("GITHUB_RUN_NUMBER") ?: "1") as int)
+        versionCode vc
+        versionName "1.0." + vc
 
         manifestPlaceholders = [
             appLabel        : appName,
