@@ -84,7 +84,9 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 
     /* 💰/🔔 conditional — ID दो तभी SDK app में आता है (zero-bloat default)
-     * Kotlin कोड इन्हें reflection से चलाता है, इसलिए off-build compile कभी नहीं टूटता */
-    if (adsOn)  implementation 'com.google.android.gms:play-services-ads:25.5.0'
+     * Kotlin कोड इन्हें reflection से चलाता है, इसलिए off-build compile कभी नहीं टूटता
+     * ads 24.5.0: byte-level verify (kotlin_module metadata) — 24.9+ Kotlin 2.2/2.3 माँगता है,
+     *             हमारा compiler 2.1 है। OneSignal 5.10.2 = compatible (verified) */
+    if (adsOn)  implementation 'com.google.android.gms:play-services-ads:24.5.0'
     if (pushOn) implementation 'com.onesignal:OneSignal:5.10.2'
 }
