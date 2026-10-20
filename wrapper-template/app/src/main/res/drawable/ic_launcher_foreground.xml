@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AppKaro डिफ़ॉल्ट icon: सफ़ेद bolt — यूज़र icon दे तो CI इसे bake कर देता है -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,20 L38,58 L51,58 L46,88 L72,47 L57,47 Z" />
+</vector>

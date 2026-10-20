@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CI theme_color को यहाँ inject करता है (default बैंगनी) -->
+<resources>
+    <color name="brand">#6C5CE7</color>
+</resources>

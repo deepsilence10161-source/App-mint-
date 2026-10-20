@@ -1,0 +1,116 @@
+# ⚡ AppKaro — Invisible Build Engine
+# यूज़र को कभी पता नहीं चलता कि यहाँ build हो रहा है।
+# Server `workflow_dispatch` से इसे चलाता है; inputs में कोई secret नहीं
+# (signing server पर होती है — keystore कभी GitHub को नहीं दिखता)।
+
+name: appkaro-build
+run-name: appkaro-${{ inputs.build_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: "Internal build id (ak_xxxxxx)"
+        required: true
+        type: string
+      app_name:
+        description: "App label"
+        required: true
+        type: string
+      package_id:
+        description: "com.example.app"
+        required: true
+        type: string
+      start_url:
+        description: "https://website.com"
+        required: true
+        type: string
+      theme_color:
+        description: "#RRGGBB"
+        required: false
+        default: "#6C5CE7"
+        type: string
+      icon_url:
+        description: "Public URL of a square PNG icon (optional)"
+        required: false
+        default: ""
+        type: string
+      permissions:
+        description: "CSV: NOTIFICATIONS,CAMERA,MIC,LOCATION"
+        required: false
+        default: "NOTIFICATIONS"
+        type: string
+      cleartext:
+        description: "'true' = http:// साइटों को अनुमति (warning के साथ)"
+        required: false
+        default: "false"
+        type: string
+
+concurrency:
+  group: appkaro-${{ inputs.build_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure (permissions, theme color, icon)
+        working-directory: wrapper-template
+        run: bash ci/configure.sh "${{ inputs.permissions }}" "${{ inputs.theme_color }}" "${{ inputs.icon_url }}"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+          cache-encryption-key: appkaro-${{ inputs.build_id }}
+
+      - name: Gradle build cache (10GB free — repeat builds ~10x तेज़)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('wrapper-template/**/*.gradle*', 'wrapper-template/gradle.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build unsigned APK + AAB
+        working-directory: wrapper-template
+        run: |
+          gradle :app:assembleRelease :app:bundleRelease --no-daemon --build-cache \
+            -PpackageId="${{ inputs.package_id }}" \
+            -PappName="${{ inputs.app_name }}" \
+            -PstartUrl="${{ inputs.start_url }}" \
+            -PthemeColor="${{ inputs.theme_color }}" \
+            -Pcleartext="${{ inputs.cleartext }}"
+
+      - name: Collect outputs
+        working-directory: wrapper-template
+        run: |
+          mkdir -p ../out
+          find app/build/outputs -name "*.apk" -exec cp {} "../out/appkaro-${{ inputs.build_id }}-unsigned.apk" \;
+          find app/build/outputs -name "*.aab" -exec cp {} "../out/appkaro-${{ inputs.build_id }}-unsigned.aab" \;
+          ls -la ../out
+
+      - name: Upload artifact (server यहीं से download करेगा)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ inputs.build_id }}
+          path: out/*
+          retention-days: 2

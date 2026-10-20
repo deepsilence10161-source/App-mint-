@@ -1,0 +1,67 @@
+// ⚡ AppKaro wrapper module
+// CI इन props से हर यूज़र की app बनाता है:
+//   gradle :app:assembleRelease -PpackageId=.. -PappName=.. -PstartUrl=.. -PthemeColor=.. -Pcleartext=..
+
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def pkg        = project.findProperty("packageId")  ?: "com.appkaro.wrapper"
+def appName    = (project.findProperty("appName")   ?: "AppKaro App").toString().replaceAll(/["']/, "")
+def startUrl   = (project.findProperty("startUrl")  ?: "https://example.com").toString().replaceAll(/["']/, "")
+def themeColor = (project.findProperty("themeColor") ?: "#6C5CE7").toString().replaceAll(/["']/, "")
+def cleartext  = (project.findProperty("cleartext") ?: "false").toString().toBoolean()
+
+android {
+    // namespace हमेशा fixed रहता है — applicationId ही यूज़र की पहचान है
+    namespace "com.appkaro.wrapper"
+    compileSdk 35 // TODO(Phase 3): AGP update के साथ 36 bump करना
+
+    defaultConfig {
+        applicationId pkg
+        minSdk 24
+        targetSdk 35
+        versionCode (System.getenv("GITHUB_RUN_NUMBER") ?: "1") as int
+        versionName "1.0." + versionCode
+
+        manifestPlaceholders = [
+            appLabel        : appName,
+            cleartextTraffic: cleartext.toString(),
+        ]
+
+        buildConfigField "String", "APP_NAME", "\"${appName}\""
+        buildConfigField "String", "START_URL", "\"${startUrl}\""
+        buildConfigField "String", "THEME_COLOR", "\"${themeColor}\""
+        buildConfigField "boolean", "ALLOW_CLEARTEXT", cleartext.toString()
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    buildTypes {
+        release {
+            // signing जान-बूझकर यहाँ नहीं — server-side होती है (keys कभी CI पर नहीं)
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.core:core-splashscreen:1.0.1'
+    implementation 'androidx.activity:activity-ktx:1.9.0'
+    implementation 'androidx.webkit:webkit:1.8.0'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+}
