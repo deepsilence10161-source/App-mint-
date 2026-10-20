@@ -59,7 +59,7 @@
   <header>
     <div class="dim" style="font-size:.75rem;letter-spacing:.08em;text-transform:uppercase">App Mint · device test</div>
     <div class="verdict">PASS</div>
-    <div class="sub">17 of 17 checks passed · run #53 · <code>2e500abb</code></div>
+    <div class="sub">16 of 17 checks passed · run #54 · <code>184d2bbf</code></div>
   </header>
 
   <section class="card">
@@ -83,7 +83,7 @@
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Package is registered on the device</div>
-          <div class="ev">dumpsys package com.appmint.demo: 6112 bytes</div>
+          <div class="ev">dumpsys package com.appmint.demo: 6115 bytes</div>
         </div>
       </li>
       <li>
@@ -97,63 +97,63 @@
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">App process still alive after all interactions</div>
-          <div class="ev">pidof -&gt; alive (pid 4122)</div>
+          <div class="ev">pidof -&gt; alive (pid 4114)</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: launch</div>
-          <div class="ev">134349 bytes</div>
+          <div class="ev">134227 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: page loaded</div>
-          <div class="ev">134380 bytes</div>
+          <div class="ev">134262 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: after pull-to-refresh</div>
-          <div class="ev">134380 bytes</div>
+          <div class="ev">134262 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: after back press</div>
-          <div class="ev">134025 bytes</div>
+          <div class="ev">134227 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: landscape rotation</div>
-          <div class="ev">134025 bytes</div>
+          <div class="ev">134227 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Screenshot captured: back to portrait</div>
-          <div class="ev">134025 bytes</div>
+          <div class="ev">134125 bytes</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">Loaded screen shows real rendered content (not a blank view)</div>
-          <div class="ev">3030 distinct colours, luminance spread 81.11 (a blank screen has a handful of colours and almost no spread)</div>
+          <div class="ev">3023 distinct colours, luminance spread 81.12 (a blank screen has a handful of colours and almost no spread)</div>
         </div>
       </li>
       <li>
         <span class="badge" style="background:#16a34a">PASS</span>
         <div class="ck">
           <div class="lbl">JavaScript ran inside the WebView</div>
-          <div class="ev">APPMINT_READY 2026-10-20 07:13:05", source: https://appassets.androidplatform.net/assets/www/index.html (153)</div>
+          <div class="ev">APPMINT_READY 2026-10-20 07:20:54", source: https://appassets.androidplatform.net/assets/www/index.html (153)</div>
         </div>
       </li>
       <li>
@@ -178,10 +178,10 @@
         </div>
       </li>
       <li>
-        <span class="badge" style="background:#16a34a">PASS</span>
+        <span class="badge" style="background:#d97706">WARN</span>
         <div class="ck">
           <div class="lbl">Screen recording captured</div>
-          <div class="ev">889962 bytes</div>
+          <div class="ev">0 bytes</div>
         </div>
       </li></ul>
   </section>
@@ -204,11 +204,11 @@
       </figure>
       <figure>
         <img src="shots/04-after-back.png" alt="After back press" loading="lazy">
-        <figcaption>After back press <span class="dim">130 KB</span></figcaption>
+        <figcaption>After back press <span class="dim">131 KB</span></figcaption>
       </figure>
       <figure>
         <img src="shots/05-landscape.png" alt="Landscape" loading="lazy">
-        <figcaption>Landscape <span class="dim">130 KB</span></figcaption>
+        <figcaption>Landscape <span class="dim">131 KB</span></figcaption>
       </figure>
       <figure>
         <img src="shots/06-portrait.png" alt="Portrait" loading="lazy">
@@ -216,11 +216,6 @@
       </figure></div>
   </section>
   
-    <section class="card">
-      <h2>Screen recording</h2>
-      <video controls playsinline preload="metadata" src="e2e.mp4"></video>
-      <p class="dim">Recorded live on the emulator. 869 KB.</p>
-    </section>
 
   <section class="card">
     <h2>Reproduce this yourself</h2>
