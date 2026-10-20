@@ -42,3 +42,6 @@ Thumbs.db
 
 # Test evidence produced locally
 /tmp-e2e/
+
+# ☁️ AppKaro Cloud runtime state — कभी commit नहीं (user builds, per-user keystores, queue DB)
+/server/data/

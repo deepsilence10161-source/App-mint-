@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AppKaro — Website se Android App, मुफ़्त</title>
+<style>
+  :root{
+    --bg:#0b0d12; --card:rgba(255,255,255,.045); --line:rgba(255,255,255,.09);
+    --acc:#6C5CE7; --acc2:#00d2ff; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+    --txt:#eef1f8; --mut:#9aa3b2; --r:18px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Devanagari",sans-serif;min-height:100vh}
+  .glow{position:fixed;inset:0;pointer-events:none;background:
+    radial-gradient(600px 300px at 15% -5%,rgba(108,92,231,.25),transparent 60%),
+    radial-gradient(500px 280px at 85% 0%,rgba(0,210,255,.16),transparent 60%)}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px;position:relative}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+  .logo{font-size:22px;font-weight:800;letter-spacing:.3px}
+  .logo em{font-style:normal;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .badges{display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:12px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--mut);background:var(--card)}
+  .badge b{color:var(--ok);font-weight:600}
+  .hero{text-align:center;padding:54px 0 30px}
+  h1{font-size:clamp(30px,5.4vw,52px);line-height:1.15;font-weight:800}
+  h1 span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:var(--mut);font-size:17px;margin-top:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(8px)}
+  .builder{padding:26px;margin:26px 0}
+  .builder h2{font-size:20px;margin-bottom:16px;display:flex;gap:8px;align-items:center}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+  .full{grid-column:1/-1}
+  label{font-size:13px;color:var(--mut);display:block;margin-bottom:6px}
+  input[type=text],input[type=url]{width:100%;padding:13px 14px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(0,0,0,.35);color:var(--txt);font-size:15px;outline:none;transition:.2s}
+  input:focus{border-color:var(--acc);box-shadow:0 0 0 3px rgba(108,92,231,.25)}
+  .rowflex{display:flex;gap:10px;align-items:center}
+  .colors{display:flex;gap:8px;align-items:center}
+  .dot{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.15s}
+  .dot.sel{border-color:#fff;transform:scale(1.12)}
+  input[type=color]{width:44px;height:34px;border:none;background:none;cursor:pointer}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:13px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);cursor:pointer;
+    color:var(--mut);background:transparent;transition:.15s;user-select:none}
+  .chip.on{border-color:var(--acc);color:#fff;background:rgba(108,92,231,.25)}
+  .chip.soon{opacity:.45;cursor:not-allowed}
+  .chip .tag{font-size:10px;background:rgba(245,158,11,.2);color:var(--warn);border-radius:6px;padding:1px 6px;margin-left:6px}
+  .cta{width:100%;margin-top:18px;padding:16px;font-size:17px;font-weight:700;border:none;border-radius:14px;
+    cursor:pointer;color:#fff;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:.2s}
+  .cta:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(108,92,231,.35)}
+  .warnbox{display:none;margin-top:12px;padding:12px 14px;border-radius:12px;font-size:13px;
+    background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:var(--warn)}
+  /* builds */
+  .builds{margin:8px 0 40px;display:flex;flex-direction:column;gap:14px}
+  .bitem{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
+  .bhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .bname{font-weight:700}
+  .burl{font-size:13px;color:var(--mut)}
+  .pill{font-size:12px;padding:5px 12px;border-radius:999px;font-weight:600}
+  .pill.work{background:rgba(0,210,255,.15);color:var(--acc2)}
+  .pill.okp{background:rgba(34,197,94,.15);color:var(--ok)}
+  .pill.bad{background:rgba(239,68,68,.15);color:var(--bad)}
+  .pill.demo{background:rgba(245,158,11,.15);color:var(--warn)}
+  .steps{display:flex;gap:0;margin:4px 0}
+  .step{flex:1;text-align:center;font-size:11px;color:var(--mut);position:relative;padding-top:18px}
+  .step::before{content:"";position:absolute;top:4px;left:50%;transform:translateX(-50%);
+    width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid var(--line)}
+  .step:not(:last-child)::after{content:"";position:absolute;top:9px;left:calc(50% + 10px);right:calc(-50% + 10px);
+    height:2px;background:var(--line)}
+  .step.done{color:var(--ok)}.step.done::before{background:var(--ok);border-color:var(--ok)}
+  .step.done:not(:last-child)::after{background:var(--ok)}
+  .step.now{color:var(--acc2)}.step.now::before{background:var(--acc2);border-color:var(--acc2);animation:pulse 1s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 6px rgba(0,210,255,.18)}}
+  .dl{display:inline-block;padding:12px 22px;border-radius:12px;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    color:#fff;text-decoration:none;font-weight:700;font-size:14px}
+  .demonote{font-size:12.5px;color:var(--warn)}
+  .err{font-size:13px;color:var(--bad)}
+  /* sections */
+  section{padding:34px 0}
+  .sect-title{font-size:26px;font-weight:800;margin-bottom:6px}
+  .sect-sub{color:var(--mut);margin-bottom:20px}
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .fcard{padding:20px;border-radius:var(--r)}
+  .fcard .ic{font-size:26px;margin-bottom:10px}
+  .fcard h3{font-size:15.5px;margin-bottom:6px}
+  .fcard p{font-size:13px;color:var(--mut);line-height:1.55}
+  table{width:100%;border-collapse:collapse;font-size:14px;overflow:hidden;border-radius:var(--r)}
+  th,td{padding:13px 14px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:rgba(108,92,231,.14);font-size:13px}
+  td.y{color:var(--ok)}td.n{color:var(--bad)}
+  .how{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+  .howcard{padding:22px}
+  .howcard .num{font-size:30px;font-weight:800;background:linear-gradient(90deg,var(--acc),var(--acc2));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .howcard h3{margin:8px 0 6px;font-size:16px}
+  .howcard p{font-size:13.5px;color:var(--mut);line-height:1.6}
+  footer{padding:34px 0 46px;text-align:center;color:var(--mut);font-size:13px;border-top:1px solid var(--line);margin-top:20px}
+  .auth{display:flex;align-items:center;gap:10px}
+  .abtn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:12px;font-size:13.5px;
+    font-weight:600;text-decoration:none;cursor:pointer;transition:.15s;border:1px solid var(--line)}
+  .abtn.ghost{background:var(--card);color:var(--txt)}
+  .abtn.ghost:hover{border-color:var(--acc2)}
+  .abtn.solid{background:linear-gradient(90deg,var(--acc),var(--acc2));color:#fff;border:none}
+  .abtn.solid:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(108,92,231,.35)}
+  .auser{display:flex;align-items:center;gap:10px;font-size:13.5px}
+  .auser .who{text-align:right;line-height:1.25}
+  .auser .who small{display:block;color:var(--mut);font-size:11px}
+  .aava{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--acc),var(--acc2));
+    display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;overflow:hidden}
+  .aava img{width:100%;height:100%;object-fit:cover}
+  .ghbadge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;padding:4px 10px;border-radius:999px;
+    background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.35)}
+  .ghoff{font-size:11px;color:var(--mut);text-decoration:underline;cursor:pointer;background:none;border:none}
+  .fade{animation:fade .5s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(10px)}to{opacity:1}}
+  .statusline{font-size:12.5px;color:var(--mut);margin-top:10px}
+  .statusline b{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+<div class="wrap">
+
+  <nav>
+    <div class="logo">⚡ App<em>Karo</em></div>
+    <div class="badges">
+      <span class="badge"><b>मुफ़्त</b> unlimited builds</span>
+      <span class="badge">कोई signup नहीं</span>
+      <span class="badge">APK + AAB</span>
+    </div>
+    <div class="auth" id="authzone"></div>
+  </nav>
+
+  <div class="hero fade">
+    <h1>अपनी Website को <span>60 सेकंड में Android App</span> बनाओ</h1>
+    <p class="sub">URL डालो, नाम और रंग चुनो — आधुनिक, सुरक्षित, Play-Store-ready app तैयार।<br>
+    कोई coding नहीं, कोई setup नहीं — पर्दे के पीछे CI तुम्हारे लिए काम करता है।</p>
+  </div>
+
+  <!-- Builder -->
+  <div class="card builder fade" id="builder">
+    <h2>🛠️ App Builder</h2>
+    <div class="grid">
+      <div class="full">
+        <label>Website URL</label>
+        <input type="url" id="f-url" placeholder="https://meriwebsite.com">
+      </div>
+      <div>
+        <label>App का नाम</label>
+        <input type="text" id="f-name" placeholder="Meri App (खाली = auto)">
+      </div>
+      <div>
+        <label>Package ID (खाली = auto)</label>
+        <input type="text" id="f-pkg" placeholder="com.mera.app">
+      </div>
+      <div class="full">
+        <label>Theme रंग (app का brand color)</label>
+        <div class="colors" id="colors">
+          <div class="dot sel" data-c="#6C5CE7" style="background:#6C5CE7"></div>
+          <div class="dot" data-c="#00B894" style="background:#00B894"></div>
+          <div class="dot" data-c="#0984E3" style="background:#0984E3"></div>
+          <div class="dot" data-c="#E17055" style="background:#E17055"></div>
+          <div class="dot" data-c="#D63031" style="background:#D63031"></div>
+          <div class="dot" data-c="#1e272e" style="background:#1e272e"></div>
+          <input type="color" id="f-color" value="#6C5CE7" title="custom रंग">
+        </div>
+      </div>
+      <div class="full">
+        <label>Permissions — सिर्फ़ वही जो सच में चाहिए (least-privilege, Play-safe)</label>
+        <div class="chips" id="perms">
+          <span class="chip on" data-p="NOTIFICATIONS">🔔 Notifications</span>
+          <span class="chip" data-p="CAMERA">📷 Camera</span>
+          <span class="chip" data-p="MIC">🎤 Mic</span>
+          <span class="chip" data-p="LOCATION">📍 Location</span>
+          <span class="chip soon">📢 AdMob <span class="tag">Phase 2</span></span>
+          <span class="chip soon">🔔 OneSignal push <span class="tag">Phase 2</span></span>
+        </div>
+      </div>
+      <div class="full">
+        <div class="rowflex">
+          <input type="checkbox" id="f-clear" style="width:18px;height:18px">
+          <label for="f-clear" style="margin:0;font-size:13.5px">मेरी site http:// (bina HTTPS) पर है — cleartext allow करो</label>
+        </div>
+      </div>
+    </div>
+    <button class="cta" id="go">🚀 APK बनाओ — मुफ़्त</button>
+    <div class="warnbox" id="warnbox">⚠️ http:// साइटें असुरक्षित होती हैं — आपकी app में यह <b>opt-in warning</b> के साथ चलेगा। AppMint ने यह सबके लिए default खुला छोड़ा था (MITM खतरा) — हम नहीं।</div>
+    <div class="statusline" id="modeline">engine जाँचा जा रहा है…</div>
+  </div>
+
+  <!-- Builds -->
+  <div class="builds" id="builds"></div>
+
+  <!-- How -->
+  <section class="fade">
+    <div class="sect-title">कैसे काम करता है?</div>
+    <div class="sect-sub">तुम्हें कुछ install या setup नहीं करना — GitHub भी नहीं। सब पर्दे के पीछे।</div>
+    <div class="how">
+      <div class="card howcard"><div class="num">01</div><h3>Form भरो</h3><p>URL, नाम, रंग, permissions। Package ID और नाम तो auto-suggest भी हो जाते हैं।</p></div>
+      <div class="card howcard"><div class="num">02</div><h3>Cloud में build</h3><p>हमारा secure wrapper-template तुम्हारे config से compile होता है — एडवांस CI pipeline पर, बिना तुम्हें किसी setup के।</p></div>
+      <div class="card howcard"><div class="num">03</div><h3>Sign करके Download</h3><p>APK तुम्हारी अपनी keystore से sign होकर आती है (keystore कभी CI को नहीं दिखती) — सीधे install या Play upload करो।</p></div>
+    </div>
+  </section>
+
+  <!-- Vs -->
+  <section class="fade">
+    <div class="sect-title">AppKaro क्यों? (ईमानदार तुलना)</div>
+    <div class="sect-sub">प्रतियोगी AppMint का हमने deep audit किया — उनकी कमज़ोरियाँ हमारी मज़बूतियाँ हैं।</div>
+    <div class="card">
+      <table>
+        <tr><th>पहलू</th><th>AppMint (audit में मिला)</th><th>AppKaro</th></tr>
+        <tr><td>App size / speed</td><td class="n">130MB app, फोन पर node runtime</td><td class="y">Cloud build — 0 load, 60–90 sec</td></tr>
+        <tr><td>Deep links</td><td class="n">टूटे (assetlinks 404)</td><td class="y">auto-generate + verify</td></tr>
+        <tr><td>Modern Android</td><td class="n">no edge-to-edge, no predictive back</td><td class="y">दोनों Day-1 से</td></tr>
+        <tr><td>Secrets</td><td class="n">"encrypted" का दावा, पर plaintext</td><td class="y">असली Keystore + server-side signing</td></tr>
+        <tr><td>Network</td><td class="n">cleartext + user-CA trust (MITM)</td><td class="y">HTTPS-only, cleartext सिर्फ़ opt-in warning के साथ</td></tr>
+        <tr><td>Permissions</td><td class="n">36, बिना काम के कई</td><td class="y">least-privilege — default सिर्फ़ 1–2</td></tr>
+        <tr><td>Pricing</td><td class="n">3 जगह 3 अलग दाम</td><td class="y">एक साफ़ page</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="fade">
+    <div class="sect-title">सब कुछ जो मिलता है</div>
+    <div class="sect-sub">100% original code — audit-powered engineering।</div>
+    <div class="fgrid">
+      <div class="card fcard"><div class="ic">📦</div><h3>APK + AAB दोनों</h3><p>Sideload के लिए APK, Play Store के लिए AAB — एक ही build में।</p></div>
+      <div class="card fcard"><div class="ic">🎨</div><h3>पूरा कस्टमाइज़</h3><p>नाम, icon, theme color, splash — सब तुम्हारे brand का।</p></div>
+      <div class="card fcard"><div class="ic">🛡️</div><h3>Secure by default</h3><p>Hardened WebView, no cleartext, no user-CA trust, allowBackup off।</p></div>
+      <div class="card fcard"><div class="ic">📱</div><h3>Modern Android</h3><p>Edge-to-edge, SplashScreen API, predictive back, pull-to-refresh।</p></div>
+      <div class="card fcard"><div class="ic">⬇️</div><h3>Downloads/Uploads</h3><p>Files download (notification के साथ) और upload — दोनों काम करते हैं।</p></div>
+      <div class="card fcard"><div class="ic">📡</div><h3>Offline grace</h3><p>Network जाने पर सुंदर error + retry screen — crash नहीं।</p></div>
+      <div class="card fcard"><div class="ic">🤫</div><h3>Zero setup</h3><p>तुम्हें GitHub/SDK कुछ नहीं चाहिए — build engine अदृश्य है।</p></div>
+      <div class="card fcard"><div class="ic">💸</div><h3>सच में मुफ़्त</h3><p>Unlimited builds, कोई watermark नहीं, कोई signup नहीं।</p></div>
+    </div>
+  </section>
+
+  <footer>
+    ⚡ AppKaro — made with audit-powered engineering · सभी code original है, किसी भी app/brand से copied नहीं।
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+let themeColor = "#6C5CE7";
+
+/* color dots */
+document.querySelectorAll("#colors .dot").forEach(d => {
+  d.onclick = () => {
+    document.querySelectorAll("#colors .dot").forEach(x => x.classList.remove("sel"));
+    d.classList.add("sel");
+    themeColor = d.dataset.c;
+    $("#f-color").value = themeColor;
+  };
+});
+$("#f-color").oninput = e => {
+  themeColor = e.target.value;
+  document.querySelectorAll("#colors .dot").forEach(x => x.classList.remove("sel"));
+};
+
+/* permission chips */
+document.querySelectorAll("#perms .chip[data-p]").forEach(c => {
+  c.onclick = () => c.classList.toggle("on");
+});
+
+/* cleartext warning */
+$("#f-clear").onchange = e => $("#warnbox").style.display = e.target.checked ? "block" : "none";
+
+/* mode line */
+fetch("/api/health").then(r => r.json()).then(h => {
+  $("#modeline").innerHTML = h.mode === "live"
+    ? "🟢 engine: <b style='color:var(--ok)'>LIVE</b> — असली CI builds चालू"
+    : "🟡 engine: <b>DEMO</b> — flow simulate होगा; live builds के लिए owner GitHub token जोड़ेगा";
+}).catch(() => { $("#modeline").textContent = ""; });
+
+/* ---------- auth zone (Google login + optional GitHub connect) ---------- */
+(async function initAuth() {
+  const zone = document.getElementById("authzone");
+  let cfg = { google: false, github: false, demoAuth: true };
+  try { cfg = (await (await fetch("/auth/config")).json()); } catch {}
+  let me = null;
+  try { const j = await (await fetch("/api/me")).json(); if (j.ok) me = j.user; } catch {}
+
+  const q = new URLSearchParams(location.search);
+  if (q.get("gh") === "connected") {
+    setTimeout(() => alert("⚡ GitHub जुड़ गया! तुम्हारे account में 'appkaro-builds' repo auto-create हो गया — अब से builds तुम्हारी अपनी quota पर priority lane में चलेंगी।\n\n(Bot/script से कुछ नहीं हुआ — यह GitHub की official authorization थी, जिसे तुम कभी भी disconnect कर सकते हो।)"), 400);
+    history.replaceState({}, "", "/");
+  }
+
+  if (!me) {
+    const btn = cfg.google
+      ? `<a class="abtn solid" href="/auth/google">🔑 Google से Login</a>`
+      : (cfg.demoAuth ? `<a class="abtn ghost" href="/auth/demo">🔑 Demo Login</a>` : "");
+    zone.innerHTML = btn + `<span class="badge">बिना login भी build OK</span>`;
+    return;
+  }
+
+  const initial = (me.name || "U").charAt(0).toUpperCase();
+  const avatar = me.avatar ? `<div class="aava"><img src="${me.avatar}" alt=""></div>`
+                           : `<div class="aava">${initial}</div>`;
+  const ghPart = me.gh
+    ? `<span class="ghbadge">⚡ Priority · @${me.gh.login}</span>
+       <a class="ghoff" href="/auth/github/disconnect">हटाओ</a>`
+    : (cfg.github
+        ? `<a class="abtn ghost" href="/auth/github" title="यूज़र के account में repo auto-बनेगा; builds उसकी quota पर">🔗 GitHub जोड़ें <small>(optional)</small></a>`
+        : `<span class="badge" title="owner को GitHub OAuth App env देना है">🔗 GitHub connect — setup pending</span>`);
+  zone.innerHTML = `
+    ${ghPart}
+    <div class="auser">
+      <div class="who">${me.name.replace(/</g, "&lt;")}<small>${me.email.replace(/</g, "&lt;")}</small></div>
+      ${avatar}
+      <a class="ghoff" href="/auth/logout">logout</a>
+    </div>`;
+})();
+
+const STEPS = [
+  ["queued", "कतार में"], ["dispatched", "CI पर गई"],
+  ["building", "बन रही"], ["signing", "साइन हो रही"], ["ready", "तैयार ✨"],
+];
+const ORDER = ["queued", "dispatched", "building", "signing", "ready"];
+
+function render(b) {
+  let el = document.getElementById("b-" + b.id);
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "card bitem fade";
+    el.id = "b-" + b.id;
+    $("#builds").prepend(el);
+  }
+  const st = b.status === "demo_ready" ? "ready" : b.status;
+  const idx = ORDER.indexOf(st);
+  const failed = b.status === "failed";
+  const steps = STEPS.map(([k, label], i) => {
+    const cls = failed ? "" : (i < idx ? "done" : i === idx ? "now" : "");
+    return `<div class="step ${cls}">${label}</div>`;
+  }).join("");
+  const instant = b.engine === "dedup";
+  const pill = failed
+    ? `<span class="pill bad">❌ fail</span>`
+    : (st === "ready"
+        ? (b.demo ? `<span class="pill demo">✅ demo पूरा</span>`
+          : instant ? `<span class="pill okp">⚡ instant तैयार!</span>`
+          : `<span class="pill okp">✅ तैयार</span>`)
+        : (instant ? `<span class="pill work">⚡ smart cache से sign हो रही…</span>`
+          : `<span class="pill work">⏳ चल रहा…</span>`));
+  let foot = "";
+  if (st === "ready" && !b.demo) {
+    foot = `<a class="dl" href="/api/builds/${b.id}/download">⬇️ APK Download${b.signed ? "" : " (unsigned)"}</a>`;
+  } else if (st === "ready" && b.demo) {
+    foot = `<span class="demonote">🟡 Demo build — असली APK तब मिलेगी जब GitHub engine जुड़ेगा (owner से 5 मिनट का काम)। पूरा flow जैसा दिखा, live में भी वैसा ही चलेगा।</span>`;
+  } else if (failed) {
+    foot = `<span class="err">⚠️ ${(b.error || "कुछ गड़बड़ हुई").replace(/</g, "&lt;")}</span>`;
+  }
+  el.innerHTML = `
+    <div class="bhead">
+      <div><div class="bname">${b.cfg.name.replace(/</g, "&lt;")}</div>
+        <div class="burl">${b.cfg.url.replace(/</g, "&lt;")} · ${b.cfg.pkg.replace(/</g, "&lt;")}
+          ${b.engine === "user-gh" ? ' · <span class="ghbadge">⚡ तुम्हारे GitHub quota पर</span>'
+            : b.engine === "pool" ? ' · <span class="badge">🏊 shared pool</span>'
+            : b.engine === "dedup" ? ' · <span class="ghbadge">⚡ smart cache</span>' : ""}
+          ${b.queue ? ` · <span style="color:var(--acc2)">⏳ क़तार #${b.queue.position} · ~${b.queue.etaMin} min</span>` : ""}</div></div>
+      ${pill}
+    </div>
+    ${failed ? "" : `<div class="steps">${steps}</div>`}
+    <div class="bfoot">${foot}</div>`;
+}
+
+let active = new Set();
+async function poll() {
+  for (const id of [...active]) {
+    try {
+      const j = await (await fetch("/api/builds/" + id)).json();
+      if (j.ok) {
+        render(j.build);
+        const st = j.build.status;
+        if (st === "ready" || st === "demo_ready" || st === "failed") active.delete(id);
+      }
+    } catch {}
+  }
+}
+setInterval(poll, 2500);
+
+$("#go").onclick = async () => {
+  const url = $("#f-url").value.trim();
+  if (!/^https?:\/\//i.test(url)) { alert("पहले सही URL डालो — https:// सहित 🙂"); return; }
+  const body = {
+    url,
+    name: $("#f-name").value.trim(),
+    packageId: $("#f-pkg").value.trim(),
+    themeColor,
+    cleartext: $("#f-clear").checked,
+    permissions: [...document.querySelectorAll("#perms .chip.on[data-p]")].map(c => c.dataset.p),
+  };
+  const r = await fetch("/api/builds", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const j = await r.json();
+  if (!j.ok) { alert("⚠️ " + (j.errors || [j.error]).join("\n")); return; }
+  render(j.build);
+  active.add(j.build.id);
+  document.getElementById("b-" + j.build.id).scrollIntoView({ behavior: "smooth", block: "center" });
+};
+</script>
+</body>
+</html>
