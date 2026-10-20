@@ -41,13 +41,26 @@ if [ -n "$COLOR" ]; then
   echo "  ✅ theme color: $COLOR"
 fi
 
-# 3) custom icon bake (ubuntu runner में imagemagick preinstalled)
+# 3) custom icon bake — Pillow से (runner में imagemagick नहीं होता, exit 127 से बचो)
 if [ -n "$ICON_URL" ]; then
   curl -fsSL "$ICON_URL" -o /tmp/icon.png
-  for sz in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-    d="${sz%%:*}"; px="${sz##*:}"
-    mkdir -p "app/src/main/res/mipmap-$d"
-    convert /tmp/icon.png -resize "${px}x${px}" "app/src/main/res/mipmap-$d/ic_launcher.png"
-  done
-  echo "  ✅ icon baked"
+  python3 -m pip install --quiet pillow 2>/dev/null || true
+  python3 - "/tmp/icon.png" <<'PY'
+from PIL import Image
+import sys, os
+img = Image.open(sys.argv[1]).convert("RGBA")
+if img.size[0] != img.size[1]:            # non-square → center crop
+    s = min(img.size)
+    l, t = (img.size[0]-s)//2, (img.size[1]-s)//2
+    img = img.crop((l, t, l+s, t+s))
+for d, px in {"mdpi":48,"hdpi":72,"xhdpi":96,"xxhdpi":144,"xxxhdpi":192}.items():
+    out = f"app/src/main/res/mipmap-{d}"
+    os.makedirs(out, exist_ok=True)
+    img.resize((px, px), Image.LANCZOS).save(f"{out}/ic_launcher.png", "PNG")
+# adaptive-vector PNGs को ढक देता है (API 26+ पर v26 priority) → custom icon के साथ हटाना ज़रूरी
+p = "app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"
+if os.path.exists(p):
+    os.remove(p)
+print("  ✅ icon baked (your image, all densities)")
+PY
 fi

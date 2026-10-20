@@ -97,6 +97,22 @@ class MainActivity : ComponentActivity() {
 
         webView.loadUrl(BuildConfig.START_URL)
         onBackPressedDispatcher.addCallback(this, backCallback)
+        requestNotificationPermissionIfNeeded()
+    }
+
+    /** POST_NOTIFICATIONS runtime ask (Android 13+) — सिर्फ़ तब जब manifest में declare हो */
+    private val notifPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* result अनिवार्य नहीं */ }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED) return
+        val declared = packageManager
+            .getPackageInfo(packageName, PackageManager.GET_PERMISSIONS)
+            .requestedPermissions
+            ?.contains(android.Manifest.permission.POST_NOTIFICATIONS) == true
+        if (declared) notifPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun buildUi() {
