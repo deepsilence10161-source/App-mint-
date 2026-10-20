@@ -1,6 +1,6 @@
 {
   "verdict": "FAIL",
-  "passed": 11,
+  "passed": 4,
   "total": 21,
   "warnings": 1,
   "checks": [
@@ -42,8 +42,8 @@
     {
       "key": "shot_01-launch",
       "label": "Screenshot captured: launch",
-      "ok": true,
-      "evidence": "92903 bytes",
+      "ok": false,
+      "evidence": "0 bytes",
       "severity": "fail"
     },
     {
@@ -70,22 +70,22 @@
     {
       "key": "shot_02-loaded",
       "label": "Screenshot captured: first screen drawn",
-      "ok": true,
-      "evidence": "92903 bytes",
+      "ok": false,
+      "evidence": "0 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-1",
       "label": "Screenshot captured: designed screen 1",
-      "ok": true,
-      "evidence": "92903 bytes",
+      "ok": false,
+      "evidence": "0 bytes",
       "severity": "fail"
     },
     {
       "key": "shot_tab-2",
       "label": "Screenshot captured: designed screen 2",
-      "ok": true,
-      "evidence": "62276 bytes",
+      "ok": false,
+      "evidence": "0 bytes",
       "severity": "fail"
     },
     {
@@ -104,9 +104,9 @@
     },
     {
       "key": "content_rendered",
-      "label": "Loaded screen shows real rendered content (not a blank view)",
-      "ok": true,
-      "evidence": "2936 distinct colours, luminance spread 42.63 (a blank screen has a handful of colours and almost no spread)",
+      "label": "Loaded screen shows real rendered content",
+      "ok": false,
+      "evidence": "no loaded screenshot to inspect",
       "severity": "fail"
     },
     {
@@ -119,22 +119,22 @@
     {
       "key": "native_first_frame",
       "label": "The app drew its first screen immediately",
-      "ok": true,
-      "evidence": "2936 distinct colours, luminance spread 42.63 in the launch frame (a designed app has nothing to download, so this is already the finished screen)",
+      "ok": false,
+      "evidence": "0 distinct colours, luminance spread 0.0 in the launch frame (a designed app has nothing to download, so this is already the finished screen)",
       "severity": "fail"
     },
     {
       "key": "screens_reachable",
       "label": "Each designed screen can be reached and draws its own content",
       "ok": false,
-      "evidence": "no screenshot to compare for screen(s) [3, 4]",
+      "evidence": "no screenshot to compare for screen(s) [2, 3, 4]",
       "severity": "fail"
     },
     {
       "key": "first_tab_is_home",
       "label": "The first tab leads back to the screen the app opens on",
-      "ok": true,
-      "evidence": "difference 0.0 between the launch screen and the first tab",
+      "ok": false,
+      "evidence": "no screenshots to compare",
       "severity": "fail"
     },
     {
@@ -154,11 +154,8 @@
   ],
   "screenshots": {
     "01-launch": {
-      "present": true,
-      "bytes": 92903,
-      "mean_luminance_pct": 14.64,
-      "luminance_stddev": 42.63,
-      "distinct_colours": 2936
+      "present": false,
+      "bytes": 0
     },
     "04-after-back": {
       "present": false,
@@ -173,25 +170,16 @@
       "bytes": 0
     },
     "02-loaded": {
-      "present": true,
-      "bytes": 92903,
-      "mean_luminance_pct": 14.64,
-      "luminance_stddev": 42.63,
-      "distinct_colours": 2936
+      "present": false,
+      "bytes": 0
     },
     "tab-1": {
-      "present": true,
-      "bytes": 92903,
-      "mean_luminance_pct": 14.64,
-      "luminance_stddev": 42.63,
-      "distinct_colours": 2936
+      "present": false,
+      "bytes": 0
     },
     "tab-2": {
-      "present": true,
-      "bytes": 62276,
-      "mean_luminance_pct": 9.4,
-      "luminance_stddev": 24.68,
-      "distinct_colours": 1740
+      "present": false,
+      "bytes": 0
     },
     "tab-3": {
       "present": false,
@@ -202,19 +190,9 @@
       "bytes": 0
     }
   },
-  "brightness": {
-    "01-launch": 14.64,
-    "02-loaded": 14.64,
-    "tab-1": 14.64,
-    "tab-2": 9.4
-  },
-  "single_colour_pct": {
-    "01-launch": 2936,
-    "02-loaded": 2936,
-    "tab-1": 2936,
-    "tab-2": 1740
-  },
-  "diff_launch_to_loaded": 0.0,
+  "brightness": {},
+  "single_colour_pct": {},
+  "diff_launch_to_loaded": null,
   "video_bytes": 0,
   "package": "com.appmint.nativedemo"
 }
