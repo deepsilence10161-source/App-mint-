@@ -143,11 +143,53 @@ class MainActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
 
+        /* 💰 banner host — AdMob id हो तभी दिखेगा */
+        bannerHost = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        column.addView(bannerHost, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
         errorView = buildErrorView()
 
         root.addView(column)
         root.addView(errorView)
         setContentView(root)
+
+        attachBannerIfEnabled()
+    }
+
+    private lateinit var bannerHost: LinearLayout
+
+    /** 💰 AdMob — SDK conditional है, इसलिए reflection; कुछ भी गलत हो तो चुपचाप skip */
+    private fun attachBannerIfEnabled() {
+        if (BuildConfig.ADS_APP_ID.isEmpty()) return
+        runCatching {
+            Class.forName("com.google.android.gms.ads.MobileAds")
+                .getMethod("initialize", Context::class.java)
+                .invoke(null, this)
+
+            val adViewCls = Class.forName("com.google.android.gms.ads.AdView")
+            val adView = adViewCls.getConstructor(Context::class.java).newInstance(this) as View
+
+            val adSizeCls = Class.forName("com.google.android.gms.ads.AdSize")
+            adViewCls.getMethod("setAdSize", adSizeCls)
+                .invoke(adView, adSizeCls.getField("BANNER").get(null))
+            adViewCls.getMethod("setAdUnitId", String::class.java)
+                .invoke(adView, BuildConfig.AD_UNIT_ID)
+
+            val builderCls = Class.forName("com.google.android.gms.ads.AdRequest\$Builder")
+            val request = builderCls.getMethod("build").invoke(builderCls.getConstructor().newInstance())
+            adViewCls.getMethod("loadAd", Class.forName("com.google.android.gms.ads.AdRequest"))
+                .invoke(adView, request)
+
+            bannerHost.addView(adView)
+            bannerHost.visibility = View.VISIBLE
+        }.onFailure {
+            android.util.Log.w("AppKaro", "💰 ads skip: ${it.message}")
+        }
     }
 
     private fun buildErrorView(): View {

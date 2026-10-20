@@ -13,6 +13,7 @@
     <!-- EXTRA_PERMISSIONS -->
 
     <application
+        android:name=".App"
         android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.AppKaro"
@@ -32,5 +33,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 💰 AdMob app id — CI placeholder से (खाली हो तो SDK link ही नहीं होता, tag inert) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${adsAppId}" />
     </application>
 </manifest>

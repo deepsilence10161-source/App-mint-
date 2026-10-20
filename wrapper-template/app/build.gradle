@@ -13,6 +13,15 @@ def startUrl   = (project.findProperty("startUrl")  ?: "https://example.com").to
 def themeColor = (project.findProperty("themeColor") ?: "#6C5CE7").toString().replaceAll(/["']/, "")
 def cleartext  = (project.findProperty("cleartext") ?: "false").toString().toBoolean()
 
+/* 💰 Earning + 🔔 push — खाली = feature पूरी तरह बाहर (SDK compile भी नहीं होता)
+ *   -PadsAppId=-ca-app-pub-XXXX~YYYY   -PadUnitId=ca-app-pub-XXXX/YYYY   -PpushAppId=OneSignal UUID */
+def adsAppId  = (project.findProperty("adsAppId")  ?: "").toString().replaceAll(/["']/, "")
+def adUnitId  = (project.findProperty("adUnitId")  ?: "").toString().replaceAll(/["']/, "")
+def pushAppId = (project.findProperty("pushAppId") ?: "").toString().replaceAll(/["']/, "")
+def adsOn  = adsAppId.length() > 0
+def pushOn = pushAppId.length() > 0
+if (!adUnitId) adUnitId = "ca-app-pub-3940256099942544/6300978111"   // Google की official TEST banner unit (safe default)
+
 android {
     // namespace हमेशा fixed रहता है — applicationId ही यूज़र की पहचान है
     namespace "com.appkaro.wrapper"
@@ -29,12 +38,16 @@ android {
         manifestPlaceholders = [
             appLabel        : appName,
             cleartextTraffic: cleartext.toString(),
+            adsAppId        : adsAppId,   // off होने पर empty — SDK link ही नहीं होता तो tag inert
         ]
 
         buildConfigField "String", "APP_NAME", "\"${appName}\""
         buildConfigField "String", "START_URL", "\"${startUrl}\""
         buildConfigField "String", "THEME_COLOR", "\"${themeColor}\""
         buildConfigField "boolean", "ALLOW_CLEARTEXT", cleartext.toString()
+        buildConfigField "String", "ADS_APP_ID", "\"${adsAppId}\""
+        buildConfigField "String", "AD_UNIT_ID", "\"${adUnitId}\""
+        buildConfigField "String", "PUSH_APP_ID", "\"${pushAppId}\""
     }
 
     buildFeatures {
@@ -65,4 +78,9 @@ dependencies {
     implementation 'androidx.activity:activity-ktx:1.9.0'
     implementation 'androidx.webkit:webkit:1.8.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+
+    /* 💰/🔔 conditional — ID दो तभी SDK app में आता है (zero-bloat default)
+     * Kotlin कोड इन्हें reflection से चलाता है, इसलिए off-build compile कभी नहीं टूटता */
+    if (adsOn)  implementation 'com.google.android.gms:play-services-ads:25.5.0'
+    if (pushOn) implementation 'com.onesignal:OneSignal:5.10.2'
 }
