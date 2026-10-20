@@ -1,5 +1,7 @@
 // Top-level build file
 plugins {
     id 'com.android.application' version '8.5.2' apply false
-    id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+    // 2.1.0: आधुनिक SDKs (ads 25.x/onesignal 5.10) stdlib 2.1 खींचते हैं — 1.9 compiler उनकी
+    // metadata पढ़ नहीं सकता था ("Incompatible classes" मिली live CI पर)। Phase 3 (Compose) को भी K2 चाहिए।
+    id 'org.jetbrains.kotlin.android' version '2.1.0' apply false
 }
