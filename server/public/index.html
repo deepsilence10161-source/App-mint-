@@ -174,9 +174,22 @@
           <span class="chip" data-p="CAMERA">📷 Camera</span>
           <span class="chip" data-p="MIC">🎤 Mic</span>
           <span class="chip" data-p="LOCATION">📍 Location</span>
-          <span class="chip soon">📢 AdMob <span class="tag">Phase 2</span></span>
-          <span class="chip soon">🔔 OneSignal push <span class="tag">Phase 2</span></span>
         </div>
+      </div>
+      <div class="full">
+        <label>कमाई + Push (optional — खाली रखो तो सीधा skip, app हल्की रहती है)</label>
+        <div class="grid" style="gap:10px">
+          <div>
+            <input type="text" id="f-admob" placeholder="AdMob App ID — ca-app-pub-…~…">
+          </div>
+          <div>
+            <input type="text" id="f-unit" placeholder="AdMob banner unit (खाली = test banner)">
+          </div>
+          <div class="full">
+            <input type="text" id="f-osig" placeholder="OneSignal App ID (UUID) — तुम्हारी site से push alerts भेजने के लिए">
+          </div>
+        </div>
+        <div class="statusline">IDs <b>admob.google.com</b> और <b>onesignal.com</b> (दोनों मुफ़्त) से मिलती हैं — बाद में कभी भी बदल/जोड़ सकते हो।</div>
       </div>
       <div class="full">
         <div class="rowflex">
@@ -374,9 +387,10 @@ function render(b) {
           : `<span class="pill work">⏳ चल रहा…</span>`));
   let foot = "";
   if (st === "ready" && !b.demo) {
-    foot = `<div class="rowflex">
+    foot = `<div class="rowflex" style="flex-wrap:wrap">
       <a class="dl" href="/api/builds/${b.id}/download">⬇️ APK${b.signed ? "" : " (unsigned)"}</a>
       ${b.aabFile ? `<a class="dl" style="background:rgba(255,255,255,.12)" href="/api/builds/${b.id}/download?type=aab">📦 AAB (Play)</a>` : ""}
+      ${b.signed ? `<a class="dl" style="background:rgba(255,255,255,.07);font-weight:500" target="_blank" href="/api/builds/${b.id}/assetlinks.json" title="अपनी site के /.well-known/assetlinks.json पर रखो — deep links (app links) चालू होंगे">🔗 assetlinks.json</a>` : ""}
     </div>`;
   } else if (st === "ready" && b.demo) {
     foot = `<span class="demonote">🟡 Demo build — असली APK तब मिलेगी जब GitHub engine जुड़ेगा (owner से 5 मिनट का काम)। पूरा flow जैसा दिखा, live में भी वैसा ही चलेगा।</span>`;
@@ -434,6 +448,9 @@ $("#go").onclick = async () => {
     cleartext: $("#f-clear").checked,
     permissions: [...document.querySelectorAll("#perms .chip.on[data-p]")].map(c => c.dataset.p),
     iconData,
+    admobAppId: $("#f-admob").value.trim(),
+    admobUnitId: $("#f-unit").value.trim(),
+    oneSignalAppId: $("#f-osig").value.trim(),
   };
   const r = await fetch("/api/builds", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),

@@ -88,7 +88,17 @@ function validate(body) {
   const color = /^#[0-9a-f]{6}$/i.test(body.themeColor || '') ? body.themeColor : '#6C5CE7';
   let permissions = Array.isArray(body.permissions) ? body.permissions.filter(p => ALLOWED_PERMS.includes(p)) : ['NOTIFICATIONS'];
   if (!permissions.length) permissions = ['NOTIFICATIONS'];
-  return { errors, cfg: { url, name, pkg, color, permissions, cleartext: body.cleartext === true } };
+
+  /* 💰 earning + 🔔 push — खाली रखने पर feature पूरी तरह बाहर */
+  const ads = /^ca-app-pub-\d{16}~\d{10}$/.test(body.admobAppId || '') ? body.admobAppId : '';
+  if (body.admobAppId && !ads) errors.push('AdMob App ID गलत है — ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY format (App ID, unit नहीं)');
+  const adUnit = /^ca-app-pub-\d{16}\/\d{10}$/.test(body.admobUnitId || '') ? body.admobUnitId : '';
+  if (body.admobUnitId && !adUnit) errors.push('AdMob Unit ID गलत है — ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY format');
+  if (adUnit && !ads) errors.push('AdMob Unit दी है पर App ID नहीं — दोनों डालें या दोनों खाली');
+  const push = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.oneSignalAppId || '') ? body.oneSignalAppId : '';
+  if (body.oneSignalAppId && !push) errors.push('OneSignal App ID गलत है — UUID format (xxxxxxxx-xxxx-…, apps.onesignal.com से)');
+
+  return { errors, cfg: { url, name, pkg, color, permissions, cleartext: body.cleartext === true, ads, adUnit, push } };
 }
 
 /* ---------------- L3: config dedup ---------------- */
@@ -96,6 +106,7 @@ function buildHash(cfg, iconUrl) {
   return crypto.createHash('sha256').update(JSON.stringify([
     cfg.url, cfg.name, cfg.pkg, cfg.color.toLowerCase(),
     [...cfg.permissions].sort(), cfg.cleartext, iconUrl || '',
+    cfg.ads || '', cfg.adUnit || '', cfg.push || '',
   ])).digest('hex');
 }
 const copyDir = (s, d) => { fs.rmSync(d, { recursive: true, force: true }); fs.cpSync(s, d, { recursive: true }); };
@@ -253,6 +264,8 @@ async function tick() {
           build_id: b.id, app_name: b.cfg.name, package_id: b.cfg.pkg,
           start_url: b.cfg.url, theme_color: b.cfg.color, icon_url: b.iconUrl || '',
           permissions: b.cfg.permissions.join(','), cleartext: String(b.cfg.cleartext),
+          admob_app_id: b.cfg.ads || '', admob_unit_id: b.cfg.adUnit || '',
+          onesignal_app_id: b.cfg.push || '',
         });
         b.engine = eng.lane; b.repo = eng.repo;
         b.status = 'dispatched'; b.statusAt = Date.now(); save();
@@ -281,6 +294,27 @@ async function tick() {
 }
 setInterval(tick, 4000);
 
+/* ---------------- ~L2: local artifact hygiene (R2 जुड़ने तक इंतज़ाम) ------------
+ * पूरी हो चुकी builds के artifacts ARTIFACT_TTL_DAYS बाद साफ़ — disk कभी न भरे।
+ * R2 storage (S3-compatible) Phase 2 में जुड़ेगा — तब ये सीधे bucket में चले जाएँगे। */
+const ART_TTL_DAYS = Number(process.env.ARTIFACT_TTL_DAYS || 3);
+function sweepArtifacts() {
+  const limit = Date.now() - ART_TTL_DAYS * 86400 * 1000;
+  let purged = 0;
+  for (const b of builds) {
+    if (b.purged) continue;
+    const doneAt = b.completedAt || b.createdAt || 0;
+    if (['ready', 'failed', 'demo_ready'].includes(b.status) && doneAt < limit &&
+        fs.existsSync(path.join(ART_DIR, b.id))) {
+      fs.rmSync(path.join(ART_DIR, b.id), { recursive: true, force: true });
+      b.purged = true; purged++;
+    }
+  }
+  if (purged) { save(); console.log(`  🗑️  artifact sweep: ${purged} build(s) साफ़ (TTL ${ART_TTL_DAYS}d)`); }
+}
+sweepArtifacts();
+setInterval(sweepArtifacts, 3600 * 1000);
+
 /* ---------------- HTTP ---------------- */
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript',
@@ -298,7 +332,11 @@ const server = http.createServer((req, res) => {
   if (auth.handleAuth(req, res, u, { onGithubConnected })) return;
 
   if (u.pathname === '/api/health') {
-    return json(res, 200, { ok: true, mode: CENTRAL_LIVE ? 'live' : 'demo', pool: CENTRAL_LIVE ? GITHUB_REPO : null });
+    return json(res, 200, {
+      ok: true, mode: CENTRAL_LIVE ? 'live' : 'demo', pool: CENTRAL_LIVE ? GITHUB_REPO : null,
+      features: { ads: true, push: true, assetlinks: true, iconBake: true, history: true },
+      storage: 'local', artifactTtlDays: ART_TTL_DAYS,
+    });
   }
 
   if (u.pathname === '/api/stats') {
@@ -392,6 +430,7 @@ const server = http.createServer((req, res) => {
     if (m[2]) {
       const wantAab = u.searchParams.get('type') === 'aab';
       const file = wantAab ? b.aabFile : b.apkFile;
+      if (b.purged) return json(res, 410, { ok: false, error: `artifacts ${ART_TTL_DAYS} दिन बाद साफ़ हो गए (storage बचाने के लिए) — दोबारा build बनाओ, smart-cache से चुटकियों में तैयार होगी` });
       if (!file || b.status !== 'ready') return json(res, 409, { ok: false, error: 'file अभी तैयार नहीं' });
       const p = path.join(ART_DIR, b.id, file);
       res.writeHead(200, {
@@ -401,6 +440,33 @@ const server = http.createServer((req, res) => {
       return fs.createReadStream(p).pipe(res);
     }
     return json(res, 200, { ok: true, build: { ...b, queue: queueInfo(b) } });
+  }
+
+  /* 🔗 Deep links: assetlinks.json — signing keystore का SHA-256 से auto (Play deep-link fix) */
+  const am = u.pathname.match(/^\/api\/builds\/([\w-]+)\/assetlinks\.json$/);
+  if (am) {
+    const b = builds.find(x => x.id === am[1]);
+    if (!b) return json(res, 404, { ok: false, error: 'build नहीं मिली' });
+    const owner = b.owner || 'default';
+    const ks = path.join(KEYS_DIR, owner + '.keystore');
+    if (!fs.existsSync(ks)) {
+      return json(res, 409, {
+        ok: false,
+        error: 'यह build unsigned थी, इसलिए fingerprint नहीं बन सका। Signed build बनाओ — तब यहाँ तैयार assetlinks.json मिलेगा, जिसे अपनी site के /.well-known/assetlinks.json पर रखना है।',
+      });
+    }
+    const pass = process.env.KEYSTORE_PASS || 'appkaro-' + owner;
+    return execFile('keytool', ['-list', '-v', '-keystore', ks, '-storepass', pass, '-alias', 'appkaro'], (e, out) => {
+      if (e) return json(res, 500, { ok: false, error: 'keystore पढ़ने में दिक्कत' });
+      const fp = (out.match(/SHA256:\s*([0-9A-F:]+)/) || [])[1];
+      if (!fp) return json(res, 500, { ok: false, error: 'fingerprint नहीं मिला' });
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify([{
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: { namespace: 'android_app', package_name: b.cfg.pkg, sha256_cert_fingerprints: [fp] },
+      }], null, 2));
+    });
+    return;
   }
 
   /* static */
